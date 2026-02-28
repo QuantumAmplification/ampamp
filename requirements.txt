@@ -1,4 +1,7 @@
 qiskit
 qiskit-aer
+qiskit-algorithms
 matplotlib
 numpy
+scipy
+pylatexenc
