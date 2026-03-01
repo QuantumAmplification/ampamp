@@ -1,12 +1,3 @@
-# AmplitudeAmplification
-
-This repository is under active development. It serves as a centralized collection of implementations, mathematical derivations, and research notes focused on quantum amplitude amplification and its modern evolution into the Quantum Singular Value Transformation (QSVT) framework.
-
-Historically, quantum search was viewed through the lens of geometric rotations (Grover's). We are documenting the transition from those early "algorithmic zoology" days to a unified algebraic approach where quantum circuits are treated as polynomial transformations of singular values.
-
----
-
-## Roadmap and Contents
 
 # AmplitudeAmplification
 
