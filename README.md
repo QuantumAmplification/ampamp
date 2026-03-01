@@ -16,21 +16,21 @@ This section implements the core logic of the standard Grover Search Algorithm. 
 #### Mathematical Implementation
 The Python core (`grover_success_prob`) models the algorithm as a rotation in a 2D invariant subspace. The probability of success after $k$ iterations is defined by:
 
-$$P_{success} = \sin^2\left(\frac{(2k + 1)\theta}{2}\right)$$
+$$P_{\text{success}} = \sin^2\left(\frac{(2k + 1)\theta}{2}\right)$$
 
 where the angle of rotation $\theta$ is derived from the initial overlap (signal strength) $\lambda = M/N$:
+
 $$\theta = 2 \arcsin(\sqrt{\lambda})$$
 
+
 #### Code Insights:
-* **Optimal Iteration Calculator:** The function `optimal_grover_iterations` prevents the "overshooting" problem by calculating the integer $k^*$ that brings the state closest to the target Hilbert space:
-    $$k^* = \left\lfloor \frac{\pi}{2\theta} - \frac{1}{2} \right\rfloor$$
+* **Optimal Iteration Calculator:** The function `optimal_grover_iterations` prevents the "overshooting" problem by calculating the integer $k^*$ that brings the state closest to the target Hilbert space: 
+  $$k^* = \left\lfloor \frac{\pi}{2\theta} - \frac{1}{2} \right\rfloor$$
 * **Case Studies:** The implementation evaluates three distinct regimes:
-    1.  **$M \ll N$:** The classic "needle in a haystack" where $k \approx \frac{\pi}{4}\sqrt{N/M}$.
-    2.  **$M = N/2$:** A critical point where the algorithm reaches maximum success in a single step (or zero steps).
-    3.  **$M > N/2$:** Observations on high-signal environments where standard amplification may actually decrease success probability.
+    1. **$M \ll N$:** The classic "needle in a haystack" where $k \approx \frac{\pi}{4}\sqrt{N/M}$.
+    2. **$M = N/2$:** A critical point where the algorithm reaches maximum success in a single step (or zero steps).
+    3. **$M > N/2$:** Observations on high-signal environments where standard amplification may actually decrease success probability.
 * **Qiskit 3-Qubit Demo:** A practical circuit implementation using a phase oracle targeting the $|101\rangle$ state and a standard diffusion operator (inversion about the mean).
-
-
 
 ---
 
@@ -70,10 +70,3 @@ The ultimate unification of quantum algorithms.
 * **Next Steps:** We are working on a classical phase synthesis tool to generate the phase sequences ($\phi_d$) required for arbitrary polynomial transformations.
 
 ---
-
-## Usage
-
-To run the Grover success probability analysis and test cases:
-
-```bash
-python Grover's_Search_Algorithm.py
