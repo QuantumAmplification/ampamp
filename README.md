@@ -16,12 +16,11 @@ This section implements the core logic of the standard Grover Search Algorithm. 
 #### Mathematical Implementation
 The Python core (`grover_success_prob`) models the algorithm as a rotation in a 2D invariant subspace. The probability of success after $k$ iterations is defined by:
 
-$$P_{\text{success}} = \sin^2\left(\frac{(2k + 1)\theta}{2}\right)$$
+P_{\text{success}} = \sin^2\!\left(\frac{(2k+1)\,\theta}{2}\right)
 
-where the angle of rotation $\theta$ is derived from the initial overlap (signal strength) $\lambda = M/N$:
+where the angle of rotation $\theta$ is derived from the initial overlap (signal strength) \lambda = \frac{M}{N}:
 
-$$\theta = 2 \arcsin(\sqrt{\lambda})$$
-
+\theta = 2\,\arcsin\!\left(\sqrt{\lambda}\right)
 
 #### Code Insights:
 * **Optimal Iteration Calculator:** The function `optimal_grover_iterations` prevents the "overshooting" problem by calculating the integer $k^*$ that brings the state closest to the target Hilbert space: 
