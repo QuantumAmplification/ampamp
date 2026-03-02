@@ -1,122 +1,8 @@
-# import numpy as np
-# import matplotlib.pyplot as plt
-# from qiskit import QuantumCircuit, transpile
-# from qiskit.circuit.library import GroverOperator
-# from qiskit.visualization import plot_histogram
-# from qiskit_aer import AerSimulator
-
-
-# def run_classical_summary() -> None:
-#     """Print compact Grover-theory results for a few M/N settings."""
-#     cases = [
-#         ("M << N", 1024, 3),
-#         ("M = N/2", 1024, 512),
-#         ("M > N/2", 1024, 768),
-#     ]
-
-#     print("\n" + "=" * 60)
-#     print("Grover Analytical Summary")
-#     print("=" * 60)
-
-#     for label, n, m in cases:
-#         if n <= 0 or m < 0 or m > n:
-#             print(f"\n{label}: invalid input (N={n}, M={m})")
-#             continue
-
-#         # lambda is the marked fraction M/N.
-#         lam = m / n
-#         # If lam=0, no marked item exists and success is always zero.
-#         if lam == 0:
-#             k_star = 0
-#             p_star = 0.0
-#         else:
-#             # Grover angle in the 2D good/bad subspace.
-#             theta = 2.0 * np.arcsin(np.sqrt(lam))
-#             # Near-optimal integer Grover iteration count.
-#             k_star = max(0, int(np.floor(np.pi / (2.0 * theta) - 0.5)))
-#             # Success probability at k_star.
-#             p_star = float(np.sin((2 * k_star + 1) * theta / 2.0) ** 2)
-
-#         print(f"\n{label} | N={n}, M={m}")
-#         print(f"  lambda = {lam:.6f}")
-#         print(f"  k*     = {k_star}")
-#         print(f"  P(k*)  = {p_star:.6f}")
-
-
-# def run_qiskit_grover_demo(target: str = "101", shots: int = 4096) -> None:
-#     """Run one-step Grover search using Qiskit's built-in GroverOperator."""
-#     if len(target) != 3 or any(bit not in "01" for bit in target):
-#         raise ValueError("target must be a 3-bit string, e.g. '101'")
-
-#     # Oracle marks exactly the target bitstring with a phase flip.
-#     oracle = QuantumCircuit(3, name=f"Oracle_{target}")
-
-#     # Map target state to |111> so CCZ can be applied in a standard way.
-#     for i, bit in enumerate(reversed(target)):
-#         if bit == "0":
-#             oracle.x(i)
-
-#     # CCZ implemented via H-CCX-H on the last qubit.
-#     oracle.h(2)
-#     oracle.ccx(0, 1, 2)
-#     oracle.h(2)
-
-#     # Undo the mapping back to original computational basis.
-#     for i, bit in enumerate(reversed(target)):
-#         if bit == "0":
-#             oracle.x(i)
-
-#     # Use Qiskit's native Grover iterate builder.
-#     grover_op = GroverOperator(oracle)
-
-#     # One Grover iteration over 3 qubits.
-#     qc = QuantumCircuit(3, 3)
-#     qc.h([0, 1, 2])
-#     qc.append(grover_op, [0, 1, 2])
-#     qc.measure([0, 1, 2], [0, 1, 2])
-
-#     # Simulate and extract measurement counts.
-#     backend = AerSimulator()
-#     compiled = transpile(qc, backend, optimization_level=1)
-#     counts = backend.run(compiled, shots=shots).result().get_counts()
-
-#     success = counts.get(target, 0) / shots
-#     print("\n" + "=" * 60)
-#     print("Qiskit GroverOperator Demo")
-#     print("=" * 60)
-#     print(f"target = {target}")
-#     print(f"shots  = {shots}")
-#     print(f"P({target}) = {success:.4f}")
-#     print(f"counts = {counts}")
-
-#     # Save histogram for quick visual verification.
-#     plot_histogram(counts, title=f"Grover (3 qubits, target={target})")
-#     plt.tight_layout()
-#     plt.savefig("grover_circuit_histogram.png", dpi=150, bbox_inches="tight")
-#     plt.close()
-#     print("Saved: grover_circuit_histogram.png")
-
-
-# def main() -> None:
-#     run_classical_summary()
-
-#     # Set to False if you only want analytical output.
-#     run_qiskit_demo = True
-#     if run_qiskit_demo:
-#         run_qiskit_grover_demo(target="101", shots=4096)
-
-
-# if __name__ == "__main__":
-#     main()
-
 import numpy as np
 import matplotlib.pyplot as plt
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
-<<<<<<< Updated upstream
 from qiskit.quantum_info import partial_trace, state_fidelity
-=======
->>>>>>> Stashed changes
 
 class GroverGeometricLab:
     """
@@ -130,15 +16,9 @@ class GroverGeometricLab:
         self.M = len(marked_indices)
         self.lambda_val = self.M / self.N
         
-<<<<<<< Updated upstream
         self.theta = 2 * np.arcsin(np.sqrt(self.lambda_val))
         # Optimal k* ≈ floor(pi/(4*arcsin(sqrt(lambda))) - 1/2) as provided in test cases
         self.k_optimal = int(np.floor(np.pi / (2 * self.theta) - 0.5))
-=======
-        # Calculate theta: sin(theta/2) = sqrt(M/N)
-        self.theta = 2 * np.arcsin(np.sqrt(self.lambda_val))
-        self.k_optimal = int(np.pi / (2 * self.theta) - 0.5)
->>>>>>> Stashed changes
         self.backend = AerSimulator()
         
         # Step A: Initialize the Invariant Vectors
@@ -151,7 +31,6 @@ class GroverGeometricLab:
         for idx in range(self.N):
             if idx not in self.marked:
                 self.bad_vec[idx] = 1.0 / np.sqrt(self.N - self.M)
-<<<<<<< Updated upstream
 
     def grover_success_prob(self, lambda_value: float, k: int) -> float:
         """Standard Grover success probability in terms of lambda = M/N."""
@@ -342,74 +221,21 @@ if __name__ == "__main__":
     print("\n" + "=" * 70)
     print("GROVER TEST CASES: M vs N")
     print("=" * 70)
-=======
->>>>>>> Stashed changes
 
-    def get_oracle(self):
-        """Standard Phase Oracle for Section II."""
-        qc = QuantumCircuit(self.n)
-        for index in self.marked:
-            target_bin = format(index, f'0{self.n}b')[::-1]
-            for i, bit in enumerate(target_bin):
-                if bit == '0': qc.x(i)
-            qc.h(self.n - 1)
-            qc.mcx(list(range(self.n - 1)), self.n - 1)
-            qc.h(self.n - 1)
-            for i, bit in enumerate(target_bin):
-                if bit == '0': qc.x(i)
-        return qc
+    test_cases = [
+        {"label": "Case 1 (M << N)", "N": 1024, "M": 3},
+        {"label": "Case 2 (M = N/2)", "N": 1024, "M": 512},
+        {"label": "Case 3 (M > N/2)", "N": 1024, "M": 768},
+    ]
 
-    def get_diffusion(self):
-        """Standard Diffusion Reflection."""
-        qc = QuantumCircuit(self.n)
-        qc.h(range(self.n))
-        qc.x(range(self.n))
-        qc.h(self.n - 1)
-        qc.mcx(list(range(self.n - 1)), self.n - 1)
-        qc.h(self.n - 1)
-        qc.x(range(self.n))
-        qc.h(range(self.n))
-        return qc
+    for case in test_cases:
+        label = case["label"]
+        N = case["N"]
+        M = case["M"]
 
-    def analyze_geometry(self, max_k):
-        """Module 1 & 2: Tracks 2D rotation and Soufflé instability using linear algebra projection."""
-        a_k_vals = []
-        b_k_vals = []
-        p_total_vals = []
-        success_probs = []
-        
-        for k in range(max_k + 1):
-            qc = QuantumCircuit(self.n)
-            qc.h(range(self.n))
-            
-            if k > 0:
-                oracle = self.get_oracle()
-                diff = self.get_diffusion()
-                for _ in range(k):
-                    qc.append(oracle, range(self.n))
-                    qc.append(diff, range(self.n))
-            
-            # Step B: Iterative Statevector Extraction
-            qc.save_statevector()
-            result = self.backend.run(transpile(qc, self.backend)).result()
-            state_k = np.array(result.get_statevector())
-            
-            # Step C: The Projection Logic
-            ak = np.dot(self.good_vec.conj(), state_k)
-            bk = np.dot(self.bad_vec.conj(), state_k)
-            
-            prob_in_subspace = np.abs(ak)**2 + np.abs(bk)**2
-            
-            a_k_vals.append(ak)
-            b_k_vals.append(bk)
-            p_total_vals.append(prob_in_subspace)
-            
-            # The actual success probability is |ak|^2
-            success_probs.append(np.abs(ak)**2)
-            
-        return np.array(a_k_vals), np.array(b_k_vals), np.array(p_total_vals), success_probs
+        print(f"\n{label}:")
+        print(f"  N = {N}, M = {M}")
 
-<<<<<<< Updated upstream
         if N <= 0 or M < 0:
             continue
         if M > N:
@@ -427,72 +253,30 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 70)
     print("Running Grover Geometric Lab Analysis...")
-=======
-    def simulate_cloning_barrier(self, k):
-        """Module 3: Proves that naive CNOT cloning fails due to entanglement."""
-        qc = QuantumCircuit(self.n * 2) # System A + Ancilla B
-        qc.h(range(self.n))
-        
-        # Evolve System A to state |psi_k>
-        oracle = self.get_oracle()
-        diff = self.get_diffusion()
-        for _ in range(k):
-            qc.append(oracle, range(self.n))
-            qc.append(diff, range(self.n))
-            
-        # Naive CNOT 'Copy'
-        for i in range(self.n):
-            qc.cx(i, i + self.n)
-            
-        qc.save_statevector()
-        final_state = self.backend.run(transpile(qc, self.backend)).result().get_statevector()
-        return final_state
-
-    def sensitivity_heatmap(self, k_range, lambda_range):
-        """Module 5: Generates the Soufflé Instability Heatmap."""
-        heatmap = np.zeros((len(k_range), len(lambda_range)))
-        
-        for i, k in enumerate(k_range):
-            for j, lam in enumerate(lambda_range):
-                # Analytical success probability for speed
-                theta_val = 2 * np.arcsin(np.sqrt(lam))
-                heatmap[i, j] = np.sin((2*k + 1) * theta_val / 2)**2
-        return heatmap
-
-if __name__ == "__main__":
-    # --- Execution for Journal Evidence ---
->>>>>>> Stashed changes
     lab = GroverGeometricLab(n_qubits=6, marked_indices=[10, 25])
     max_k = lab.k_optimal * 3
 
     print("Running Grover Geometric Lab Analysis...")
     a_vals, b_vals, p_total, probs = lab.analyze_geometry(max_k)
-<<<<<<< Updated upstream
     pur_orig, pur_copy = lab.simulate_cloning_barrier(max_k)
     lam_vals, p1_curve, p2_curve, gate_depths = lab.recursive_nesting_analysis(k1=3, k2=3, max_lambda=0.15)
     
     heatmap_K, heatmap_L, success_heatmap = lab.sensitivity_heatmap(k_max=50, lambda_max=0.5, resolution=500)
     
-=======
-
->>>>>>> Stashed changes
     # Machine Precision Check
     mean_sq_dev = np.mean((1.0 - p_total)**2)
     print(f"Mean squared deviation from invariant subspace: {mean_sq_dev:.2e}")
     if mean_sq_dev < 1e-15:
         print("-> Confirmed: Invariant Subspace Theorem holds within double-precision limits.")
 
-<<<<<<< Updated upstream
     print(f"Gate Depth Comparison for Equivalent Boost: Standard={gate_depths['std_depth']} gates vs Nested={gate_depths['nested_depth']} gates")
 
     # Visualization
-    # Expand to a 2-row layout to fit the heatmap cleanly
-    fig = plt.figure(figsize=(24, 10))
+    fig = plt.figure(figsize=(24, 12))
 
-    # ---- TOP ROW (1x4 Grid) ----
-    
+    # ---- TOP ROW ----
     # Plot 1: Soufflé Problem
-    ax1 = plt.subplot(2, 4, 1)
+    ax1 = plt.subplot(2, 3, 1)
 
     # Theoretical Overlay
     k_continuous = np.linspace(0, max_k, 300)
@@ -520,23 +304,7 @@ if __name__ == "__main__":
     ax1.legend()
 
     # Plot 2: Invariant Subspace Proof
-    ax2 = plt.subplot(2, 4, 2)
-=======
-    # Visualization
-    fig = plt.figure(figsize=(18, 5))
-
-    # Plot 1: Soufflé Problem
-    ax1 = plt.subplot(1, 3, 1)
-    ax1.plot(range(max_k + 1), probs, color='red', marker='o', label='Success Prob (Sine-Wave)')
-    ax1.axvline(lab.k_optimal, color='green', linestyle='--', label='Theoretical k*')
-    ax1.set_title("The Soufflé Problem: Instability vs. Iterations")
-    ax1.set_xlabel("Iterations (k)")
-    ax1.set_ylabel("Probability of Success")
-    ax1.legend()
-
-    # Plot 2: Invariant Subspace Proof
-    ax2 = plt.subplot(1, 3, 2)
->>>>>>> Stashed changes
+    ax2 = plt.subplot(2, 3, 2)
     ax2.plot(range(max_k + 1), p_total, color='blue', marker='x', label='|ak|^2 + |bk|^2')
     ax2.set_title("Invariant Subspace Verification (P = 1.0)")
     ax2.set_xlabel("Iterations (k)")
@@ -544,43 +312,49 @@ if __name__ == "__main__":
     ax2.set_ylim(0.9, 1.1)
     ax2.legend()
 
-<<<<<<< Updated upstream
-    # Plot 3: Recursive Nesting
-    ax3 = plt.subplot(2, 4, 3)
-    ax3.plot(lam_vals, p1_curve, color='blue', linestyle='--', label='Level 1 (k=3)')
-    ax3.plot(lam_vals, p2_curve, color='red', linestyle='-', label='Level 2 (k1=3, k2=3)')
-    
-    ax3.set_title("Self-Similar Scaling (Sharpening Effect)")
-    ax3.set_xlabel("Solution Density (λ = M/N)")
-    ax3.set_ylabel("Success Probability P(λ)")
+    # Plot 3: Unit Circle (a_k vs b_k)
+    ax3 = plt.subplot(2, 3, 3)
+    ax3.plot(np.real(b_vals), np.real(a_vals), marker='o', color='purple', linestyle='-', label=r'$|\psi_k\rangle$ path')
+    theta_ideal = np.linspace(0, np.pi/2, 100)
+    ax3.plot(np.cos(theta_ideal), np.sin(theta_ideal), color='gray', linestyle='--', alpha=0.5, label='Ideal Unit Circle')
+    ax3.set_title("Geometric Rotation in Invariant Subspace")
+    ax3.set_xlabel("Unmarked Amplitude ($b_k$)")
+    ax3.set_ylabel("Marked Amplitude ($a_k$)")
+    ax3.set_aspect('equal')
     ax3.grid(True)
     ax3.legend()
 
-    # Plot 4: No-Cloning Barrier
-    ax4 = plt.subplot(2, 4, 4)
-    x = np.arange(len(pur_orig))
-    width = 0.35
-    
-    ax4.bar(x - width/2, pur_orig, width, label='Original State Purity', color='lightgreen')
-    ax4.bar(x + width/2, pur_copy, width, label='Purity After Naive Copy', color='salmon')
-    ax4.axhline(0.833, color='red', linestyle='--', label='UQCM Limit (0.833)')
-    
-    ax4.set_title("Cloning Obstruction: Purity Collapse")
-    ax4.set_xlabel("Iterations (k)")
-    ax4.set_ylabel("Purity Value Tr(ρ^2)")
-    ax4.set_ylim(0, 1.1)
+    # ---- BOTTOM ROW ----
+    # Plot 4: Recursive Nesting
+    ax4 = plt.subplot(2, 3, 4)
+    ax4.plot(lam_vals, p1_curve, color='blue', linestyle='--', label='Level 1 (k=3)')
+    ax4.plot(lam_vals, p2_curve, color='red', linestyle='-', label='Level 2 (k1=3, k2=3)')
+    ax4.set_title("Self-Similar Scaling (Sharpening Effect)")
+    ax4.set_xlabel("Solution Density (λ = M/N)")
+    ax4.set_ylabel("Success Probability P(λ)")
+    ax4.grid(True)
     ax4.legend()
 
-    # ---- BOTTOM ROW (Heatmap spanning multiple columns) ----
+    # Plot 5: No-Cloning Barrier
+    ax5 = plt.subplot(2, 3, 5)
+    x = np.arange(len(pur_orig))
+    width = 0.35
+    ax5.bar(x - width/2, pur_orig, width, label='Original State Purity', color='lightgreen')
+    ax5.bar(x + width/2, pur_copy, width, label='Purity After Naive Copy', color='salmon')
+    ax5.axhline(0.833, color='red', linestyle='--', label='UQCM Limit (0.833)')
+    ax5.set_title("Cloning Obstruction: Purity Collapse")
+    ax5.set_xlabel("Iterations (k)")
+    ax5.set_ylabel("Purity Value Tr(ρ^2)")
+    ax5.set_ylim(0, 1.1)
+    ax5.legend()
     
-    # Plot 5: Soufflé Sensitivity Heatmap
-    ax5 = plt.subplot(2, 1, 2)  # Spans the entire bottom row
-    contour = ax5.pcolormesh(heatmap_L, heatmap_K, success_heatmap, shading='auto', cmap='inferno')
-    fig.colorbar(contour, ax=ax5, label='Success Probability')
-    
-    ax5.set_title("Grover Sensitivity Heatmap: The Soufflé Islands", fontsize=15)
-    ax5.set_xlabel(r"Solution Density ($\lambda = M/N$)", fontsize=12)
-    ax5.set_ylabel("Iteration Count ($k$)", fontsize=12)
+    # Plot 6: Soufflé Sensitivity Heatmap
+    ax6 = plt.subplot(2, 3, 6)
+    contour = ax6.pcolormesh(heatmap_L, heatmap_K, success_heatmap, shading='auto', cmap='inferno')
+    fig.colorbar(contour, ax=ax6, label='Success Probability')
+    ax6.set_title("Grover Sensitivity Heatmap: The Soufflé Islands", fontsize=15)
+    ax6.set_xlabel(r"Solution Density ($\lambda = M/N$)", fontsize=12)
+    ax6.set_ylabel("Iteration Count ($k$)", fontsize=12)
 
     plt.tight_layout()
     plt.savefig('grover_geometric_evidence.png')
@@ -650,25 +424,3 @@ if __name__ == "__main__":
     run_qiskit_demo = False
     if run_qiskit_demo:
         run_optional_qiskit_demo()
-=======
-    # Plot 3: Unit Circle (a_k vs b_k)
-    ax3 = plt.subplot(1, 3, 3)
-    # Using real parts as coefficients are real in standard Grover
-    ax3.plot(np.real(b_vals), np.real(a_vals), marker='o', color='purple', linestyle='-', label=r'$|\psi_k\rangle$ path')
-    
-    # Draw ideal unit circle quarter
-    theta_ideal = np.linspace(0, np.pi/2, 100)
-    ax3.plot(np.cos(theta_ideal), np.sin(theta_ideal), color='gray', linestyle='--', alpha=0.5, label='Ideal Unit Circle')
-    
-    ax3.set_title("Geometric Rotation in Invariant Subspace")
-    ax3.set_xlabel("Unmarked Amplitude ($b_k$)")
-    ax3.set_ylabel("Marked Amplitude ($a_k$)")
-    ax3.set_aspect('equal')
-    ax3.grid(True)
-    ax3.legend()
-
-    plt.tight_layout()
-    plt.savefig('grover_geometric_evidence.png')
-    print("Saved plot to 'grover_geometric_evidence.png'")
-    # plt.show()
->>>>>>> Stashed changes
