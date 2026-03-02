@@ -10,24 +10,44 @@ class GroverGeometricLab:
     A rigorous numerical study of 2D geometry, instability, and cloning barriers.
     """
     def __init__(self, n_qubits, marked_indices):
+        """
+        Initializes the GroverGeometricLab simulation environment.
+
+        Args:
+            n_qubits (int): Total number of qubits in the quantum register.
+            marked_indices (list of int): Integer representations of the marked (target) states.
+        """
+        # Define the dimensionality of the quantum state space
         self.n = n_qubits
         self.N = 2**n_qubits
+        
+        # Store properties related to the search targets
         self.marked = marked_indices
         self.M = len(marked_indices)
+        
+        # Calculate the initial probability of measuring a marked state (solution density)
         self.lambda_val = self.M / self.N
         
+        # Calculate the geometric rotation angle theta between the initial state and the unmarked subspace
         self.theta = 2 * np.arcsin(np.sqrt(self.lambda_val))
+        
         # Optimal k* ≈ floor(pi/(4*arcsin(sqrt(lambda))) - 1/2) as provided in test cases
+        # This represents the theoretical optimum number of Grover iterations to maximize success probability
         self.k_optimal = int(np.floor(np.pi / (2 * self.theta) - 0.5))
+        
+        # Initialize the statevector simulator backend from Qiskit Aer
         self.backend = AerSimulator()
         
         # Step A: Initialize the Invariant Vectors
+        # These vectors form the orthogonal basis for the 2D invariant subspace where Grover rotation occurs
         self.good_vec = np.zeros(self.N, dtype=complex)
         self.bad_vec = np.zeros(self.N, dtype=complex)
         
+        # Populate the 'good' state vector uniformly superpositioned over all target states
         for idx in self.marked:
             self.good_vec[idx] = 1.0 / np.sqrt(self.M)
             
+        # Populate the 'bad' state vector uniformly superpositioned over all non-target states
         for idx in range(self.N):
             if idx not in self.marked:
                 self.bad_vec[idx] = 1.0 / np.sqrt(self.N - self.M)
@@ -55,43 +75,96 @@ class GroverGeometricLab:
                 self.bad_vec[idx] = 1.0 / np.sqrt(self.N - self.M)
 
     def get_oracle(self):
-        """Standard Phase Oracle for Section II."""
+        """
+        Standard Phase Oracle for Section II.
+        
+        Constructs a quantum circuit that flips the phase of the marked states.
+        This is accomplished by flipping the target state to all 1s, applying a multi-controlled Z gate 
+        (simulated using H, Multi-Controlled X, and H), and uncomputing the bit flips.
+        
+        Returns:
+            QuantumCircuit: The synthesized phase oracle circuit.
+        """
         qc = QuantumCircuit(self.n)
         for index in self.marked:
+            # Convert the target index to its binary string representation (little-endian for Qiskit)
             target_bin = format(index, f'0{self.n}b')[::-1]
+            
+            # Apply X-gates to transform the zero-bits of the target state into ones
             for i, bit in enumerate(target_bin):
                 if bit == '0': qc.x(i)
+                
+            # Apply a multi-controlled Z gate by wrapping a multi-controlled X (MCX) in Hadamard gates
             qc.h(self.n - 1)
             qc.mcx(list(range(self.n - 1)), self.n - 1)
             qc.h(self.n - 1)
+            
+            # Uncompute the initial X-gates to restore the state basis
             for i, bit in enumerate(target_bin):
                 if bit == '0': qc.x(i)
         return qc
 
     def get_diffusion(self):
-        """Standard Diffusion Reflection."""
+        """
+        Standard Diffusion Reflection.
+        
+        Constructs the Grover diffusion operator (inversion about the mean).
+        This operator reflects the quantum state across the uniform superposition state 
+        to amplify the amplitudes of marked states.
+        
+        Returns:
+            QuantumCircuit: The synthesized diffusion operator circuit.
+        """
         qc = QuantumCircuit(self.n)
+        
+        # Apply Hadamard gates to transform back to the computational basis
         qc.h(range(self.n))
+        
+        # Apply X gates to effectively map the zero state |00...0> to |11...1>
         qc.x(range(self.n))
+        
+        # Apply a multi-controlled Z gate to shift the phase of the |11...1> state
         qc.h(self.n - 1)
         qc.mcx(list(range(self.n - 1)), self.n - 1)
         qc.h(self.n - 1)
+        
+        # Uncompute the X gates map back from |11...1> to |00...0>
         qc.x(range(self.n))
+        
+        # Apply Hadamard gates to return to the superposition basis
         qc.h(range(self.n))
+        
         return qc
 
     def analyze_geometry(self, max_k):
-        """Module 1 & 2: Tracks 2D rotation and Soufflé instability using linear algebra projection."""
+        """
+        Module 1 & 2: Tracks 2D rotation and Soufflé instability using linear algebra projection.
+        
+        Observes the precise quantum state vector at each step of Grover's iteration to 
+        empirically verify that the operation constitutes a rotation in a 2D invariant subspace 
+        spanned by the uniform target and non-target states.
+        
+        Args:
+            max_k (int): Maximum number of iterations to simulate.
+            
+        Returns:
+            tuple: Arrays containing 'good' amplitudes, 'bad' amplitudes, the total subspace probability, 
+                   and the empirical success probabilities.
+        """
         a_k_vals = []
         b_k_vals = []
         p_total_vals = []
         success_probs = []
         
+        # Iterate over increasing numbers of Grover operator applications
         for k in range(max_k + 1):
             qc = QuantumCircuit(self.n)
+            
+            # Initialize to the uniform superposition state
             qc.h(range(self.n))
             
             if k > 0:
+                # Apply the Oracle and Diffusion operators k times
                 oracle = self.get_oracle()
                 diff = self.get_diffusion()
                 for _ in range(k):
@@ -99,27 +172,42 @@ class GroverGeometricLab:
                     qc.append(diff, range(self.n))
             
             # Step B: Iterative Statevector Extraction
+            # Capture the full statevector to analyze its overlap with the invariant subspace
             qc.save_statevector()
             result = self.backend.run(transpile(qc, self.backend)).result()
             state_k = np.array(result.get_statevector())
             
             # Step C: The Projection Logic
+            # Calculate the projection coefficients for the good and bad basis vectors
             ak = np.dot(self.good_vec.conj(), state_k)
             bk = np.dot(self.bad_vec.conj(), state_k)
             
+            # Theoretical invariant subspace conservation check
             prob_in_subspace = np.abs(ak)**2 + np.abs(bk)**2
             
             a_k_vals.append(ak)
             b_k_vals.append(bk)
             p_total_vals.append(prob_in_subspace)
             
-            # The actual success probability is |ak|^2
+            # The actual success probability is |ak|^2, corresponding to a measurement collapsing to a marked state
             success_probs.append(np.abs(ak)**2)
             
         return np.array(a_k_vals), np.array(b_k_vals), np.array(p_total_vals), success_probs
 
     def simulate_cloning_barrier(self, max_k):
-        """Module 3: Proves that naive CNOT cloning fails due to entanglement."""
+        """
+        Module 3: Proves that naive CNOT cloning fails due to entanglement.
+        
+        Provides an empirical demonstration of the No-Cloning Theorem by showing how naive 
+        attempt at copying via CNOT gates unavoidably destroys the purity of the state 
+        due to unwanted system-environment entanglement.
+        
+        Args:
+            max_k (int): Maximum number of iterations to simulate.
+            
+        Returns:
+            tuple: Lists defining the state purity before and after attempting to copy the quantum register.
+        """
         purity_original = []
         purity_after_copy = []
         
@@ -164,8 +252,21 @@ class GroverGeometricLab:
         return purity_original, purity_after_copy
 
     def sensitivity_heatmap(self, k_max, lambda_max, resolution=500):
-        """Module 5: Generates the 2D Soufflé Instability Heatmap."""
-        # 1. Create the Meshgrid
+        """
+        Module 5: Generates the 2D Soufflé Instability Heatmap.
+        
+        Calculates a vectorized surface of Grover success probabilities across varying 
+        iteration counts and solution densities to highlight its extreme sensitivity.
+        
+        Args:
+            k_max (int): The upper limit for the number of Grover iterations.
+            lambda_max (float): The upper limit for the solution density (M/N).
+            resolution (int): Resolution of the discretized test grid.
+            
+        Returns:
+            tuple: Coordinates and probabilistic success rates defining the instability heatmap.
+        """
+        # 1. Create the Meshgrid for extensive parametric sampling
         k_range = np.arange(0, k_max)
         lambda_range = np.linspace(0.001, lambda_max, resolution)
         K, L = np.meshgrid(k_range, lambda_range)
@@ -177,8 +278,21 @@ class GroverGeometricLab:
         return K, L, success_heatmap
 
     def recursive_nesting_analysis(self, k1, k2, max_lambda):
-        """Module 4: Demonstrates self-similar scaling and extreme gate depth in nested AA."""
-        # 1. Analytical Evaluation for Smooth Curves
+        """
+        Module 4: Demonstrates self-similar scaling and extreme gate depth in nested Amplitude Amplification (AA).
+        
+        Examines the theoretical implications of executing nested iterations of standard Grover 
+        logic—comparing multi-level success amplifications against corresponding exponential circuit depth.
+        
+        Args:
+            k1 (int): Application count for an inner-layer Grover operator.
+            k2 (int): Application count for an outer-layer meta-Grover operator.
+            max_lambda (float): Upper boundary for solution density on the evaluated smooth curve.
+            
+        Returns:
+            tuple: Solution density arrays, nested level probability curves, and gate depth analysis mappings.
+        """
+        # 1. Analytical Evaluation utilizing discretized smooth curves for theoretical predictions
         lambda_vals = np.linspace(0.0001, max_lambda, 500)
         
         # Level 1 probability P1
@@ -218,6 +332,11 @@ class GroverGeometricLab:
         return lambda_vals, p1_vals, p2_vals, depth_data
 
 if __name__ == "__main__":
+    # --------------------------------------------------------------------------------
+    # Experimental Execution Block
+    # Handles rigorous module evaluation, simulation visualization, and mathematical proof outputs.
+    # --------------------------------------------------------------------------------
+
     print("\n" + "=" * 70)
     print("GROVER TEST CASES: M vs N")
     print("=" * 70)
