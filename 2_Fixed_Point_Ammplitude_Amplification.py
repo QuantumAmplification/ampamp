@@ -285,7 +285,7 @@ def simulate_2d_fpaa_sequence(lam: float, alphas: np.ndarray, betas: np.ndarray)
 
     for a_j, b_j in zip(alphas, betas):
         S_t = I - (1.0 - np.exp(1j * float(b_j))) * Pi_t
-        S_s = I - (1.0 - np.exp(1j * float(a_j))) * Pi_s
+        S_s = I - (1.0 - np.exp(-1j * float(a_j))) * Pi_s
         state = -(S_s @ S_t) @ state
 
     return float(np.abs(state[1]) ** 2)
