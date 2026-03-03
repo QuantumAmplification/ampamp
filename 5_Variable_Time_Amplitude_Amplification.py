@@ -69,6 +69,87 @@ class VTAAReport:
     vtaa_asymptotic_bound: float
 
 
+@dataclass
+class SouffleProblemResults:
+    """Over-rotation benchmark when guessed and actual marked-state counts differ."""
+
+    n: int
+    N: int
+    guessed_m: int
+    actual_m: int
+    k_opt_guess: int
+    k_values: np.ndarray
+    actual_probs: np.ndarray
+    guess_probs_theoretical: np.ndarray
+    prob_at_halt: float
+    peak_prob_before_halt: float
+    collapse_from_peak: float
+
+
+@dataclass
+class FTQCScalingResults:
+    """Fault-tolerant synthesis scaling for diffusion-core multi-control logic."""
+
+    n_values_vchain: np.ndarray
+    t_counts_vchain: np.ndarray
+    ancilla_counts_vchain: np.ndarray
+    n_values_noancilla: np.ndarray
+    t_counts_noancilla: np.ndarray
+
+
+@dataclass
+class ExactAAResults:
+    """Exact amplitude amplification via optimized final fractional phases."""
+
+    n: int
+    N: int
+    m_targets: int
+    k_base: int
+    k_peak_standard: int
+    standard_probs: np.ndarray
+    exact_oracle_phase: float
+    exact_diffusion_phase: float
+    exact_prob: float
+
+
+@dataclass
+class PhaseLeakageResults:
+    """Rank-growth audit under phase mismatch and analog control skew."""
+
+    n: int
+    N: int
+    k_max: int
+    eps_oracle_deg: float
+    eps_diff_deg: float
+    crosstalk_oracle_deg: float
+    local_z_detune_deg: float
+    rank_threshold: float
+    rank_ideal: np.ndarray
+    rank_mismatch_only: np.ndarray
+    rank_leaky: np.ndarray
+    final_sv_ideal: np.ndarray
+    final_sv_mismatch_only: np.ndarray
+    final_sv_leaky: np.ndarray
+
+
+@dataclass
+class OpenSystemTrajectoryResults:
+    """Open-system AA trajectory metrics under dephasing noise."""
+
+    n: int
+    N: int
+    k_max: int
+    phase_damp_1q: float
+    phase_damp_2q: float
+    target_state: str
+    ideal_x: np.ndarray
+    ideal_z: np.ndarray
+    noisy_x: np.ndarray
+    noisy_z: np.ndarray
+    noisy_purity: np.ndarray
+    trace_distance_to_plane: np.ndarray
+
+
 class VariableTimeAmplitudeAmplificationLab:
     """Numerical lab for variable-time amplitude amplification."""
 
@@ -394,6 +475,736 @@ def save_plots(
     return saved
 
 
+def experiment_souffle_catastrophe(
+    n: int = 8,
+    guessed_m: int = 1,
+    actual_m: int = 5,
+    k_scan_factor: float = 1.5,
+) -> SouffleProblemResults:
+    """Numerically demonstrate over-rotation from an incorrect M estimate."""
+    if n < 1:
+        raise ValueError("n must be >= 1.")
+    if guessed_m < 1 or actual_m < 1:
+        raise ValueError("guessed_m and actual_m must be >= 1.")
+    if k_scan_factor < 1.0:
+        raise ValueError("k_scan_factor must be >= 1.")
+
+    N = 2**n
+    if guessed_m > N or actual_m > N:
+        raise ValueError("guessed_m and actual_m must be <= 2**n.")
+
+    theta_guess = float(np.arcsin(np.sqrt(guessed_m / N)))
+    k_opt_guess = max(0, int(np.floor(np.pi / (4.0 * theta_guess) - 0.5)))
+    k_max = max(k_opt_guess + 1, int(np.ceil(k_scan_factor * max(1, k_opt_guess))))
+    k_values = np.arange(k_max + 1, dtype=int)
+
+    # Mark the first actual_m basis states as good states.
+    target_indices = np.arange(actual_m, dtype=int)
+    oracle_sign = np.ones(N, dtype=float)
+    oracle_sign[target_indices] = -1.0
+
+    # Uniform start state |s>.
+    psi = np.ones(N, dtype=complex) / np.sqrt(N)
+
+    actual_probs: List[float] = []
+    for k in k_values:
+        p_good = float(np.sum(np.abs(psi[target_indices]) ** 2))
+        actual_probs.append(p_good)
+
+        if k < k_max:
+            # Oracle phase flip on actual good states.
+            psi = oracle_sign * psi
+            # Diffusion about |s>: D = 2|s><s| - I.
+            mean_amp = np.mean(psi)
+            psi = (2.0 * mean_amp) - psi
+
+    actual_probs_arr = np.array(actual_probs, dtype=float)
+    guess_probs_theoretical = np.sin((2 * k_values + 1) * theta_guess) ** 2
+    prob_at_halt = float(actual_probs_arr[k_opt_guess])
+    peak_prob_before_halt = float(np.max(actual_probs_arr[: k_opt_guess + 1]))
+    collapse_from_peak = float(peak_prob_before_halt - prob_at_halt)
+
+    return SouffleProblemResults(
+        n=n,
+        N=N,
+        guessed_m=guessed_m,
+        actual_m=actual_m,
+        k_opt_guess=k_opt_guess,
+        k_values=k_values,
+        actual_probs=actual_probs_arr,
+        guess_probs_theoretical=np.array(guess_probs_theoretical, dtype=float),
+        prob_at_halt=prob_at_halt,
+        peak_prob_before_halt=peak_prob_before_halt,
+        collapse_from_peak=collapse_from_peak,
+    )
+
+
+def save_souffle_plot(result: SouffleProblemResults, output_prefix: str = "vtaa") -> str:
+    """Save guessed-vs-actual over-rotation trajectory plot."""
+    fig, ax = plt.subplots(figsize=(8, 4.8))
+    k = result.k_values
+
+    ax.plot(
+        k,
+        result.guess_probs_theoretical,
+        linestyle=":",
+        linewidth=2.0,
+        color="0.35",
+        label=f"Expected (assumed M={result.guessed_m})",
+    )
+    ax.plot(
+        k,
+        result.actual_probs,
+        marker="o",
+        markersize=3,
+        linewidth=2.0,
+        color="tab:red",
+        label=f"Actual (true M={result.actual_m})",
+    )
+    ax.axvline(
+        result.k_opt_guess,
+        linestyle="--",
+        linewidth=1.2,
+        color="black",
+        label=f"Halt at guessed k*={result.k_opt_guess}",
+    )
+    ax.set_title("Souffle Problem: Over-Rotation Catastrophe")
+    ax.set_xlabel("Grover iterations k")
+    ax.set_ylabel("Success probability")
+    ax.set_ylim(0.0, 1.02)
+    ax.grid(alpha=0.3)
+    ax.legend()
+
+    ax.annotate(
+        f"halt={100*result.prob_at_halt:.1f}%\npeak drop={100*result.collapse_from_peak:.1f}%",
+        xy=(result.k_opt_guess, result.prob_at_halt),
+        xytext=(result.k_opt_guess + 1, min(0.95, result.prob_at_halt + 0.25)),
+        arrowprops={"arrowstyle": "->", "lw": 1.0},
+    )
+
+    path = f"{output_prefix}_souffle_catastrophe.png"
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+    return path
+
+
+def experiment_ftqc_diffusion_scaling(
+    n_min: int = 5,
+    n_max: int = 50,
+    noancilla_max: int = 8,
+    optimization_level: int = 1,
+) -> FTQCScalingResults:
+    """Compile MCX-based diffusion core to Clifford+T and record scaling metrics.
+
+    Notes
+    -----
+    - V-chain uses dirty ancillas and scales roughly linearly in T-count.
+    - No-ancilla compilation grows rapidly; by default we cap its sweep.
+    """
+    if n_min < 3:
+        raise ValueError("n_min must be >= 3.")
+    if n_max < n_min:
+        raise ValueError("n_max must be >= n_min.")
+    if noancilla_max < n_min:
+        noancilla_max = n_min
+    if optimization_level not in (0, 1, 2, 3):
+        raise ValueError("optimization_level must be one of {0,1,2,3}.")
+
+    try:
+        import warnings
+
+        from qiskit import QuantumCircuit, transpile
+    except Exception as exc:
+        raise RuntimeError("Qiskit is required for FTQC diffusion scaling.") from exc
+
+    basis = ["cx", "h", "s", "sdg", "t", "tdg", "x", "z"]
+    n_values_vchain = np.arange(n_min, n_max + 1, dtype=int)
+    t_counts_vchain: List[int] = []
+    ancilla_counts_vchain: List[int] = []
+
+    # V-chain sweep for the full n-range.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=DeprecationWarning)
+        for n in n_values_vchain:
+            controls = int(n - 1)
+            ancillas = max(0, controls - 2)
+            ancilla_counts_vchain.append(ancillas)
+
+            num_qubits = n + ancillas
+            qc = QuantumCircuit(num_qubits)
+            ctrl_idx = list(range(controls))
+            target_idx = controls
+            anc_idx = list(range(controls + 1, num_qubits))
+            qc.mcx(ctrl_idx, target_idx, anc_idx, mode="v-chain")
+
+            t_qc = transpile(
+                qc,
+                basis_gates=basis,
+                optimization_level=optimization_level,
+                seed_transpiler=42,
+            )
+            ops = t_qc.count_ops()
+            t_counts_vchain.append(int(ops.get("t", 0) + ops.get("tdg", 0)))
+
+    # No-ancilla sweep (truncated by default for runtime feasibility).
+    noancilla_end = min(noancilla_max, n_max)
+    n_values_noancilla = np.arange(n_min, noancilla_end + 1, dtype=int)
+    t_counts_noancilla: List[int] = []
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=DeprecationWarning)
+        for n in n_values_noancilla:
+            controls = int(n - 1)
+            qc = QuantumCircuit(n)
+            qc.mcx(list(range(controls)), controls, mode="noancilla")
+
+            t_qc = transpile(
+                qc,
+                basis_gates=basis,
+                optimization_level=optimization_level,
+                seed_transpiler=42,
+            )
+            ops = t_qc.count_ops()
+            t_counts_noancilla.append(int(ops.get("t", 0) + ops.get("tdg", 0)))
+
+    return FTQCScalingResults(
+        n_values_vchain=n_values_vchain,
+        t_counts_vchain=np.array(t_counts_vchain, dtype=int),
+        ancilla_counts_vchain=np.array(ancilla_counts_vchain, dtype=int),
+        n_values_noancilla=n_values_noancilla,
+        t_counts_noancilla=np.array(t_counts_noancilla, dtype=int),
+    )
+
+
+def save_ftqc_scaling_plot(result: FTQCScalingResults, output_prefix: str = "vtaa") -> str:
+    """Save FTQC T-gate/ancilla scaling plot for diffusion synthesis."""
+    fig, ax1 = plt.subplots(figsize=(8.8, 5.2))
+
+    ax1.plot(
+        result.n_values_vchain,
+        result.t_counts_vchain,
+        marker="o",
+        linewidth=2.0,
+        markersize=3.5,
+        color="tab:blue",
+        label="T-count (v-chain, with ancillas)",
+    )
+    if len(result.n_values_noancilla) > 0:
+        ax1.plot(
+            result.n_values_noancilla,
+            result.t_counts_noancilla,
+            marker="x",
+            linewidth=1.8,
+            markersize=4,
+            linestyle="--",
+            color="tab:red",
+            label="T-count (no ancilla)",
+        )
+    ax1.set_xlabel("Diffusion register size n")
+    ax1.set_ylabel("T + Tdg gate count")
+    ax1.set_yscale("log")
+    ax1.grid(alpha=0.3)
+
+    ax2 = ax1.twinx()
+    ax2.bar(
+        result.n_values_vchain,
+        result.ancilla_counts_vchain,
+        alpha=0.18,
+        color="tab:green",
+        width=0.75,
+        label="dirty ancillas (v-chain)",
+    )
+    ax2.set_ylabel("Ancilla qubits")
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
+    ax1.set_title("FTQC Scaling of Diffusion-Operator Synthesis")
+
+    path = f"{output_prefix}_ftqc_diffusion_scaling.png"
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+    return path
+
+
+def experiment_exact_amplitude_amplification(
+    n: int = 8,
+    m_targets: int = 3,
+    coarse_grid: int = 48,
+) -> ExactAAResults:
+    """Run standard AA and optimize a fractional final step for exact-AA landing."""
+    if n < 1:
+        raise ValueError("n must be >= 1.")
+    if m_targets < 1:
+        raise ValueError("m_targets must be >= 1.")
+    if coarse_grid < 8:
+        raise ValueError("coarse_grid must be >= 8.")
+
+    try:
+        from scipy.optimize import minimize
+    except Exception as exc:
+        raise RuntimeError("scipy is required for exact-AA phase optimization.") from exc
+
+    N = 2**n
+    if m_targets > N:
+        raise ValueError("m_targets must be <= 2**n.")
+
+    target_indices = np.arange(m_targets, dtype=int)
+    theta_0 = float(np.arcsin(np.sqrt(m_targets / N)))
+    k_base = max(0, int(np.floor(np.pi / (4.0 * theta_0) - 0.5)))
+
+    # Build operators in full space for explicit statevector-level evidence.
+    proj_good = np.zeros((N, N), dtype=complex)
+    proj_good[target_indices, target_indices] = 1.0
+    ket_s = np.ones(N, dtype=complex) / np.sqrt(N)
+    proj_s = np.outer(ket_s, ket_s.conjugate())
+    oracle_pi = np.eye(N, dtype=complex) - 2.0 * proj_good
+    diffusion_pi = 2.0 * proj_s - np.eye(N, dtype=complex)
+
+    # Standard AA trajectory through one overshoot step.
+    psi = ket_s.copy()
+    standard_probs: List[float] = []
+    states: List[np.ndarray] = []
+    k_max = k_base + 2
+    for k in range(k_max + 1):
+        states.append(psi.copy())
+        standard_probs.append(float(np.sum(np.abs(psi[target_indices]) ** 2)))
+        if k < k_max:
+            psi = diffusion_pi @ (oracle_pi @ psi)
+
+    standard_probs_arr = np.array(standard_probs, dtype=float)
+    k_peak_standard = int(np.argmax(standard_probs_arr))
+    psi_base = states[k_base]
+
+    def _prob_after_fractional_step(alpha: float, beta: float) -> float:
+        oracle_alpha = np.eye(N, dtype=complex) + (np.exp(1j * alpha) - 1.0) * proj_good
+        diffusion_beta = np.eye(N, dtype=complex) + (np.exp(1j * beta) - 1.0) * proj_s
+        psi_final = diffusion_beta @ (oracle_alpha @ psi_base)
+        return float(np.sum(np.abs(psi_final[target_indices]) ** 2))
+
+    # Coarse search to avoid local minima in local optimizer.
+    alpha_grid = np.linspace(0.0, 2.0 * np.pi, coarse_grid, endpoint=False)
+    beta_grid = np.linspace(0.0, 2.0 * np.pi, coarse_grid, endpoint=False)
+    best_prob = -1.0
+    best_alpha = 0.0
+    best_beta = 0.0
+    for alpha in alpha_grid:
+        oracle_alpha = np.eye(N, dtype=complex) + (np.exp(1j * alpha) - 1.0) * proj_good
+        oracle_applied = oracle_alpha @ psi_base
+        for beta in beta_grid:
+            diffusion_beta = np.eye(N, dtype=complex) + (np.exp(1j * beta) - 1.0) * proj_s
+            p = float(np.sum(np.abs((diffusion_beta @ oracle_applied)[target_indices]) ** 2))
+            if p > best_prob:
+                best_prob = p
+                best_alpha = float(alpha)
+                best_beta = float(beta)
+
+    def _objective(x: np.ndarray) -> float:
+        return -_prob_after_fractional_step(float(x[0]), float(x[1]))
+
+    opt = minimize(
+        _objective,
+        x0=np.array([best_alpha, best_beta], dtype=float),
+        method="L-BFGS-B",
+        bounds=[(0.0, 2.0 * np.pi), (0.0, 2.0 * np.pi)],
+        options={"maxiter": 1000},
+    )
+    exact_alpha = float(opt.x[0])
+    exact_beta = float(opt.x[1])
+    exact_prob = float(_prob_after_fractional_step(exact_alpha, exact_beta))
+
+    return ExactAAResults(
+        n=n,
+        N=N,
+        m_targets=m_targets,
+        k_base=k_base,
+        k_peak_standard=k_peak_standard,
+        standard_probs=standard_probs_arr,
+        exact_oracle_phase=exact_alpha,
+        exact_diffusion_phase=exact_beta,
+        exact_prob=exact_prob,
+    )
+
+
+def save_exact_aa_peak_plot(result: ExactAAResults, output_prefix: str = "vtaa") -> str:
+    """Save a peak-region comparison: standard AA vs optimized exact-AA final step."""
+    k_left = max(0, result.k_base - 1)
+    k_right = min(len(result.standard_probs) - 1, result.k_base + 2)
+    k_vals = np.arange(k_left, k_right + 1, dtype=int)
+    std_zoom = result.standard_probs[k_left : k_right + 1]
+
+    fig, ax = plt.subplots(figsize=(8.4, 4.8))
+    ax.plot(
+        k_vals,
+        std_zoom,
+        color="tab:red",
+        marker="o",
+        linewidth=2.0,
+        markersize=4.5,
+        label="Standard AA (pi phases)",
+    )
+
+    # Exact-AA endpoint is at k_base + 1 with optimized final phases.
+    exact_k = result.k_base + 1
+    ax.plot(
+        [result.k_base, exact_k],
+        [result.standard_probs[result.k_base], result.exact_prob],
+        color="tab:green",
+        linestyle="--",
+        linewidth=1.8,
+    )
+    ax.scatter(
+        [exact_k],
+        [result.exact_prob],
+        color="tab:green",
+        s=80,
+        marker="*",
+        label="Exact AA (optimized final phases)",
+        zorder=5,
+    )
+
+    ax.axhline(1.0, color="black", linestyle=":", linewidth=1.2, label="Unity target")
+    ax.set_title("Exact Amplitude Amplification: Discretization Fix")
+    ax.set_xlabel("Iteration k")
+    ax.set_ylabel("Success probability")
+    ax.set_ylim(max(0.0, float(np.min(std_zoom)) * 0.97), 1.01)
+    ax.grid(alpha=0.3)
+    ax.legend(loc="lower right")
+
+    path = f"{output_prefix}_exact_aa_peak_region.png"
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+    return path
+
+
+def experiment_phase_mismatch_leakage(
+    n: int = 6,
+    k_max: int = 20,
+    eps_oracle_deg: float = -5.0,
+    eps_diff_deg: float = 2.0,
+    crosstalk_oracle_deg: float = 0.6,
+    local_z_detune_deg: float = 0.6,
+    rank_threshold: float = 1e-10,
+) -> PhaseLeakageResults:
+    """Track trajectory rank under ideal, mismatch-only, and leaky analog control.
+
+    Important nuance:
+    Pure phase mismatch alone remains rank-2 in the idealized generalized-AA model.
+    Leakage above rank-2 appears when control errors also introduce non-uniform
+    state-dependent phases (modeled here as crosstalk + local detuning).
+    """
+    if n < 1:
+        raise ValueError("n must be >= 1.")
+    if k_max < 1:
+        raise ValueError("k_max must be >= 1.")
+    if rank_threshold <= 0.0:
+        raise ValueError("rank_threshold must be > 0.")
+
+    N = 2**n
+    target_idx = N - 1
+    spur_idx = N - 2 if N >= 2 else 0
+
+    ket_t = np.zeros(N, dtype=complex)
+    ket_t[target_idx] = 1.0
+    proj_t = np.outer(ket_t, ket_t.conjugate())
+
+    ket_spur = np.zeros(N, dtype=complex)
+    ket_spur[spur_idx] = 1.0
+    proj_spur = np.outer(ket_spur, ket_spur.conjugate())
+
+    ket_s = np.ones(N, dtype=complex) / np.sqrt(N)
+    proj_s = np.outer(ket_s, ket_s.conjugate())
+
+    eps_o = float(np.deg2rad(eps_oracle_deg))
+    eps_d = float(np.deg2rad(eps_diff_deg))
+    gamma_o = float(np.deg2rad(crosstalk_oracle_deg))
+    gamma_z = float(np.deg2rad(local_z_detune_deg))
+
+    # Ideal reflections.
+    oracle_ideal = np.eye(N, dtype=complex) - 2.0 * proj_t
+    diffusion_ideal = 2.0 * proj_s - np.eye(N, dtype=complex)
+
+    # Mismatch-only generalized reflections.
+    oracle_mismatch = np.eye(N, dtype=complex) + (np.exp(1j * (np.pi + eps_o)) - 1.0) * proj_t
+    diffusion_mismatch = np.eye(N, dtype=complex) + (np.exp(1j * (np.pi + eps_d)) - 1.0) * proj_s
+
+    # Additional analog non-uniformity model (crosstalk + local Z-detuning).
+    oracle_crosstalk = np.eye(N, dtype=complex) + (np.exp(1j * gamma_o) - 1.0) * proj_spur
+    local_z_sign = np.array([1.0 if (i & 1) == 0 else -1.0 for i in range(N)], dtype=float)
+    local_detune = np.diag(np.exp(1j * gamma_z * local_z_sign))
+
+    oracle_leaky = oracle_crosstalk @ oracle_mismatch
+    diffusion_leaky = local_detune @ diffusion_mismatch
+
+    def _track_rank(oracle: np.ndarray, diffusion: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        psi = ket_s.copy()
+        history = [psi.copy()]
+        ranks: List[int] = [1]
+        sv_last = np.array([1.0], dtype=float)
+        for _ in range(k_max):
+            psi = diffusion @ (oracle @ psi)
+            history.append(psi.copy())
+            sv = np.linalg.svd(np.column_stack(history), compute_uv=False)
+            ranks.append(int(np.count_nonzero(sv > rank_threshold)))
+            sv_last = sv
+        return np.array(ranks, dtype=int), sv_last
+
+    rank_ideal, sv_ideal = _track_rank(oracle_ideal, diffusion_ideal)
+    rank_mismatch_only, sv_mismatch = _track_rank(oracle_mismatch, diffusion_mismatch)
+    rank_leaky, sv_leaky = _track_rank(oracle_leaky, diffusion_leaky)
+
+    return PhaseLeakageResults(
+        n=n,
+        N=N,
+        k_max=k_max,
+        eps_oracle_deg=eps_oracle_deg,
+        eps_diff_deg=eps_diff_deg,
+        crosstalk_oracle_deg=crosstalk_oracle_deg,
+        local_z_detune_deg=local_z_detune_deg,
+        rank_threshold=rank_threshold,
+        rank_ideal=rank_ideal,
+        rank_mismatch_only=rank_mismatch_only,
+        rank_leaky=rank_leaky,
+        final_sv_ideal=sv_ideal,
+        final_sv_mismatch_only=sv_mismatch,
+        final_sv_leaky=sv_leaky,
+    )
+
+
+def save_phase_leakage_plot(result: PhaseLeakageResults, output_prefix: str = "vtaa") -> str:
+    """Save rank-growth evidence plot for phase-mismatch leakage audit."""
+    k_vals = np.arange(result.k_max + 1, dtype=int)
+    fig, ax = plt.subplots(figsize=(8.8, 5.2))
+
+    ax.step(
+        k_vals,
+        result.rank_ideal,
+        where="post",
+        linewidth=2.2,
+        color="tab:blue",
+        label="Ideal (180 deg, 180 deg)",
+    )
+    ax.step(
+        k_vals,
+        result.rank_mismatch_only,
+        where="post",
+        linewidth=2.0,
+        color="tab:orange",
+        label=f"Mismatch only ({180+result.eps_oracle_deg:.1f} deg, {180+result.eps_diff_deg:.1f} deg)",
+    )
+    ax.step(
+        k_vals,
+        result.rank_leaky,
+        where="post",
+        linewidth=2.2,
+        color="tab:red",
+        label=(
+            "Mismatch + analog skew "
+            f"(crosstalk {result.crosstalk_oracle_deg:.1f} deg, detune {result.local_z_detune_deg:.1f} deg)"
+        ),
+    )
+
+    ax.axhline(2, color="black", linestyle=":", linewidth=1.2, label="Invariant-plane rank=2")
+    ax.set_title("Phase-Mismatch Leakage: Empirical Trajectory Rank")
+    ax.set_xlabel("Iteration k")
+    ax.set_ylabel("Numerical rank of history matrix")
+    ax.set_ylim(0, max(4, int(np.max(result.rank_leaky)) + 1))
+    ax.grid(alpha=0.3)
+    ax.legend(loc="upper left", fontsize=9)
+
+    path = f"{output_prefix}_phase_mismatch_leakage.png"
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+    return path
+
+
+def _trace_distance(rho_a: np.ndarray, rho_b: np.ndarray) -> float:
+    """Trace distance D(rho_a, rho_b) = 1/2 ||rho_a-rho_b||_1 for Hermitian inputs."""
+    delta = rho_a - rho_b
+    delta = 0.5 * (delta + delta.conjugate().T)
+    eigvals = np.linalg.eigvalsh(delta)
+    return 0.5 * float(np.sum(np.abs(eigvals)))
+
+
+def experiment_open_system_trajectory(
+    n: int = 4,
+    k_max: int = 12,
+    phase_damp_1q: float = 0.02,
+    phase_damp_2q: float = 0.08,
+    target_state: str | None = None,
+) -> OpenSystemTrajectoryResults:
+    """Simulate AA as an open system and track purity/plane-distance decay."""
+    if n < 2:
+        raise ValueError("n must be >= 2.")
+    if k_max < 1:
+        raise ValueError("k_max must be >= 1.")
+    if not (0.0 <= phase_damp_1q <= 1.0 and 0.0 <= phase_damp_2q <= 1.0):
+        raise ValueError("phase damping probabilities must be in [0,1].")
+
+    try:
+        from qiskit import QuantumCircuit, transpile
+        from qiskit_aer import AerSimulator
+        from qiskit_aer.noise import NoiseModel, phase_damping_error
+    except Exception as exc:
+        raise RuntimeError("qiskit + qiskit-aer are required for open-system trajectory module.") from exc
+
+    N = 2**n
+    if target_state is None:
+        target_state = "1" * n
+    if len(target_state) != n or any(ch not in "01" for ch in target_state):
+        raise ValueError("target_state must be an n-bit binary string.")
+    target_idx = int(target_state, 2)
+
+    # Build the |B>,|G> basis used for 2D projection observables.
+    vec_g = np.zeros(N, dtype=complex)
+    vec_g[target_idx] = 1.0
+    vec_s = np.ones(N, dtype=complex) / np.sqrt(N)
+    vec_b = vec_s - np.vdot(vec_g, vec_s) * vec_g
+    vec_b = vec_b / np.linalg.norm(vec_b)
+
+    proj_b = np.outer(vec_b, vec_b.conjugate())
+    proj_g = np.outer(vec_g, vec_g.conjugate())
+    proj_plane = proj_b + proj_g
+    z_eff = proj_b - proj_g
+    x_eff = np.outer(vec_b, vec_g.conjugate()) + np.outer(vec_g, vec_b.conjugate())
+
+    # Severe dephasing-dominant open-system model.
+    noise_model = NoiseModel()
+    err_1q = phase_damping_error(phase_damp_1q)
+    err_2q = phase_damping_error(phase_damp_2q).tensor(phase_damping_error(phase_damp_2q))
+    for gate in ["h", "x", "sx", "u", "u1", "u2", "u3", "p", "rz"]:
+        try:
+            noise_model.add_all_qubit_quantum_error(err_1q, [gate])
+        except Exception:
+            pass
+    noise_model.add_all_qubit_quantum_error(err_2q, ["cx"])
+
+    sim_ideal = AerSimulator(method="density_matrix")
+    sim_noisy = AerSimulator(method="density_matrix", noise_model=noise_model)
+
+    def _append_oracle(qc: "QuantumCircuit", phase: float) -> None:
+        rev_bits = target_state[::-1]
+        for q, bit in enumerate(rev_bits):
+            if bit == "0":
+                qc.x(q)
+        qc.mcp(phase, list(range(n - 1)), n - 1)
+        for q, bit in enumerate(rev_bits):
+            if bit == "0":
+                qc.x(q)
+
+    def _append_diffusion(qc: "QuantumCircuit", phase: float) -> None:
+        qc.h(range(n))
+        qc.x(range(n))
+        qc.mcp(phase, list(range(n - 1)), n - 1)
+        qc.x(range(n))
+        qc.h(range(n))
+
+    def _build_circuit(k: int) -> "QuantumCircuit":
+        qc = QuantumCircuit(n)
+        qc.h(range(n))
+        for _ in range(k):
+            _append_oracle(qc, np.pi)
+            _append_diffusion(qc, np.pi)
+        qc.save_density_matrix()
+        return qc
+
+    ideal_x: List[float] = []
+    ideal_z: List[float] = []
+    noisy_x: List[float] = []
+    noisy_z: List[float] = []
+    purity_noisy: List[float] = []
+    trace_dist_plane: List[float] = []
+
+    for k in range(k_max + 1):
+        qc = _build_circuit(k)
+        tc_ideal = transpile(qc, sim_ideal, optimization_level=0)
+        tc_noisy = transpile(qc, sim_noisy, optimization_level=0)
+
+        rho_i = np.asarray(sim_ideal.run(tc_ideal).result().data(0)["density_matrix"], dtype=complex)
+        rho_n = np.asarray(sim_noisy.run(tc_noisy).result().data(0)["density_matrix"], dtype=complex)
+
+        ideal_x.append(float(np.real(np.trace(rho_i @ x_eff))))
+        ideal_z.append(float(np.real(np.trace(rho_i @ z_eff))))
+        noisy_x.append(float(np.real(np.trace(rho_n @ x_eff))))
+        noisy_z.append(float(np.real(np.trace(rho_n @ z_eff))))
+
+        purity_noisy.append(float(np.real(np.trace(rho_n @ rho_n))))
+
+        rho_proj = proj_plane @ rho_n @ proj_plane
+        in_plane = float(np.real(np.trace(rho_proj)))
+        if in_plane > 1e-15:
+            rho_plane_state = rho_proj / in_plane
+        else:
+            rho_plane_state = 0.5 * proj_plane
+        trace_dist_plane.append(_trace_distance(rho_n, rho_plane_state))
+
+    return OpenSystemTrajectoryResults(
+        n=n,
+        N=N,
+        k_max=k_max,
+        phase_damp_1q=phase_damp_1q,
+        phase_damp_2q=phase_damp_2q,
+        target_state=target_state,
+        ideal_x=np.array(ideal_x, dtype=float),
+        ideal_z=np.array(ideal_z, dtype=float),
+        noisy_x=np.array(noisy_x, dtype=float),
+        noisy_z=np.array(noisy_z, dtype=float),
+        noisy_purity=np.array(purity_noisy, dtype=float),
+        trace_distance_to_plane=np.array(trace_dist_plane, dtype=float),
+    )
+
+
+def save_open_system_trajectory_plot(result: OpenSystemTrajectoryResults, output_prefix: str = "vtaa") -> str:
+    """Save 2-panel open-system evidence: trajectory spiral + purity/distance decay."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12.4, 5.2))
+
+    # Panel A: Effective 2D trajectory (ideal orbit vs noisy spiral).
+    circle = plt.Circle((0.0, 0.0), 1.0, fill=False, linestyle=":", linewidth=1.2, color="black", alpha=0.6)
+    ax1.add_patch(circle)
+    ax1.plot(result.ideal_z, result.ideal_x, "-o", color="tab:blue", linewidth=2.0, markersize=4, label="Ideal closed system")
+    ax1.plot(result.noisy_z, result.noisy_x, "-X", color="tab:red", linewidth=2.0, markersize=4, label="Open system (dephasing)")
+    ax1.scatter([result.ideal_z[0]], [result.ideal_x[0]], color="tab:blue", s=45, zorder=5)
+    ax1.scatter([-1.0], [0.0], color="green", s=60, zorder=5)
+    ax1.set_title("Open-System Geometric Trajectory")
+    ax1.set_xlabel("Re<Z_eff>")
+    ax1.set_ylabel("Re<X_eff>")
+    ax1.set_xlim(-1.25, 1.25)
+    ax1.set_ylim(-1.25, 1.25)
+    ax1.set_aspect("equal")
+    ax1.grid(alpha=0.3)
+    ax1.legend(loc="lower right", fontsize=9)
+
+    # Panel B: Purity and trace-distance diagnostics.
+    k_vals = np.arange(result.k_max + 1, dtype=int)
+    ax2.plot(k_vals, result.noisy_purity, "-s", color="tab:purple", linewidth=2.0, markersize=4, label="Purity Tr(rho^2)")
+    ax2.plot(
+        k_vals,
+        result.trace_distance_to_plane,
+        "-^",
+        color="tab:orange",
+        linewidth=2.0,
+        markersize=4,
+        label="Trace distance to ideal 2D plane",
+    )
+    ax2.axhline(1.0 / result.N, color="black", linestyle="--", linewidth=1.1, label=f"Mixed-state limit 1/N={1/result.N:.3f}")
+    ax2.set_title("Purity Decay and Geometric Drift")
+    ax2.set_xlabel("Grover iteration k")
+    ax2.set_ylabel("Metric value")
+    ax2.set_ylim(0.0, 1.02)
+    ax2.grid(alpha=0.3)
+    ax2.legend(loc="upper right", fontsize=9)
+
+    path = f"{output_prefix}_open_system_spiral.png"
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+    return path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Variable-Time Amplitude Amplification lab")
     parser.add_argument("--times", type=str, default="1,2,4,8,16", help="comma-separated stop times")
@@ -405,6 +1216,74 @@ def main() -> None:
     parser.add_argument("--verify-k", type=int, default=25, help="max k for SU(2) closed-form verification")
     parser.add_argument("--plot-prefix", type=str, default="vtaa", help="prefix for output PNG files")
     parser.add_argument("--no-plots", action="store_true", help="disable plot generation")
+    parser.add_argument("--run-souffle-catastrophe", action="store_true", help="run over-rotation catastrophe experiment")
+    parser.add_argument("--souffle-n", type=int, default=8, help="qubits for souffle experiment")
+    parser.add_argument("--souffle-guessed-m", type=int, default=1, help="guessed number of marked states")
+    parser.add_argument("--souffle-actual-m", type=int, default=5, help="actual number of marked states")
+    parser.add_argument("--souffle-k-factor", type=float, default=1.5, help="k scan factor past guessed k*")
+    parser.add_argument("--run-ftqc-scaling", action="store_true", help="run FTQC ancilla/T-gate diffusion scaling")
+    parser.add_argument("--ftqc-n-min", type=int, default=5, help="minimum n for FTQC scaling sweep")
+    parser.add_argument("--ftqc-n-max", type=int, default=50, help="maximum n for FTQC scaling sweep")
+    parser.add_argument(
+        "--ftqc-noancilla-max",
+        type=int,
+        default=8,
+        help="maximum n for no-ancilla sweep (kept low due compile blowup)",
+    )
+    parser.add_argument("--ftqc-opt-level", type=int, default=1, help="qiskit transpiler optimization level")
+    parser.add_argument("--run-exact-aa", action="store_true", help="run exact amplitude amplification benchmark")
+    parser.add_argument("--exact-aa-n", type=int, default=8, help="qubit count for exact-AA benchmark")
+    parser.add_argument("--exact-aa-m", type=int, default=3, help="marked-state count for exact-AA benchmark")
+    parser.add_argument(
+        "--exact-aa-grid",
+        type=int,
+        default=48,
+        help="coarse phase grid per axis before local optimizer (exact-AA)",
+    )
+    parser.add_argument("--run-phase-leakage", action="store_true", help="run phase-mismatch leakage rank audit")
+    parser.add_argument("--leakage-n", type=int, default=6, help="qubit count for phase-leakage audit")
+    parser.add_argument("--leakage-k-max", type=int, default=20, help="iterations for phase-leakage rank tracking")
+    parser.add_argument("--leakage-eps-oracle-deg", type=float, default=-5.0, help="oracle phase error in degrees")
+    parser.add_argument("--leakage-eps-diff-deg", type=float, default=2.0, help="diffusion phase error in degrees")
+    parser.add_argument(
+        "--leakage-crosstalk-deg",
+        type=float,
+        default=0.6,
+        help="spurious oracle crosstalk phase on a non-target basis state (degrees)",
+    )
+    parser.add_argument(
+        "--leakage-local-z-deg",
+        type=float,
+        default=0.6,
+        help="local qubit detuning phase per iteration (degrees)",
+    )
+    parser.add_argument(
+        "--leakage-rank-threshold",
+        type=float,
+        default=1e-10,
+        help="singular-value threshold for numerical rank in leakage audit",
+    )
+    parser.add_argument("--run-open-system-trajectory", action="store_true", help="run density-matrix open-system AA trajectory")
+    parser.add_argument("--open-system-n", type=int, default=4, help="qubit count for open-system trajectory")
+    parser.add_argument("--open-system-k-max", type=int, default=12, help="iterations for open-system trajectory")
+    parser.add_argument(
+        "--open-system-phase-damp-1q",
+        type=float,
+        default=0.02,
+        help="single-qubit phase-damping probability per gate",
+    )
+    parser.add_argument(
+        "--open-system-phase-damp-2q",
+        type=float,
+        default=0.08,
+        help="two-qubit phase-damping probability per entangling gate",
+    )
+    parser.add_argument(
+        "--open-system-target-state",
+        type=str,
+        default=None,
+        help="optional marked n-bit target for open-system trajectory",
+    )
     args = parser.parse_args()
 
     times = _parse_csv_floats(args.times)
@@ -419,8 +1298,132 @@ def main() -> None:
 
     report = lab.build_report(polylog_factor=args.polylog, constant_tmax=args.c1, constant_trms=args.c2)
     print(format_report(report))
+
+    souffle_result: SouffleProblemResults | None = None
+    if args.run_souffle_catastrophe:
+        souffle_result = experiment_souffle_catastrophe(
+            n=args.souffle_n,
+            guessed_m=args.souffle_guessed_m,
+            actual_m=args.souffle_actual_m,
+            k_scan_factor=args.souffle_k_factor,
+        )
+        print("\nSouffle Catastrophe:")
+        print(f"  guessed M                         : {souffle_result.guessed_m}")
+        print(f"  actual M                          : {souffle_result.actual_m}")
+        print(f"  guessed optimal k*                : {souffle_result.k_opt_guess}")
+        print(f"  peak probability before halt      : {souffle_result.peak_prob_before_halt:.10f}")
+        print(f"  probability at halt               : {souffle_result.prob_at_halt:.10f}")
+        print(f"  collapse from peak                : {souffle_result.collapse_from_peak:.10f}")
+
+    ftqc_result: FTQCScalingResults | None = None
+    if args.run_ftqc_scaling:
+        ftqc_result = experiment_ftqc_diffusion_scaling(
+            n_min=args.ftqc_n_min,
+            n_max=args.ftqc_n_max,
+            noancilla_max=args.ftqc_noancilla_max,
+            optimization_level=args.ftqc_opt_level,
+        )
+        print("\nFTQC Diffusion Scaling:")
+        print(
+            f"  v-chain sweep n                   : {int(ftqc_result.n_values_vchain[0])}"
+            f" .. {int(ftqc_result.n_values_vchain[-1])}"
+        )
+        print(
+            f"  v-chain T-count endpoints         : {int(ftqc_result.t_counts_vchain[0])}"
+            f" -> {int(ftqc_result.t_counts_vchain[-1])}"
+        )
+        print(
+            f"  v-chain ancilla endpoints         : {int(ftqc_result.ancilla_counts_vchain[0])}"
+            f" -> {int(ftqc_result.ancilla_counts_vchain[-1])}"
+        )
+        if len(ftqc_result.n_values_noancilla) > 0:
+            print(
+                f"  no-ancilla sweep n                : {int(ftqc_result.n_values_noancilla[0])}"
+                f" .. {int(ftqc_result.n_values_noancilla[-1])}"
+            )
+            print(
+                f"  no-ancilla T-count endpoints      : {int(ftqc_result.t_counts_noancilla[0])}"
+                f" -> {int(ftqc_result.t_counts_noancilla[-1])}"
+            )
+
+    exact_result: ExactAAResults | None = None
+    if args.run_exact_aa:
+        exact_result = experiment_exact_amplitude_amplification(
+            n=args.exact_aa_n,
+            m_targets=args.exact_aa_m,
+            coarse_grid=args.exact_aa_grid,
+        )
+        print("\nExact Amplitude Amplification:")
+        print(f"  N                                 : {exact_result.N}")
+        print(f"  M                                 : {exact_result.m_targets}")
+        print(f"  k_base                            : {exact_result.k_base}")
+        print(f"  standard p(k_base)                : {exact_result.standard_probs[exact_result.k_base]:.10f}")
+        print(
+            f"  standard p(k_base+1)              : "
+            f"{exact_result.standard_probs[min(len(exact_result.standard_probs)-1, exact_result.k_base+1)]:.10f}"
+        )
+        print(
+            f"  standard p(k_base+2)              : "
+            f"{exact_result.standard_probs[min(len(exact_result.standard_probs)-1, exact_result.k_base+2)]:.10f}"
+        )
+        print(f"  exact oracle phase alpha          : {exact_result.exact_oracle_phase:.10f} rad")
+        print(f"  exact diffusion phase beta        : {exact_result.exact_diffusion_phase:.10f} rad")
+        print(f"  exact final probability           : {exact_result.exact_prob:.12f}")
+
+    leakage_result: PhaseLeakageResults | None = None
+    if args.run_phase_leakage:
+        leakage_result = experiment_phase_mismatch_leakage(
+            n=args.leakage_n,
+            k_max=args.leakage_k_max,
+            eps_oracle_deg=args.leakage_eps_oracle_deg,
+            eps_diff_deg=args.leakage_eps_diff_deg,
+            crosstalk_oracle_deg=args.leakage_crosstalk_deg,
+            local_z_detune_deg=args.leakage_local_z_deg,
+            rank_threshold=args.leakage_rank_threshold,
+        )
+        print("\nPhase-Mismatch Leakage:")
+        print(
+            f"  mismatch phases                  : oracle={180+leakage_result.eps_oracle_deg:.1f} deg, "
+            f"diffusion={180+leakage_result.eps_diff_deg:.1f} deg"
+        )
+        print(
+            f"  analog skew terms                : crosstalk={leakage_result.crosstalk_oracle_deg:.2f} deg, "
+            f"local_detune={leakage_result.local_z_detune_deg:.2f} deg"
+        )
+        print(f"  final rank ideal                 : {int(leakage_result.rank_ideal[-1])}")
+        print(f"  final rank mismatch-only         : {int(leakage_result.rank_mismatch_only[-1])}")
+        print(f"  final rank leaky                 : {int(leakage_result.rank_leaky[-1])}")
+
+    open_result: OpenSystemTrajectoryResults | None = None
+    if args.run_open_system_trajectory:
+        open_result = experiment_open_system_trajectory(
+            n=args.open_system_n,
+            k_max=args.open_system_k_max,
+            phase_damp_1q=args.open_system_phase_damp_1q,
+            phase_damp_2q=args.open_system_phase_damp_2q,
+            target_state=args.open_system_target_state,
+        )
+        print("\nOpen-System Trajectory:")
+        print(f"  target state                     : {open_result.target_state}")
+        print(f"  phase damping p1q/p2q            : {open_result.phase_damp_1q:.4f} / {open_result.phase_damp_2q:.4f}")
+        print(f"  noisy purity (k=0 -> k_max)      : {open_result.noisy_purity[0]:.6f} -> {open_result.noisy_purity[-1]:.6f}")
+        print(
+            f"  trace distance to 2D plane       : "
+            f"{open_result.trace_distance_to_plane[0]:.6f} -> {open_result.trace_distance_to_plane[-1]:.6f}"
+        )
+
     if not args.no_plots:
         files = save_plots(lab, report, output_prefix=args.plot_prefix, max_k=args.verify_k)
+        if souffle_result is not None:
+            files.append(save_souffle_plot(souffle_result, output_prefix=args.plot_prefix))
+        if ftqc_result is not None:
+            files.append(save_ftqc_scaling_plot(ftqc_result, output_prefix=args.plot_prefix))
+        if exact_result is not None:
+            files.append(save_exact_aa_peak_plot(exact_result, output_prefix=args.plot_prefix))
+        if leakage_result is not None:
+            files.append(save_phase_leakage_plot(leakage_result, output_prefix=args.plot_prefix))
+        if open_result is not None:
+            files.append(save_open_system_trajectory_plot(open_result, output_prefix=args.plot_prefix))
         print("\nSaved plots:")
         for f in files:
             print(f"  - {f}")
