@@ -416,8 +416,10 @@ def experiment_subnormalization_rescue(
 
     for k in k_values:
         qc = QuantumCircuit(anc, data)
+        # Start from |0>_anc|0>_data and prepare the weak block-encoded state A|0,0>.
         qc.append(A_qc, [anc[0], data[0]])
         for _ in range(k):
+            # One oblivious iteration Q = A R0 A^{-1} Rbad.
             qc.append(R_qc, [anc[0], data[0]])   # R_bad
             qc.append(A_inv, [anc[0], data[0]])  # A^{-1}
             qc.append(R_qc, [anc[0], data[0]])   # R_0
@@ -558,6 +560,7 @@ def experiment_geometric_obstruction(
             qc.append(A_qc, [anc[0], data[0]])
 
             for _ in range(k):
+                # Apply Q repeatedly while keeping the same data input state.
                 qc.append(R_qc, [anc[0], data[0]])    # R_bad
                 qc.append(A_inv_qc, [anc[0], data[0]])  # A^{-1}
                 qc.append(R_qc, [anc[0], data[0]])    # R_0
@@ -571,6 +574,7 @@ def experiment_geometric_obstruction(
             probs[k] = prob0
 
             if prob0 > 1e-12:
+                # Post-select ancilla=0 and renormalize to get the conditional data state.
                 cond_data = amp_a0 / np.sqrt(prob0)
                 fidelities[k] = float(np.abs(np.vdot(plus, cond_data)) ** 2)
             else:
@@ -719,10 +723,12 @@ def experiment_explicit_lcu_block_encoding(
     }
 
     if ft_basis is None:
+        # Treat these as a lightweight Clifford+T proxy basis for resource reporting.
         ft_basis = ["cx", "h", "s", "sdg", "t", "tdg", "x", "z"]
     logging.getLogger("qiskit").setLevel(logging.WARNING)
 
     def _compile_and_metrics(circ: QuantumCircuit) -> tuple[int, int]:
+        # Compile each module separately so PREP/SELECT/PREP^\dagger costs are visible.
         ft_circ = transpile(
             circ,
             basis_gates=ft_basis,
@@ -780,6 +786,7 @@ def _clean_ancilla_subspace_indices(num_qubits: int, ancilla_positions: list[int
     """Basis indices where all ancilla-position bits are 0."""
     out: list[int] = []
     for basis_index in range(2**num_qubits):
+        # Keep computational basis states that lie in the clean-ancilla subspace.
         if all(((basis_index >> pos) & 1) == 0 for pos in ancilla_positions):
             out.append(basis_index)
     return np.array(out, dtype=int)
@@ -801,6 +808,7 @@ def extract_identity_block_metrics(
 
     num_qubits = A_qc.num_qubits
     full_dim = 2**num_qubits
+    # Map each Qiskit qubit object to its bit position in statevector indexing.
     qubit_to_pos = {qb: idx for idx, qb in enumerate(A_qc.qubits)}
     anc_positions = [qubit_to_pos[qb] for qb in ancilla_qubits]
     clean_idx = _clean_ancilla_subspace_indices(num_qubits, anc_positions)
@@ -809,11 +817,13 @@ def extract_identity_block_metrics(
     A = Operator(A_qc).data
     A_dag = A.conj().T
 
-    # P1 projects onto ancilla=|0^l> subspace, independent of register ordering.
+    # Build P1 directly in the computational basis using clean_idx, so this stays
+    # correct even when ancilla is not the first/last register.
     P1 = np.zeros((full_dim, full_dim), dtype=complex)
     P1[np.ix_(clean_idx, clean_idx)] = np.eye(clean_dim, dtype=complex)
 
     M = A_dag @ P1 @ A
+    # "Top-left block" in theory corresponds here to the clean_idx principal block.
     m_tl = M[np.ix_(clean_idx, clean_idx)]
 
     if p_reference is None:
@@ -882,6 +892,7 @@ def experiment_identity_block_extractor(
     # Case 2: Explicit LCU block encoding for H = c0 X_0 + c1 Z_1 (2 data qubits)
     # ------------------------------------------------------------------
     if m != 2:
+        # This demo Hamiltonian is defined on two data qubits only.
         raise ValueError("LCU cross-check is defined for m=2 in this implementation.")
 
     data_lcu = QuantumRegister(2, "data")
@@ -896,7 +907,7 @@ def experiment_identity_block_extractor(
     A_lcu.cz(anc_lcu[0], data_lcu[1])  # anc=1 branch -> Z_1
     A_lcu.ry(-2.0 * theta, anc_lcu[0])
 
-    # p_reference for the pI test in LCU case is taken from trace normalization.
+    # For LCU, we infer p_est from trace(M_TL)/dim to test "distance to pI" objectively.
     lcu_audit = extract_identity_block_metrics(
         A_qc=A_lcu,
         ancilla_qubits=[anc_lcu[0]],
@@ -908,6 +919,7 @@ def experiment_identity_block_extractor(
     i2 = np.eye(2, dtype=complex)
     H = c0 * np.kron(i2, x) + c1 * np.kron(z, i2)
     h_norm = H / alpha
+    # Expected LCU invariant for this setting is (H/alpha)^\dagger(H/alpha), not pI.
     lcu_target = h_norm.conj().T @ h_norm
     lcu_distance_to_h2 = float(np.linalg.norm(lcu_audit.m_tl - lcu_target))
 
