@@ -1418,6 +1418,156 @@ def save_open_system_trajectory_plot(result: OpenSystemTrajectoryResults, output
     return path
 
 
+def experiment_vtaa_state_synthesis() -> VTAA_StateSynthesisResults:
+    """Construct a coherent staged variable-time state with explicit flags.
+
+    Flag encoding:
+    - `|00>` continue
+    - `|01>` success
+    - `|10>` fail
+    """
+    try:
+        from qiskit import QuantumCircuit, QuantumRegister
+        from qiskit.quantum_info import Statevector
+    except Exception as exc:
+        raise RuntimeError("Qiskit is required for VTAA state synthesis.") from exc
+
+    stage_reg = QuantumRegister(1, "stage_j")
+    flag_reg = QuantumRegister(2, "flag")
+    data_reg = QuantumRegister(1, "data")
+    qc = QuantumCircuit(data_reg, flag_reg, stage_reg, name="A_variable_time")
+
+    # Stage-1 branch model: 20% immediate success, 80% continue.
+    p_s1 = 0.20
+    qc.ry(2.0 * np.arcsin(np.sqrt(p_s1)), flag_reg[0])
+
+    # Mark stage-2 path on the clock register only for continue branch (flag0=0).
+    qc.x(flag_reg[0])
+    qc.cx(flag_reg[0], stage_reg[0])
+    qc.x(flag_reg[0])
+
+    # Stage-2 conditional split on continue branch:
+    # 10% success and 70% fail of total mass (i.e., success/fail conditioned on continue).
+    p_continue = 1.0 - p_s1
+    p_fail_cond = 0.70 / p_continue
+    qc.x(flag_reg[0])
+    qc.cry(2.0 * np.arcsin(np.sqrt(p_fail_cond)), flag_reg[0], flag_reg[1])
+    qc.x(flag_reg[0])
+
+    # Any stage-2 branch that is not fail becomes success.
+    qc.x(flag_reg[1])
+    qc.ccx(stage_reg[0], flag_reg[1], flag_reg[0])
+    qc.x(flag_reg[1])
+
+    sv = np.asarray(Statevector.from_instruction(qc).data, dtype=complex)
+    flag0_idx = qc.find_bit(flag_reg[0]).index
+    flag1_idx = qc.find_bit(flag_reg[1]).index
+
+    p_success = 0.0
+    p_fail = 0.0
+    p_continue_final = 0.0
+    for basis_idx, amp in enumerate(sv):
+        prob = float(np.abs(amp) ** 2)
+        bit0 = (basis_idx >> flag0_idx) & 1
+        bit1 = (basis_idx >> flag1_idx) & 1
+        flag_val = bit0 + 2 * bit1
+        if flag_val == 1:
+            p_success += prob
+        elif flag_val == 2:
+            p_fail += prob
+        elif flag_val == 0:
+            p_continue_final += prob
+
+    return VTAA_StateSynthesisResults(
+        num_stages=2,
+        statevector_dimension=int(len(sv)),
+        success_probability=float(p_success),
+        continue_probability=float(p_continue_final),
+        fail_probability=float(p_fail),
+    )
+
+
+def experiment_vtaa_cost_sweep(
+    total_ps: float = 0.05,
+    t1: float = 100.0,
+    t2: float = 1000.0,
+    t3: float = 10000.0,
+) -> VTAA_CostSweepResults:
+    """Sweep early-success ratio and compare VTAA functional to worst-case AA."""
+    if not (0.0 < total_ps < 1.0):
+        raise ValueError("total_ps must be in (0,1).")
+    if min(t1, t2, t3) <= 0.0:
+        raise ValueError("all stage times must be positive.")
+
+    ratios = np.linspace(0.01, 0.99, 100)
+    standard_costs: List[float] = []
+    vtaa_costs: List[float] = []
+
+    for ratio in ratios:
+        p_s1 = total_ps * ratio
+        p_s2 = total_ps * (1.0 - ratio) * 0.5
+        p_s3 = total_ps * (1.0 - ratio) * 0.5
+
+        # Worst-case AA baseline uses T_max in each amplified query block.
+        standard_costs.append(float(t3 / np.sqrt(total_ps)))
+
+        # Ambainis-style VTAA functional proxy:
+        # T_vtaa ~ sqrt(sum_j p_j * t_j^2), total amplification cost ~ T_vtaa / p_s.
+        t_vtaa = float(np.sqrt(p_s1 * (t1**2) + p_s2 * (t2**2) + p_s3 * (t3**2)))
+        vtaa_costs.append(float(t_vtaa / total_ps))
+
+    return VTAA_CostSweepResults(
+        total_ps=float(total_ps),
+        early_success_ratios=ratios,
+        standard_costs=np.array(standard_costs, dtype=float),
+        vtaa_costs=np.array(vtaa_costs, dtype=float),
+    )
+
+
+def save_vtaa_cost_sweep_plot(result: VTAA_CostSweepResults, output_prefix: str = "vtaa") -> str:
+    """Save VTAA vs standard AA asymptotic query-cost sweep."""
+    fig, ax = plt.subplots(figsize=(8.6, 5.0))
+    x_pct = 100.0 * result.early_success_ratios
+
+    ax.plot(
+        x_pct,
+        result.standard_costs,
+        color="tab:red",
+        linestyle="--",
+        linewidth=2.4,
+        label="Standard AA (worst-case T_max baseline)",
+    )
+    ax.plot(
+        x_pct,
+        result.vtaa_costs,
+        color="tab:blue",
+        linewidth=2.6,
+        label=r"VTAA cost functional ($T_{vtaa}$)",
+    )
+    ax.fill_between(
+        x_pct,
+        result.vtaa_costs,
+        result.standard_costs,
+        color="tab:green",
+        alpha=0.16,
+        label="Computational savings region",
+    )
+
+    ax.set_title(f"VTAA Cost Sweep (total p_s={100*result.total_ps:.1f}%)")
+    ax.set_xlabel("Success amplitude fraction halting at stage 1 (%)")
+    ax.set_ylabel("Asymptotic query-cost proxy")
+    ax.set_xlim(0.0, 100.0)
+    ax.set_ylim(0.0, 1.15 * float(np.max(result.standard_costs)))
+    ax.grid(alpha=0.3)
+    ax.legend(loc="center right")
+
+    path = f"{output_prefix}_vtaa_cost_sweep.png"
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+    return path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Variable-Time Amplitude Amplification lab")
     parser.add_argument("--times", type=str, default="1,2,4,8,16", help="comma-separated stop times")
@@ -1506,6 +1656,12 @@ def main() -> None:
         default=None,
         help="optional marked n-bit target for open-system trajectory",
     )
+    parser.add_argument("--run-vtaa-synthesis", action="store_true", help="run VTAA staged state synthesis (Eq. 47-style)")
+    parser.add_argument("--run-vtaa-sweep", action="store_true", help="run VTAA cost-functional sweep")
+    parser.add_argument("--vtaa-total-ps", type=float, default=0.05, help="total success mass p_s for VTAA sweep")
+    parser.add_argument("--vtaa-t1", type=float, default=100.0, help="stage-1 cost for VTAA sweep")
+    parser.add_argument("--vtaa-t2", type=float, default=1000.0, help="stage-2 cost for VTAA sweep")
+    parser.add_argument("--vtaa-t3", type=float, default=10000.0, help="stage-3 cost for VTAA sweep")
     args = parser.parse_args()
 
     times = _parse_csv_floats(args.times)
@@ -1663,6 +1819,35 @@ def main() -> None:
             f"{open_result.trace_distance_to_plane[0]:.6f} -> {open_result.trace_distance_to_plane[-1]:.6f}"
         )
 
+    vtaa_state_result: VTAA_StateSynthesisResults | None = None
+    if args.run_vtaa_synthesis:
+        vtaa_state_result = experiment_vtaa_state_synthesis()
+        print("\nVTAA State Synthesis:")
+        print(f"  simulated stages                 : {vtaa_state_result.num_stages}")
+        print(f"  statevector dimension            : {vtaa_state_result.statevector_dimension}")
+        print(f"  success flag |01> probability    : {vtaa_state_result.success_probability:.6f}")
+        print(f"  fail flag |10> probability       : {vtaa_state_result.fail_probability:.6f}")
+        print(f"  continue flag |00> probability   : {vtaa_state_result.continue_probability:.6f}")
+
+    vtaa_sweep_result: VTAA_CostSweepResults | None = None
+    if args.run_vtaa_sweep:
+        vtaa_sweep_result = experiment_vtaa_cost_sweep(
+            total_ps=args.vtaa_total_ps,
+            t1=args.vtaa_t1,
+            t2=args.vtaa_t2,
+            t3=args.vtaa_t3,
+        )
+        print("\nVTAA Cost Sweep:")
+        print(f"  total p_s                        : {vtaa_sweep_result.total_ps:.6f}")
+        print(
+            f"  standard/vtaa cost ratio (best)  : "
+            f"{float(np.max(vtaa_sweep_result.standard_costs / vtaa_sweep_result.vtaa_costs)):.3f}x"
+        )
+        print(
+            f"  standard/vtaa cost ratio (worst) : "
+            f"{float(np.min(vtaa_sweep_result.standard_costs / vtaa_sweep_result.vtaa_costs)):.3f}x"
+        )
+
     if not args.no_plots:
         files = save_plots(lab, report, output_prefix=args.plot_prefix, max_k=args.verify_k)
         if subspace_result is not None:
@@ -1679,6 +1864,8 @@ def main() -> None:
             files.append(save_phase_leakage_plot(leakage_result, output_prefix=args.plot_prefix))
         if open_result is not None:
             files.append(save_open_system_trajectory_plot(open_result, output_prefix=args.plot_prefix))
+        if vtaa_sweep_result is not None:
+            files.append(save_vtaa_cost_sweep_plot(vtaa_sweep_result, output_prefix=args.plot_prefix))
         print("\nSaved plots:")
         for f in files:
             print(f"  - {f}")
