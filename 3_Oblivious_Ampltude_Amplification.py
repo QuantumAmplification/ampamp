@@ -9,12 +9,13 @@ checks. Intended for use from a script or notebook.
 from __future__ import annotations
 
 import logging
+import csv
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 
 import numpy as np
-from qiskit import QuantumCircuit, QuantumRegister
-from qiskit.quantum_info import Operator, random_unitary
+from qiskit import QuantumCircuit, QuantumRegister, transpile
+from qiskit.quantum_info import Operator, Statevector, random_unitary
 
 # configure logger for informative output
 logger = logging.getLogger(__name__)
@@ -30,6 +31,59 @@ class AmplificationResults:
     fidelity_curve: np.ndarray
 
 
+@dataclass
+class SubnormalizationRescueResults:
+    """Container for circuit-level OAA rescue experiment outputs."""
+
+    p: float
+    theta: float
+    k_opt: int
+    k_values: np.ndarray
+    success_probabilities: np.ndarray
+
+
+@dataclass
+class GeometricObstructionResults:
+    """Container for valid-vs-violated purified-setting comparison."""
+
+    k_values: np.ndarray
+    valid_fidelity: np.ndarray
+    invalid_fidelity: np.ndarray
+    valid_success_probability: np.ndarray
+    invalid_success_probability: np.ndarray
+
+
+@dataclass
+class ExplicitLCUBlockEncodingResults:
+    """Container for explicit LCU construction and resource metrics."""
+
+    alpha: float
+    matrix_distance: float
+    native_gate_counts: dict[str, dict[str, int]]
+    ft_t_counts: dict[str, int]
+    ft_depths: dict[str, int]
+
+
+@dataclass
+class IdentityBlockAudit:
+    """Numerical audit for the clean-ancilla block of M = A^\\dagger P1 A."""
+
+    p_reference: float
+    distance_to_p_identity: float
+    max_off_diagonal: float
+    diagonal_entries: np.ndarray
+    m_tl: np.ndarray
+
+
+@dataclass
+class IdentityBlockExtractorResults:
+    """Results for purified-setting proof and LCU cross-check."""
+
+    purified: IdentityBlockAudit
+    lcu: IdentityBlockAudit
+    lcu_distance_to_h2_over_alpha2: float
+
+
 class ObliviousAmplificationLab:
     """Implements the laboratory for oblivious amplitude amplification.
 
@@ -42,7 +96,7 @@ class ObliviousAmplificationLab:
 
         U    : random m-qubit unitary
         p    : success probability (a float in (0,1])
-        B    : \sqrt{p} U (the operator we wish to block encode)
+        B    : \\sqrt{p} U (the operator we wish to block encode)
         A    : unitary acting on m + l qubits with
                P_1 A P_1 = B (= top-left block) where P_1 = |0^l><0^l|_anc.
         R_0  : reflection about the clean ancilla subspace
@@ -297,6 +351,620 @@ class ObliviousAmplificationLab:
         logger.info("this illustrates that with only one copy your reflection is"
                     " essentially random and the probability of success is no better"
                     " than chance.")
-        
+
+
+def experiment_subnormalization_rescue(
+    p: float = 0.005,
+    data_gate: str = "h",
+    overshoot_factor: float = 1.5,
+    show_plot: bool = True,
+    save_path: Optional[str] = None,
+) -> SubnormalizationRescueResults:
+    """Circuit-level demonstration that OAA rescues heavily subnormalized blocks.
+
+    The experiment prepares a block-encoding-like operator ``A`` with ancilla
+    success probability ``p`` and applies
+
+        Q = A R_0 A^{-1} R_bad
+
+    for increasing iteration counts, while tracking the probability of the clean
+    ancilla ``|0>`` through exact statevector simulation.
+    """
+    if not (0.0 < p < 1.0):
+        raise ValueError("p must be in (0, 1).")
+    if overshoot_factor <= 0.0:
+        raise ValueError("overshoot_factor must be positive.")
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise RuntimeError(
+            "matplotlib is required for plotting in experiment_subnormalization_rescue."
+        ) from exc
+
+    anc = QuantumRegister(1, "anc")
+    data = QuantumRegister(1, "data")
+
+    # Build A: ancilla amplitudes set P(anc=0)=p, then apply a controlled data
+    # operation conditioned on ancilla=0.
+    A_qc = QuantumCircuit(anc, data, name="A")
+    theta_prep = np.arccos(np.sqrt(p))
+    A_qc.ry(2.0 * theta_prep, anc[0])
+    A_qc.x(anc[0])
+    if data_gate.lower() == "h":
+        A_qc.ch(anc[0], data[0])
+    elif data_gate.lower() == "x":
+        A_qc.cx(anc[0], data[0])
+    else:
+        raise ValueError("data_gate must be one of {'h', 'x'}.")
+    A_qc.x(anc[0])
+    A_inv = A_qc.inverse()
+    A_inv.name = "A_dagger"
+
+    # Reflection on |0> ancilla: I - 2|0><0| = XZX (up to global phase
+    # conventions this works as the required oracle/diffusion reflection here).
+    R_qc = QuantumCircuit(anc, data, name="R0/Rbad")
+    R_qc.x(anc[0])
+    R_qc.z(anc[0])
+    R_qc.x(anc[0])
+
+    theta = np.arcsin(np.sqrt(p))
+    k_opt = int(np.floor(np.pi / (4.0 * theta)))
+    max_k = max(1, int(np.floor(overshoot_factor * k_opt)))
+
+    k_values = np.arange(max_k + 1, dtype=int)
+    success_probs = np.zeros(max_k + 1, dtype=float)
+
+    for k in k_values:
+        qc = QuantumCircuit(anc, data)
+        qc.append(A_qc, [anc[0], data[0]])
+        for _ in range(k):
+            qc.append(R_qc, [anc[0], data[0]])   # R_bad
+            qc.append(A_inv, [anc[0], data[0]])  # A^{-1}
+            qc.append(R_qc, [anc[0], data[0]])   # R_0
+            qc.append(A_qc, [anc[0], data[0]])   # A
+
+        state = Statevector.from_instruction(qc)
+        # For |data, anc> indexing, ancilla is the least-significant bit.
+        success_probs[k] = float(
+            np.sum(np.abs(state.data[0::2]) ** 2)
+        )
+
+    print(f"Initial Success Probability p: {p:.6f}")
+    print(f"Theoretical OAA optimum k*: {k_opt}")
+    print(f"Best simulated probability: {success_probs.max():.6f} at k={int(np.argmax(success_probs))}")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(
+        k_values,
+        success_probs,
+        color="tab:blue",
+        linewidth=2.2,
+        marker="o",
+        markersize=4,
+        label="OAA circuit simulation",
+    )
+    plt.axvline(
+        x=k_opt,
+        color="tab:red",
+        linestyle="--",
+        linewidth=1.5,
+        label=f"Estimated optimum k*={k_opt}",
+    )
+    plt.axhline(
+        y=p,
+        color="0.35",
+        linestyle=":",
+        linewidth=1.3,
+        label=f"Initial p={p:.3f}",
+    )
+    plt.title("Subnormalization Rescue via OAA (Circuit-Level)")
+    plt.xlabel("Number of OAA iterations (k)")
+    plt.ylabel("P(clean ancilla = |0>)")
+    plt.ylim(0.0, 1.02)
+    plt.grid(alpha=0.25)
+    plt.legend(loc="lower right")
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=250)
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+    return SubnormalizationRescueResults(
+        p=p,
+        theta=float(theta),
+        k_opt=k_opt,
+        k_values=k_values,
+        success_probabilities=success_probs,
+    )
+
+
+def experiment_geometric_obstruction(
+    p_valid: float = 0.05,
+    p_invalid_zero: float = 0.05,
+    p_invalid_one: float = 0.20,
+    max_k: int = 15,
+    show_plot: bool = True,
+    save_path: Optional[str] = None,
+) -> GeometricObstructionResults:
+    """Negative proof: violate purified setting and observe OAA failure.
+
+    Compares two constructions:
+    1) Valid purified setting: ancilla success weight independent of data.
+    2) Violated setting: ancilla rotation depends on data basis component.
+
+    The data qubit starts in |+>, and the target is U|phi>=|+> (U=I demo).
+    We track both:
+    - P(ancilla=|0>) after k OAA iterations
+    - Fidelity of conditional data state (given ancilla=|0>) with |+>
+    """
+    if not (0.0 < p_valid < 1.0):
+        raise ValueError("p_valid must be in (0, 1).")
+    if not (0.0 < p_invalid_zero < 1.0):
+        raise ValueError("p_invalid_zero must be in (0, 1).")
+    if not (0.0 < p_invalid_one < 1.0):
+        raise ValueError("p_invalid_one must be in (0, 1).")
+    if max_k < 0:
+        raise ValueError("max_k must be non-negative.")
+
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise RuntimeError(
+            "matplotlib is required for plotting in experiment_geometric_obstruction."
+        ) from exc
+
+    anc = QuantumRegister(1, "anc")
+    data = QuantumRegister(1, "data")
+
+    # Target data state is |+> for this U=I demonstration.
+    plus = np.array([1.0 / np.sqrt(2.0), 1.0 / np.sqrt(2.0)], dtype=complex)
+
+    # Valid purified setting: ancilla preparation independent of data.
+    theta_valid = np.arccos(np.sqrt(p_valid))
+    A_valid = QuantumCircuit(anc, data, name="A_valid")
+    A_valid.ry(2.0 * theta_valid, anc[0])
+    A_valid_inv = A_valid.inverse()
+    A_valid_inv.name = "A_valid_dagger"
+
+    # Violated setting: ancilla rotation conditioned on data basis component.
+    theta_0 = np.arccos(np.sqrt(p_invalid_zero))
+    theta_1 = np.arccos(np.sqrt(p_invalid_one))
+    A_invalid = QuantumCircuit(anc, data, name="A_invalid")
+    A_invalid.x(data[0])
+    A_invalid.cry(2.0 * theta_0, data[0], anc[0])  # branch for data=|0>
+    A_invalid.x(data[0])
+    A_invalid.cry(2.0 * theta_1, data[0], anc[0])  # branch for data=|1>
+    A_invalid_inv = A_invalid.inverse()
+    A_invalid_inv.name = "A_invalid_dagger"
+
+    # Common reflection I - 2|0><0| on ancilla.
+    R_qc = QuantumCircuit(anc, data, name="R0/Rbad")
+    R_qc.x(anc[0])
+    R_qc.z(anc[0])
+    R_qc.x(anc[0])
+
+    k_values = np.arange(max_k + 1, dtype=int)
+
+    def _run_loop(A_qc: QuantumCircuit, A_inv_qc: QuantumCircuit) -> tuple[np.ndarray, np.ndarray]:
+        fidelities = np.zeros(max_k + 1, dtype=float)
+        probs = np.zeros(max_k + 1, dtype=float)
+
+        for k in k_values:
+            qc = QuantumCircuit(anc, data)
+            qc.h(data[0])  # |phi> = |+>
+            qc.append(A_qc, [anc[0], data[0]])
+
+            for _ in range(k):
+                qc.append(R_qc, [anc[0], data[0]])    # R_bad
+                qc.append(A_inv_qc, [anc[0], data[0]])  # A^{-1}
+                qc.append(R_qc, [anc[0], data[0]])    # R_0
+                qc.append(A_qc, [anc[0], data[0]])    # A
+
+            state = Statevector.from_instruction(qc).data
+
+            # ancilla=0 corresponds to even indices for register order (anc, data).
+            amp_a0 = state[0::2]
+            prob0 = float(np.sum(np.abs(amp_a0) ** 2))
+            probs[k] = prob0
+
+            if prob0 > 1e-12:
+                cond_data = amp_a0 / np.sqrt(prob0)
+                fidelities[k] = float(np.abs(np.vdot(plus, cond_data)) ** 2)
+            else:
+                fidelities[k] = 0.0
+
+        return fidelities, probs
+
+    valid_fid, valid_prob = _run_loop(A_valid, A_valid_inv)
+    invalid_fid, invalid_prob = _run_loop(A_invalid, A_invalid_inv)
+
+    print("Geometric Obstruction Experiment")
+    print(f"Valid setting p={p_valid:.3f}")
+    print(f"Invalid setting p(|0>)={p_invalid_zero:.3f}, p(|1>)={p_invalid_one:.3f}")
+    print(f"Valid fidelity range: [{valid_fid.min():.6f}, {valid_fid.max():.6f}]")
+    print(f"Invalid fidelity range: [{invalid_fid.min():.6f}, {invalid_fid.max():.6f}]")
+    print(f"Valid success max: {valid_prob.max():.6f}")
+    print(f"Invalid success max: {invalid_prob.max():.6f}")
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+
+    ax1.plot(k_values, valid_fid, color="tab:blue", marker="o", label="Purified setting (valid)")
+    ax1.plot(
+        k_values,
+        invalid_fid,
+        color="tab:red",
+        marker="x",
+        linestyle="--",
+        label="Violated setting (invalid)",
+    )
+    ax1.set_title("OAA Geometric Obstruction: Conditional Data Fidelity")
+    ax1.set_ylabel("Fidelity with |+>")
+    ax1.set_ylim(0.0, 1.05)
+    ax1.grid(alpha=0.25)
+    ax1.legend(loc="lower left")
+
+    ax2.plot(k_values, valid_prob, color="tab:blue", marker="o", label="Purified setting (valid)")
+    ax2.plot(
+        k_values,
+        invalid_prob,
+        color="tab:red",
+        marker="x",
+        linestyle="--",
+        label="Violated setting (invalid)",
+    )
+    ax2.set_title("OAA Geometric Obstruction: Success Probability")
+    ax2.set_xlabel("OAA iterations (k)")
+    ax2.set_ylabel("P(clean ancilla = |0>)")
+    ax2.grid(alpha=0.25)
+    ax2.legend(loc="upper left")
+
+    plt.tight_layout()
+    if save_path is not None:
+        plt.savefig(save_path, dpi=250)
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+    return GeometricObstructionResults(
+        k_values=k_values,
+        valid_fidelity=valid_fid,
+        invalid_fidelity=invalid_fid,
+        valid_success_probability=valid_prob,
+        invalid_success_probability=invalid_prob,
+    )
+
+
+def experiment_explicit_lcu_block_encoding(
+    c0: float = 0.6,
+    c1: float = 0.4,
+    ft_basis: Optional[list[str]] = None,
+    optimization_level: int = 0,
+    save_csv_path: Optional[str] = None,
+) -> ExplicitLCUBlockEncodingResults:
+    """Construct explicit LCU block encoding for H = c0 X_0 + c1 Z_1.
+
+    Builds PREP, SELECT, PREP^\\dagger as explicit circuits, constructs
+    A = PREP^\\dagger * SELECT * PREP, verifies the top-left block
+    M_TL = H / alpha, and reports native and Clifford+T proxy costs.
+    """
+    if c0 == 0.0 and c1 == 0.0:
+        raise ValueError("At least one coefficient must be non-zero.")
+    if c0 < 0.0 or c1 < 0.0:
+        raise ValueError(
+            "This demo expects non-negative coefficients. For signed LCUs,"
+            " include sign handling in SELECT."
+        )
+    if optimization_level not in (0, 1, 2, 3):
+        raise ValueError("optimization_level must be one of 0,1,2,3.")
+
+    alpha = abs(c0) + abs(c1)
+    w0 = c0 / alpha
+    w1 = c1 / alpha
+
+    data = QuantumRegister(2, "data")
+    anc = QuantumRegister(1, "anc")
+
+    # PREP: sqrt(w0)|0> + sqrt(w1)|1>
+    theta = np.arccos(np.sqrt(w0))
+    prep = QuantumCircuit(data, anc, name="PREP")
+    prep.ry(2.0 * theta, anc[0])
+
+    # SELECT: |0><0|_anc ⊗ X_0 + |1><1|_anc ⊗ Z_1
+    select = QuantumCircuit(data, anc, name="SELECT")
+    select.x(anc[0])
+    select.cx(anc[0], data[0])  # anc=0 branch -> X on qubit 0
+    select.x(anc[0])
+    select.cz(anc[0], data[1])  # anc=1 branch -> Z on qubit 1
+
+    prep_dag = prep.inverse()
+    prep_dag.name = "PREP_dagger"
+
+    # Compose full LCU block-encoding unitary.
+    A_qc = QuantumCircuit(data, anc, name="A_LCU")
+    A_qc.compose(prep, inplace=True)
+    A_qc.compose(select, inplace=True)
+    A_qc.compose(prep_dag, inplace=True)
+
+    # Numerical verification M_TL = H/alpha.
+    x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=complex)
+    z = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=complex)
+    i2 = np.eye(2, dtype=complex)
+    x0 = np.kron(i2, x)   # data ordering |q1 q0>
+    z1 = np.kron(z, i2)
+    H_target = c0 * x0 + c1 * z1
+
+    A_matrix = Operator(A_qc).data
+    # ancilla register is created after data, so anc is MSB; top-left 4x4 is anc=0 block.
+    m_tl = A_matrix[:4, :4]
+    h_norm = H_target / alpha
+    distance = float(np.linalg.norm(m_tl - h_norm))
+
+    print("-" * 62)
+    print("EXPLICIT LCU BLOCK ENCODING")
+    print("-" * 62)
+    print(f"Hamiltonian: H = {c0:.3f} X_0 + {c1:.3f} Z_1")
+    print(f"alpha = |c0| + |c1| = {alpha:.6f}")
+    print(f"||M_TL - H/alpha||_F = {distance:.3e}")
+    print("Verification:", "PASS" if distance < 1e-10 else "CHECK NUMERICS")
+
+    native_gate_counts = {
+        "PREP": dict(prep.count_ops()),
+        "SELECT": dict(select.count_ops()),
+        "PREP_dagger": dict(prep_dag.count_ops()),
+        "A_LCU_total": dict(A_qc.count_ops()),
+    }
+
+    if ft_basis is None:
+        ft_basis = ["cx", "h", "s", "sdg", "t", "tdg", "x", "z"]
+    logging.getLogger("qiskit").setLevel(logging.WARNING)
+
+    def _compile_and_metrics(circ: QuantumCircuit) -> tuple[int, int]:
+        ft_circ = transpile(
+            circ,
+            basis_gates=ft_basis,
+            optimization_level=optimization_level,
+        )
+        ops = ft_circ.count_ops()
+        t_count = int(ops.get("t", 0) + ops.get("tdg", 0))
+        return t_count, int(ft_circ.depth())
+
+    prep_t, prep_depth = _compile_and_metrics(prep)
+    select_t, select_depth = _compile_and_metrics(select)
+    prep_dag_t, prep_dag_depth = _compile_and_metrics(prep_dag)
+    total_t, total_depth = _compile_and_metrics(A_qc)
+
+    ft_t_counts = {
+        "PREP": prep_t,
+        "SELECT": select_t,
+        "PREP_dagger": prep_dag_t,
+        "A_LCU_total": total_t,
+    }
+    ft_depths = {
+        "PREP": prep_depth,
+        "SELECT": select_depth,
+        "PREP_dagger": prep_dag_depth,
+        "A_LCU_total": total_depth,
+    }
+
+    print("\n" + "-" * 62)
+    print("RESOURCE SUMMARY (Native + Clifford+T Proxy)")
+    print("-" * 62)
+    print(f"{'Module':<14} {'Native Ops':<34} {'T-count':>8} {'Depth':>8}")
+    for key in ("PREP", "SELECT", "PREP_dagger", "A_LCU_total"):
+        print(
+            f"{key:<14} {str(native_gate_counts[key]):<34} "
+            f"{ft_t_counts[key]:>8} {ft_depths[key]:>8}"
+        )
+
+    if save_csv_path is not None:
+        with open(save_csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["module", "native_ops", "t_count", "depth"])
+            for key in ("PREP", "SELECT", "PREP_dagger", "A_LCU_total"):
+                writer.writerow([key, native_gate_counts[key], ft_t_counts[key], ft_depths[key]])
+
+    return ExplicitLCUBlockEncodingResults(
+        alpha=float(alpha),
+        matrix_distance=distance,
+        native_gate_counts=native_gate_counts,
+        ft_t_counts=ft_t_counts,
+        ft_depths=ft_depths,
+    )
+
+
+def _clean_ancilla_subspace_indices(num_qubits: int, ancilla_positions: list[int]) -> np.ndarray:
+    """Basis indices where all ancilla-position bits are 0."""
+    out: list[int] = []
+    for basis_index in range(2**num_qubits):
+        if all(((basis_index >> pos) & 1) == 0 for pos in ancilla_positions):
+            out.append(basis_index)
+    return np.array(out, dtype=int)
+
+
+def extract_identity_block_metrics(
+    A_qc: QuantumCircuit,
+    ancilla_qubits: list,
+    p_reference: Optional[float] = None,
+) -> IdentityBlockAudit:
+    """Compute M=A^\\dagger P1 A and audit clean-ancilla block against pI.
+
+    This helper works for any qubit order by deriving ancilla bit positions from
+    ``A_qc.qubits`` and selecting the corresponding clean-ancilla computational
+    basis subspace.
+    """
+    if not ancilla_qubits:
+        raise ValueError("ancilla_qubits must contain at least one qubit.")
+
+    num_qubits = A_qc.num_qubits
+    full_dim = 2**num_qubits
+    qubit_to_pos = {qb: idx for idx, qb in enumerate(A_qc.qubits)}
+    anc_positions = [qubit_to_pos[qb] for qb in ancilla_qubits]
+    clean_idx = _clean_ancilla_subspace_indices(num_qubits, anc_positions)
+    clean_dim = len(clean_idx)
+
+    A = Operator(A_qc).data
+    A_dag = A.conj().T
+
+    # P1 projects onto ancilla=|0^l> subspace, independent of register ordering.
+    P1 = np.zeros((full_dim, full_dim), dtype=complex)
+    P1[np.ix_(clean_idx, clean_idx)] = np.eye(clean_dim, dtype=complex)
+
+    M = A_dag @ P1 @ A
+    m_tl = M[np.ix_(clean_idx, clean_idx)]
+
+    if p_reference is None:
+        p_reference = float(np.real(np.trace(m_tl)) / clean_dim)
+    target = p_reference * np.eye(clean_dim, dtype=complex)
+
+    distance = float(np.linalg.norm(m_tl - target))
+    off_diag = m_tl - np.diag(np.diag(m_tl))
+    max_off_diag = float(np.max(np.abs(off_diag))) if clean_dim > 1 else 0.0
+
+    return IdentityBlockAudit(
+        p_reference=float(p_reference),
+        distance_to_p_identity=distance,
+        max_off_diagonal=max_off_diag,
+        diagonal_entries=np.diag(m_tl),
+        m_tl=m_tl,
+    )
+
+
+def experiment_identity_block_extractor(
+    m: int = 2,
+    l: int = 1,
+    p: float = 0.15,
+    seed: int = 42,
+    c0: float = 0.6,
+    c1: float = 0.4,
+    save_csv_path: Optional[str] = None,
+) -> IdentityBlockExtractorResults:
+    """Numerically verify Proposition-2 style identity block in purified setting.
+
+    Also performs an LCU cross-check for H=c0*X_0 + c1*Z_1. For this Hamiltonian
+    block encoding, M_TL is generally not pI; the expected structure is
+    M_TL = (H/alpha)^\\dagger (H/alpha).
+    """
+    if m < 1:
+        raise ValueError("m must be >= 1.")
+    if l != 1:
+        raise NotImplementedError("This experiment currently supports l=1.")
+    if not (0.0 < p < 1.0):
+        raise ValueError("p must be in (0, 1).")
+    if c0 == 0.0 and c1 == 0.0:
+        raise ValueError("At least one of c0 or c1 must be non-zero.")
+    if c0 < 0.0 or c1 < 0.0:
+        raise ValueError("Use non-negative c0,c1 in this demo.")
+
+    # ------------------------------------------------------------------
+    # Case 1: Purified setting (independent initial weight)
+    # ------------------------------------------------------------------
+    data = QuantumRegister(m, "data")
+    anc = QuantumRegister(l, "anc")
+    A_purified = QuantumCircuit(data, anc, name="A_purified")
+    A_purified.ry(2.0 * np.arccos(np.sqrt(p)), anc[0])
+
+    U = random_unitary(2**m, seed=seed).to_instruction()
+    A_purified.x(anc[0])
+    A_purified.append(U.control(1), [anc[0]] + data[:])
+    A_purified.x(anc[0])
+
+    purified_audit = extract_identity_block_metrics(
+        A_qc=A_purified,
+        ancilla_qubits=[anc[0]],
+        p_reference=p,
+    )
+
+    # ------------------------------------------------------------------
+    # Case 2: Explicit LCU block encoding for H = c0 X_0 + c1 Z_1 (2 data qubits)
+    # ------------------------------------------------------------------
+    if m != 2:
+        raise ValueError("LCU cross-check is defined for m=2 in this implementation.")
+
+    data_lcu = QuantumRegister(2, "data")
+    anc_lcu = QuantumRegister(1, "anc")
+    A_lcu = QuantumCircuit(data_lcu, anc_lcu, name="A_LCU")
+    alpha = abs(c0) + abs(c1)
+    theta = np.arccos(np.sqrt(c0 / alpha))
+    A_lcu.ry(2.0 * theta, anc_lcu[0])
+    A_lcu.x(anc_lcu[0])
+    A_lcu.cx(anc_lcu[0], data_lcu[0])  # anc=0 branch -> X_0
+    A_lcu.x(anc_lcu[0])
+    A_lcu.cz(anc_lcu[0], data_lcu[1])  # anc=1 branch -> Z_1
+    A_lcu.ry(-2.0 * theta, anc_lcu[0])
+
+    # p_reference for the pI test in LCU case is taken from trace normalization.
+    lcu_audit = extract_identity_block_metrics(
+        A_qc=A_lcu,
+        ancilla_qubits=[anc_lcu[0]],
+        p_reference=None,
+    )
+
+    x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=complex)
+    z = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=complex)
+    i2 = np.eye(2, dtype=complex)
+    H = c0 * np.kron(i2, x) + c1 * np.kron(z, i2)
+    h_norm = H / alpha
+    lcu_target = h_norm.conj().T @ h_norm
+    lcu_distance_to_h2 = float(np.linalg.norm(lcu_audit.m_tl - lcu_target))
+
+    print("-" * 72)
+    print("IDENTITY BLOCK EXTRACTOR: NUMERICAL AUDIT")
+    print("-" * 72)
+    print("Purified setting (Proposition-2 check)")
+    print(f"p (input): {p:.6f}")
+    print(f"diag(M_TL): {np.round(purified_audit.diagonal_entries, 6)}")
+    print(f"max |offdiag(M_TL)|: {purified_audit.max_off_diagonal:.3e}")
+    print(f"||M_TL - pI||_F: {purified_audit.distance_to_p_identity:.3e}")
+    print("status:", "PASS" if purified_audit.distance_to_p_identity < 1e-14 else "CHECK")
+
+    print("\nLCU cross-check (H = c0 X_0 + c1 Z_1)")
+    print(f"p_est (trace/dim): {lcu_audit.p_reference:.6f}")
+    print(f"diag(M_TL): {np.round(lcu_audit.diagonal_entries, 6)}")
+    print(f"max |offdiag(M_TL)|: {lcu_audit.max_off_diagonal:.3e}")
+    print(f"||M_TL - p_est I||_F: {lcu_audit.distance_to_p_identity:.3e}")
+    print(f"||M_TL - (H/alpha)^dagger(H/alpha)||_F: {lcu_distance_to_h2:.3e}")
+    print("-" * 72)
+
+    if save_csv_path is not None:
+        with open(save_csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "case",
+                    "p_reference",
+                    "distance_to_pI",
+                    "max_offdiag",
+                    "distance_to_expected_lcu_target",
+                ]
+            )
+            writer.writerow(
+                [
+                    "purified_setting",
+                    purified_audit.p_reference,
+                    purified_audit.distance_to_p_identity,
+                    purified_audit.max_off_diagonal,
+                    "",
+                ]
+            )
+            writer.writerow(
+                [
+                    "explicit_lcu",
+                    lcu_audit.p_reference,
+                    lcu_audit.distance_to_p_identity,
+                    lcu_audit.max_off_diagonal,
+                    lcu_distance_to_h2,
+                ]
+            )
+
+    return IdentityBlockExtractorResults(
+        purified=purified_audit,
+        lcu=lcu_audit,
+        lcu_distance_to_h2_over_alpha2=lcu_distance_to_h2,
+    )
+
 
 # end of module
