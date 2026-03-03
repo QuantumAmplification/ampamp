@@ -130,6 +130,8 @@ class PhaseLeakageResults:
     final_sv_ideal: np.ndarray
     final_sv_mismatch_only: np.ndarray
     final_sv_leaky: np.ndarray
+    mismatch_only_rank2_all: bool
+    leaky_exceeds_rank2: bool
 
 
 @dataclass
@@ -183,6 +185,8 @@ class SubspaceAuditResults:
     singular_values: np.ndarray
     rank_threshold: float
     empirical_rank: int
+    sigma3_to_sigma1: float
+    float64_svd_floor: float
 
 
 @dataclass
@@ -571,6 +575,13 @@ def experiment_2d_subspace_extractor(
     history_matrix = np.column_stack(history)
     singular_values = np.linalg.svd(history_matrix, compute_uv=False)
     empirical_rank = int(np.count_nonzero(singular_values > rank_threshold))
+    sigma3_to_sigma1 = 0.0
+    if len(singular_values) > 2 and singular_values[0] > 0.0:
+        sigma3_to_sigma1 = float(singular_values[2] / singular_values[0])
+    # Practical floating-point SVD floor estimate: O(eps * max(m,n) * sigma_1).
+    float64_svd_floor = float(
+        np.finfo(np.float64).eps * max(history_matrix.shape) * float(singular_values[0])
+    )
 
     return SubspaceAuditResults(
         n=n,
@@ -581,6 +592,8 @@ def experiment_2d_subspace_extractor(
         singular_values=singular_values,
         rank_threshold=rank_threshold,
         empirical_rank=empirical_rank,
+        sigma3_to_sigma1=sigma3_to_sigma1,
+        float64_svd_floor=float64_svd_floor,
     )
 
 
@@ -597,6 +610,13 @@ def save_subspace_audit_plot(result: SubspaceAuditResults, output_prefix: str = 
         linestyle="--",
         linewidth=1.6,
         label=f"Rank threshold ({result.rank_threshold:.1e})",
+    )
+    ax.axhline(
+        result.float64_svd_floor,
+        color="tab:green",
+        linestyle=":",
+        linewidth=1.5,
+        label=f"Float64 SVD floor (~{result.float64_svd_floor:.1e})",
     )
     ax.set_yscale("log")
     ax.set_xlim(0.5, min(16.5, len(sv) + 0.5))
@@ -1173,6 +1193,8 @@ def experiment_phase_mismatch_leakage(
     rank_ideal, sv_ideal = _track_rank(oracle_ideal, diffusion_ideal)
     rank_mismatch_only, sv_mismatch = _track_rank(oracle_mismatch, diffusion_mismatch)
     rank_leaky, sv_leaky = _track_rank(oracle_leaky, diffusion_leaky)
+    mismatch_only_rank2_all = bool(np.all(rank_mismatch_only <= 2))
+    leaky_exceeds_rank2 = bool(np.any(rank_leaky > 2))
 
     return PhaseLeakageResults(
         n=n,
@@ -1189,6 +1211,8 @@ def experiment_phase_mismatch_leakage(
         final_sv_ideal=sv_ideal,
         final_sv_mismatch_only=sv_mismatch,
         final_sv_leaky=sv_leaky,
+        mismatch_only_rank2_all=mismatch_only_rank2_all,
+        leaky_exceeds_rank2=leaky_exceeds_rank2,
     )
 
 
@@ -1698,6 +1722,8 @@ def main() -> None:
         print(f"  sigma_2                           : {subspace_result.singular_values[1]:.6e}")
         if len(subspace_result.singular_values) > 2:
             print(f"  sigma_3                           : {subspace_result.singular_values[2]:.6e}")
+        print(f"  sigma_3 / sigma_1                 : {subspace_result.sigma3_to_sigma1:.6e}")
+        print(f"  float64 SVD floor estimate        : {subspace_result.float64_svd_floor:.6e}")
 
     staircase_result: PhaseStaircaseResults | None = None
     if args.run_phase_staircase:
@@ -1806,6 +1832,8 @@ def main() -> None:
         print(f"  final rank ideal                 : {int(leakage_result.rank_ideal[-1])}")
         print(f"  final rank mismatch-only         : {int(leakage_result.rank_mismatch_only[-1])}")
         print(f"  final rank leaky                 : {int(leakage_result.rank_leaky[-1])}")
+        print(f"  mismatch-only stays rank<=2?     : {leakage_result.mismatch_only_rank2_all}")
+        print(f"  non-uniform skew causes leakage? : {leakage_result.leaky_exceeds_rank2}")
 
     open_result: OpenSystemTrajectoryResults | None = None
     if args.run_open_system_trajectory:
