@@ -150,6 +150,57 @@ class OpenSystemTrajectoryResults:
     trace_distance_to_plane: np.ndarray
 
 
+@dataclass
+class VTAA_StateSynthesisResults:
+    """Empirical staged-state synthesis metrics for a variable-time unitary."""
+
+    num_stages: int
+    statevector_dimension: int
+    success_probability: float
+    continue_probability: float
+    fail_probability: float
+
+
+@dataclass
+class VTAA_CostSweepResults:
+    """VTAA asymptotic cost sweep versus worst-case standard AA."""
+
+    total_ps: float
+    early_success_ratios: np.ndarray
+    standard_costs: np.ndarray
+    vtaa_costs: np.ndarray
+
+
+@dataclass
+class SubspaceAuditResults:
+    """SVD audit proving rank-2 trajectory confinement in large Hilbert space."""
+
+    n: int
+    N: int
+    k_max: int
+    target_state: str
+    history_shape: tuple[int, int]
+    singular_values: np.ndarray
+    rank_threshold: float
+    empirical_rank: int
+
+
+@dataclass
+class PhaseStaircaseResults:
+    """Empirical-vs-theoretical angular staircase in the {|B>,|G>} plane."""
+
+    n: int
+    N: int
+    k_max: int
+    target_state: str
+    theta_0: float
+    empirical_angles: np.ndarray
+    theoretical_angles: np.ndarray
+    angle_abs_error: np.ndarray
+    max_abs_error: float
+    target_fidelity: np.ndarray
+
+
 class VariableTimeAmplitudeAmplificationLab:
     """Numerical lab for variable-time amplitude amplification."""
 
@@ -473,6 +524,168 @@ def save_plots(
     saved.append(path3)
 
     return saved
+
+
+def _standard_grover_state_history(
+    n: int,
+    k_max: int,
+    target_state: str | None = None,
+) -> tuple[List[np.ndarray], str, int, int]:
+    """Return full state history |psi_0>..|psi_kmax> for standard AA with one marked state."""
+    if n < 1:
+        raise ValueError("n must be >= 1.")
+    if k_max < 1:
+        raise ValueError("k_max must be >= 1.")
+
+    N = 2**n
+    if target_state is None:
+        target_state = "1" * n
+    if len(target_state) != n or any(ch not in "01" for ch in target_state):
+        raise ValueError("target_state must be an n-bit binary string.")
+
+    target_idx = int(target_state, 2)
+    oracle_sign = np.ones(N, dtype=float)
+    oracle_sign[target_idx] = -1.0
+
+    psi = np.ones(N, dtype=complex) / np.sqrt(N)
+    history: List[np.ndarray] = [psi.copy()]
+    for _ in range(k_max):
+        psi = oracle_sign * psi
+        mean_amp = np.mean(psi)
+        psi = (2.0 * mean_amp) - psi
+        history.append(psi.copy())
+    return history, target_state, target_idx, N
+
+
+def experiment_2d_subspace_extractor(
+    n: int = 10,
+    k_max: int = 25,
+    target_state: str | None = None,
+    rank_threshold: float = 1e-12,
+) -> SubspaceAuditResults:
+    """Construct history matrix H and SVD-audit its empirical rank."""
+    if rank_threshold <= 0.0:
+        raise ValueError("rank_threshold must be > 0.")
+
+    history, target_state, _, N = _standard_grover_state_history(n=n, k_max=k_max, target_state=target_state)
+    history_matrix = np.column_stack(history)
+    singular_values = np.linalg.svd(history_matrix, compute_uv=False)
+    empirical_rank = int(np.count_nonzero(singular_values > rank_threshold))
+
+    return SubspaceAuditResults(
+        n=n,
+        N=N,
+        k_max=k_max,
+        target_state=target_state,
+        history_shape=(int(history_matrix.shape[0]), int(history_matrix.shape[1])),
+        singular_values=singular_values,
+        rank_threshold=rank_threshold,
+        empirical_rank=empirical_rank,
+    )
+
+
+def save_subspace_audit_plot(result: SubspaceAuditResults, output_prefix: str = "vtaa") -> str:
+    """Save singular-value spectrum for the 2D invariant-subspace audit."""
+    sv = result.singular_values
+    idx = np.arange(1, len(sv) + 1)
+    fig, ax = plt.subplots(figsize=(8.6, 5.0))
+    ax.scatter(idx, sv, s=40, color="tab:blue", zorder=4, label="Singular values")
+    ax.plot(idx, sv, color="tab:blue", alpha=0.45)
+    ax.axhline(
+        result.rank_threshold,
+        color="tab:red",
+        linestyle="--",
+        linewidth=1.6,
+        label=f"Rank threshold ({result.rank_threshold:.1e})",
+    )
+    ax.set_yscale("log")
+    ax.set_xlim(0.5, min(16.5, len(sv) + 0.5))
+    ax.set_title(
+        f"2D Invariant Subspace Audit (n={result.n}, N={result.N}, rank={result.empirical_rank})"
+    )
+    ax.set_xlabel("Singular value index i")
+    ax.set_ylabel("Magnitude sigma_i (log scale)")
+    ax.grid(alpha=0.3, which="both", linestyle=":")
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+
+    path = f"{output_prefix}_subspace_singular_spectrum.png"
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+    return path
+
+
+def experiment_geometric_phase_staircase(
+    n: int = 8,
+    k_max: int = 12,
+    target_state: str | None = None,
+) -> PhaseStaircaseResults:
+    """Extract theta_k and verify linear staircase theta_k=(2k+1)theta_0."""
+    history, target_state, target_idx, N = _standard_grover_state_history(n=n, k_max=k_max, target_state=target_state)
+    theta_0 = float(np.arcsin(np.sqrt(1.0 / N)))
+
+    ket_g = np.zeros(N, dtype=complex)
+    ket_g[target_idx] = 1.0
+
+    empirical: List[float] = []
+    theoretical: List[float] = []
+    fidelity: List[float] = []
+    for k, psi in enumerate(history):
+        amp_g = complex(np.vdot(ket_g, psi))
+        empirical.append(float(np.arcsin(np.clip(np.abs(amp_g), 0.0, 1.0))))
+        theoretical.append(float((2 * k + 1) * theta_0))
+        fidelity.append(float(np.abs(amp_g) ** 2))
+
+    empirical_arr = np.array(empirical, dtype=float)
+    theoretical_arr = np.array(theoretical, dtype=float)
+    abs_err = np.abs(empirical_arr - theoretical_arr)
+
+    return PhaseStaircaseResults(
+        n=n,
+        N=N,
+        k_max=k_max,
+        target_state=target_state,
+        theta_0=theta_0,
+        empirical_angles=empirical_arr,
+        theoretical_angles=theoretical_arr,
+        angle_abs_error=abs_err,
+        max_abs_error=float(np.max(abs_err)),
+        target_fidelity=np.array(fidelity, dtype=float),
+    )
+
+
+def save_phase_staircase_plot(result: PhaseStaircaseResults, output_prefix: str = "vtaa") -> str:
+    """Save empirical-vs-theoretical angle staircase plot."""
+    k_vals = np.arange(result.k_max + 1, dtype=int)
+    fig, ax = plt.subplots(figsize=(8.6, 5.0))
+    ax.plot(
+        k_vals,
+        result.theoretical_angles,
+        color="0.30",
+        linewidth=2.4,
+        label=r"Theory: $\theta_k=(2k+1)\theta_0$",
+    )
+    ax.scatter(
+        k_vals,
+        result.empirical_angles,
+        color="tab:red",
+        s=32,
+        label=r"Empirical: $\theta_k=\arcsin(|\langle G|\psi_k\rangle|)$",
+        zorder=4,
+    )
+    ax.set_title(
+        f"Geometric Phase Staircase (n={result.n}, N={result.N}, max err={result.max_abs_error:.2e})"
+    )
+    ax.set_xlabel("Grover iteration k")
+    ax.set_ylabel("Angle (radians)")
+    ax.grid(alpha=0.3, linestyle=":")
+    ax.legend(loc="upper left")
+    fig.tight_layout()
+
+    path = f"{output_prefix}_phase_staircase.png"
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+    return path
 
 
 def experiment_souffle_catastrophe(
@@ -1216,6 +1429,15 @@ def main() -> None:
     parser.add_argument("--verify-k", type=int, default=25, help="max k for SU(2) closed-form verification")
     parser.add_argument("--plot-prefix", type=str, default="vtaa", help="prefix for output PNG files")
     parser.add_argument("--no-plots", action="store_true", help="disable plot generation")
+    parser.add_argument("--run-subspace-audit", action="store_true", help="run 2D invariant subspace SVD audit")
+    parser.add_argument("--subspace-n", type=int, default=10, help="qubit count for subspace audit")
+    parser.add_argument("--subspace-k-max", type=int, default=25, help="iterations for subspace audit")
+    parser.add_argument("--subspace-target-state", type=str, default=None, help="optional marked n-bit state for subspace audit")
+    parser.add_argument("--subspace-rank-threshold", type=float, default=1e-12, help="rank threshold for subspace SVD")
+    parser.add_argument("--run-phase-staircase", action="store_true", help="run geometric phase staircase audit")
+    parser.add_argument("--staircase-n", type=int, default=8, help="qubit count for staircase audit")
+    parser.add_argument("--staircase-k-max", type=int, default=12, help="iterations for staircase audit")
+    parser.add_argument("--staircase-target-state", type=str, default=None, help="optional marked n-bit state for staircase audit")
     parser.add_argument("--run-souffle-catastrophe", action="store_true", help="run over-rotation catastrophe experiment")
     parser.add_argument("--souffle-n", type=int, default=8, help="qubits for souffle experiment")
     parser.add_argument("--souffle-guessed-m", type=int, default=1, help="guessed number of marked states")
@@ -1298,6 +1520,35 @@ def main() -> None:
 
     report = lab.build_report(polylog_factor=args.polylog, constant_tmax=args.c1, constant_trms=args.c2)
     print(format_report(report))
+
+    subspace_result: SubspaceAuditResults | None = None
+    if args.run_subspace_audit:
+        subspace_result = experiment_2d_subspace_extractor(
+            n=args.subspace_n,
+            k_max=args.subspace_k_max,
+            target_state=args.subspace_target_state,
+            rank_threshold=args.subspace_rank_threshold,
+        )
+        print("\n2D Subspace SVD Audit:")
+        print(f"  N                                 : {subspace_result.N}")
+        print(f"  history matrix shape              : {subspace_result.history_shape}")
+        print(f"  empirical rank                    : {subspace_result.empirical_rank}")
+        print(f"  sigma_1                           : {subspace_result.singular_values[0]:.6e}")
+        print(f"  sigma_2                           : {subspace_result.singular_values[1]:.6e}")
+        print(f"  sigma_3                           : {subspace_result.singular_values[2]:.6e}")
+
+    staircase_result: PhaseStaircaseResults | None = None
+    if args.run_phase_staircase:
+        staircase_result = experiment_geometric_phase_staircase(
+            n=args.staircase_n,
+            k_max=args.staircase_k_max,
+            target_state=args.staircase_target_state,
+        )
+        print("\nGeometric Phase Staircase:")
+        print(f"  N                                 : {staircase_result.N}")
+        print(f"  theta_0                           : {staircase_result.theta_0:.10f}")
+        print(f"  max |theta_emp-theory|            : {staircase_result.max_abs_error:.3e}")
+        print(f"  fidelity at k_max                 : {staircase_result.target_fidelity[-1]:.10f}")
 
     souffle_result: SouffleProblemResults | None = None
     if args.run_souffle_catastrophe:
@@ -1414,6 +1665,10 @@ def main() -> None:
 
     if not args.no_plots:
         files = save_plots(lab, report, output_prefix=args.plot_prefix, max_k=args.verify_k)
+        if subspace_result is not None:
+            files.append(save_subspace_audit_plot(subspace_result, output_prefix=args.plot_prefix))
+        if staircase_result is not None:
+            files.append(save_phase_staircase_plot(staircase_result, output_prefix=args.plot_prefix))
         if souffle_result is not None:
             files.append(save_souffle_plot(souffle_result, output_prefix=args.plot_prefix))
         if ftqc_result is not None:
