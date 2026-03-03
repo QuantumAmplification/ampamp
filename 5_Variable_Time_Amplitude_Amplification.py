@@ -617,7 +617,7 @@ def save_subspace_audit_plot(result: SubspaceAuditResults, output_prefix: str = 
 
 def experiment_geometric_phase_staircase(
     n: int = 8,
-    k_max: int = 12,
+    k_max: int = 25,
     target_state: str | None = None,
 ) -> PhaseStaircaseResults:
     """Extract theta_k and verify linear staircase theta_k=(2k+1)theta_0."""
@@ -626,17 +626,22 @@ def experiment_geometric_phase_staircase(
 
     ket_g = np.zeros(N, dtype=complex)
     ket_g[target_idx] = 1.0
+    ket_s = np.ones(N, dtype=complex) / np.sqrt(N)
+    ket_b = ket_s - np.vdot(ket_g, ket_s) * ket_g
+    ket_b = ket_b / np.linalg.norm(ket_b)
 
     empirical: List[float] = []
     theoretical: List[float] = []
     fidelity: List[float] = []
     for k, psi in enumerate(history):
         amp_g = complex(np.vdot(ket_g, psi))
-        empirical.append(float(np.arcsin(np.clip(np.abs(amp_g), 0.0, 1.0))))
+        amp_b = complex(np.vdot(ket_b, psi))
+        empirical.append(float(np.arctan2(np.real(amp_g), np.real(amp_b))))
         theoretical.append(float((2 * k + 1) * theta_0))
         fidelity.append(float(np.abs(amp_g) ** 2))
 
-    empirical_arr = np.array(empirical, dtype=float)
+    # Keep staircase linear after crossing pi/2 by unwrapping the angle branch.
+    empirical_arr = np.unwrap(np.array(empirical, dtype=float))
     theoretical_arr = np.array(theoretical, dtype=float)
     abs_err = np.abs(empirical_arr - theoretical_arr)
 
@@ -670,7 +675,7 @@ def save_phase_staircase_plot(result: PhaseStaircaseResults, output_prefix: str 
         result.empirical_angles,
         color="tab:red",
         s=32,
-        label=r"Empirical: $\theta_k=\arcsin(|\langle G|\psi_k\rangle|)$",
+        label=r"Empirical: $\theta_k=\mathrm{atan2}(\Re\langle G|\psi_k\rangle,\Re\langle B|\psi_k\rangle)$",
         zorder=4,
     )
     ax.set_title(
@@ -1586,7 +1591,7 @@ def main() -> None:
     parser.add_argument("--subspace-rank-threshold", type=float, default=1e-12, help="rank threshold for subspace SVD")
     parser.add_argument("--run-phase-staircase", action="store_true", help="run geometric phase staircase audit")
     parser.add_argument("--staircase-n", type=int, default=8, help="qubit count for staircase audit")
-    parser.add_argument("--staircase-k-max", type=int, default=12, help="iterations for staircase audit")
+    parser.add_argument("--staircase-k-max", type=int, default=25, help="iterations for staircase audit")
     parser.add_argument("--staircase-target-state", type=str, default=None, help="optional marked n-bit state for staircase audit")
     parser.add_argument("--run-souffle-catastrophe", action="store_true", help="run over-rotation catastrophe experiment")
     parser.add_argument("--souffle-n", type=int, default=8, help="qubits for souffle experiment")
@@ -1691,7 +1696,8 @@ def main() -> None:
         print(f"  empirical rank                    : {subspace_result.empirical_rank}")
         print(f"  sigma_1                           : {subspace_result.singular_values[0]:.6e}")
         print(f"  sigma_2                           : {subspace_result.singular_values[1]:.6e}")
-        print(f"  sigma_3                           : {subspace_result.singular_values[2]:.6e}")
+        if len(subspace_result.singular_values) > 2:
+            print(f"  sigma_3                           : {subspace_result.singular_values[2]:.6e}")
 
     staircase_result: PhaseStaircaseResults | None = None
     if args.run_phase_staircase:
