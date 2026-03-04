@@ -28,6 +28,10 @@ Phase IV: Fundamental limits and realism
 Phase V: Adversarial QSVT edge cases
 15. Gibbs catastrophe for discontinuous targets
 16. Parity scramble for mixed-parity transforms
+17. Ill-conditioned abyss under fixed hardware depth
+18. Non-normal eigenvalue trap (eigenvalues vs singular values)
+19. Phase quantization limit from finite DAC bit-depth
+20. Subnormalization hubris (cheating alpha penalty)
 """
 
 from __future__ import annotations
@@ -232,6 +236,61 @@ class ParityScrambleResults:
     matrix_naive_expected: np.ndarray
     matrix_physical_reality: np.ndarray
     scramble_error: float
+
+
+@dataclass
+class IllConditionedAbyssResults:
+    """Results for fixed-depth inversion failure under increasing condition number."""
+
+    degree: int
+    kappas: np.ndarray
+    x_eval: np.ndarray
+    y_targets: Dict[float, np.ndarray]
+    y_polys: Dict[float, np.ndarray]
+    effective_inverses: Dict[float, np.ndarray]
+    max_errors: Dict[float, float]
+    max_amplitudes: Dict[float, float]
+
+
+@dataclass
+class NonNormalTrapResults:
+    """Results for non-normal matrices under eigenvalue-vs-singular-value transforms."""
+
+    A: np.ndarray
+    eigenvalues: np.ndarray
+    singular_values: np.ndarray
+    matrix_eigen_expected: np.ndarray
+    matrix_svd_physical: np.ndarray
+    divergence_error: float
+    is_normal: bool
+
+
+@dataclass
+class PhaseQuantizationResults:
+    """Results for finite-bit DAC phase quantization and fidelity degradation."""
+
+    degree: int
+    x_eval: np.ndarray
+    ideal_phases: np.ndarray
+    ideal_poly: np.ndarray
+    bit_depths_tested: np.ndarray
+    quantized_polys: Dict[int, np.ndarray]
+    sweep_bits: np.ndarray
+    fidelity_curve: np.ndarray
+    max_errors: Dict[int, float]
+
+
+@dataclass
+class SubnormalizationHubrisResults:
+    """Results for valid-vs-cheated alpha paths in block-encoding dilation."""
+
+    A: np.ndarray
+    true_alpha: float
+    valid_alpha: float
+    cheated_alpha: float
+    valid_eigenvalues: np.ndarray
+    invalid_eigenvalues: np.ndarray
+    catastrophe_message: str
 
 
 class SU2QSPEngine:
@@ -733,6 +792,10 @@ def phase_5_roadmap() -> Dict[str, str]:
     return {
         "Module 11": "Gibbs catastrophe: discontinuous target fitting and unitarity failure.",
         "Module 12": "Parity scramble: invariant-plane breakdown under parity violation.",
+        "Module 13": "Ill-conditioned abyss: fixed-depth inversion breakdown under high kappa.",
+        "Module 14": "Non-normal eigenvalue trap: QSVT applies singular-value, not eigenvalue, transforms.",
+        "Module 15": "Phase quantization limit: finite DAC bit-depth destroys phase precision.",
+        "Module 16": "Subnormalization hubris: cheating alpha breaks PSD defect matrices and dilation.",
     }
 
 
@@ -2006,6 +2069,561 @@ def experiment_adversarial_parity_scramble(
     )
 
 
+def experiment_adversarial_ill_conditioned_abyss(
+    degree: int = 41,
+    kappas: tuple[float, ...] = (5.0, 20.0, 100.0),
+    scale_factor: float = 0.5,
+    outside_weight: float = 50.0,
+    num_points: int = 5001,
+    plot: bool = True,
+) -> IllConditionedAbyssResults:
+    """
+    MODULE 13: Adversarial QSVT - The Ill-Conditioned Abyss.
+
+    Fixes hardware depth (degree) and sweeps increasing condition numbers to
+    expose the resolution limit of inversion synthesis near tiny spectral gaps.
+    """
+    from numpy.polynomial.chebyshev import chebfit, chebval
+
+    print("-" * 65)
+    print("MODULE 13: ADVERSARIAL QSVT - THE ILL-CONDITIONED ABYSS")
+    print("-" * 65)
+
+    if degree < 3 or degree % 2 == 0:
+        raise ValueError("degree must be odd and >= 3")
+    if num_points < 1001:
+        raise ValueError("num_points must be >= 1001")
+    if not (0.0 < scale_factor <= 1.0):
+        raise ValueError("scale_factor must be in (0, 1]")
+    if outside_weight < 1.0:
+        raise ValueError("outside_weight must be >= 1")
+    if len(kappas) == 0:
+        raise ValueError("kappas must be non-empty")
+
+    kappas_arr = np.asarray(kappas, dtype=float)
+    if np.any(kappas_arr <= 1.0):
+        raise ValueError("all kappa values must be > 1")
+
+    print(f"Hardware Limit: fixed QSVT degree d = {degree}")
+    print(f"Kappa sweep: {', '.join(str(int(k)) if float(k).is_integer() else f'{k:.2f}' for k in kappas_arr)}")
+
+    x_eval = np.linspace(-1.0, 1.0, num_points)
+    y_targets: Dict[float, np.ndarray] = {}
+    y_polys: Dict[float, np.ndarray] = {}
+    effective_inverses: Dict[float, np.ndarray] = {}
+    max_errors: Dict[float, float] = {}
+    max_amplitudes: Dict[float, float] = {}
+
+    def inversion_target(x: np.ndarray, kappa: float) -> np.ndarray:
+        """Gapped odd target used for bounded inverse synthesis."""
+        gap = 1.0 / kappa
+        y = np.zeros_like(x, dtype=float)
+        outside = np.abs(x) >= gap
+        inside = ~outside
+        y[outside] = scale_factor * (1.0 / (kappa * x[outside]))
+        y[inside] = scale_factor * (kappa * x[inside])
+        return y
+
+    for kappa in kappas_arr:
+        gap = 1.0 / float(kappa)
+        y_target = inversion_target(x_eval, float(kappa))
+
+        # Weighted fit emphasizes accuracy in the operational domain.
+        weights = np.ones_like(x_eval)
+        weights[np.abs(x_eval) >= gap] = outside_weight
+
+        coeffs = chebfit(x_eval, y_target, degree, w=weights)
+        coeffs[::2] = 0.0  # enforce strict odd parity
+
+        y_poly = chebval(x_eval, coeffs)
+        max_amp = float(np.max(np.abs(y_poly)))
+        if max_amp > 1.0:
+            coeffs = coeffs / (max_amp + 1e-12)
+            y_poly = chebval(x_eval, coeffs)
+            max_amp = float(np.max(np.abs(y_poly)))
+
+        # Convert bounded polynomial back to the effective inverse action.
+        eff_inv = y_poly * (float(kappa) / scale_factor)
+
+        valid = np.abs(x_eval) >= gap
+        max_err = float(np.max(np.abs(y_poly[valid] - y_target[valid])))
+
+        key = float(kappa)
+        y_targets[key] = y_target
+        y_polys[key] = y_poly
+        effective_inverses[key] = eff_inv
+        max_errors[key] = max_err
+        max_amplitudes[key] = max_amp
+
+        print(
+            f"kappa={key:7.2f} | gap={gap:.5f} | "
+            f"max_error={max_err:.4e} | max|P|={max_amp:.4f}"
+        )
+
+    print("Observation: once kappa materially exceeds fixed degree, near-gap inversion degrades sharply.")
+    print("-" * 65)
+
+    if plot:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        color_map = plt.get_cmap("tab10")
+        keys_sorted = sorted(y_polys.keys())
+
+        # Panel 1: bounded synthesized polynomials at fixed depth.
+        for idx, kappa in enumerate(keys_sorted):
+            ax1.plot(
+                x_eval,
+                y_polys[kappa],
+                color=color_map(idx),
+                linewidth=2.4,
+                label=rf"$\kappa={int(kappa) if float(kappa).is_integer() else kappa:.0f}$",
+            )
+
+        ax1.axhline(1.0, color="black", linestyle=":", alpha=0.6)
+        ax1.axhline(-1.0, color="black", linestyle=":", alpha=0.6)
+        ax1.set_title(f"Fixed-Depth Inversion Polynomials (d={degree})", fontsize=13)
+        ax1.set_xlabel("Singular Value x")
+        ax1.set_ylabel("Synthesized Amplitude P(x)")
+        ax1.set_xlim(-0.5, 0.5)
+        ax1.set_ylim(-1.1, 1.1)
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc="lower right")
+
+        # Panel 2: effective inverse action actually applied by the polynomial.
+        ideal_inverse = np.full_like(x_eval, np.nan, dtype=float)
+        ideal_mask = np.abs(x_eval) >= 1e-2
+        ideal_inverse[ideal_mask] = 1.0 / x_eval[ideal_mask]
+        ax2.plot(
+            x_eval,
+            ideal_inverse,
+            color="black",
+            linestyle="--",
+            linewidth=2.0,
+            label=r"Ideal inverse $1/x$",
+        )
+
+        for idx, kappa in enumerate(keys_sorted):
+            ax2.plot(
+                x_eval,
+                effective_inverses[kappa],
+                color=color_map(idx),
+                linewidth=2.4,
+                label=rf"Effective inverse ($\kappa={int(kappa) if float(kappa).is_integer() else kappa:.0f}$)",
+            )
+
+        ax2.annotate(
+            "Resolution limit:\nwrong near-gap action",
+            xy=(0.02, -5.0),
+            xytext=(0.12, -35.0),
+            arrowprops=dict(facecolor="tab:red", shrink=0.05, width=1.5, headwidth=8),
+            color="tab:red",
+            fontsize=10,
+            fontweight="bold",
+        )
+        ax2.set_title("Effective Applied Inverse (What Hardware Computes)", fontsize=13)
+        ax2.set_xlabel("Singular Value x")
+        ax2.set_ylabel("Applied Spectral Multiplier")
+        ax2.set_xlim(-0.3, 0.3)
+        ax2.set_ylim(-50, 50)
+        ax2.grid(True, alpha=0.3)
+        ax2.legend(loc="upper left")
+
+        plt.suptitle("Adversarial QSVT: Ill-Conditioned Abyss Under Fixed Depth", fontsize=15)
+        plt.tight_layout()
+        plt.show()
+
+    return IllConditionedAbyssResults(
+        degree=int(degree),
+        kappas=kappas_arr,
+        x_eval=x_eval,
+        y_targets=y_targets,
+        y_polys=y_polys,
+        effective_inverses=effective_inverses,
+        max_errors=max_errors,
+        max_amplitudes=max_amplitudes,
+    )
+
+
+def experiment_adversarial_non_normal_trap(plot: bool = True) -> NonNormalTrapResults:
+    """
+    MODULE 14: Adversarial QSVT - The Non-Normal Eigenvalue Trap.
+
+    Shows that QSVT-style odd transforms act on singular values (SVD channel),
+    not on eigenvalues (matrix-function channel), for non-normal matrices.
+    """
+    print("-" * 65)
+    print("MODULE 14: ADVERSARIAL QSVT - THE NON-NORMAL EIGENVALUE TRAP")
+    print("-" * 65)
+
+    # Non-normal (Jordan-like) matrix with spectral norm strictly < 1.
+    A = np.array([[0.2, 0.8], [0.0, 0.2]], dtype=complex)
+    is_normal = bool(np.allclose(A @ A.conj().T, A.conj().T @ A, atol=1e-12))
+    print(f"Is target matrix normal? {is_normal}")
+
+    # Eigen vs singular spectra diverge for non-normal matrices.
+    eigenvalues, _ = np.linalg.eig(A)
+    W, singular_values, Vh = np.linalg.svd(A, full_matrices=True)
+    print(f"Eigenvalue magnitudes: {np.abs(eigenvalues)}")
+    print(f"Singular values:       {singular_values}")
+    print("Target odd polynomial: P(x) = x^3")
+
+    # Naive eigenvalue-based expectation: f(A)=A^3.
+    matrix_eigen_expected = A @ A @ A
+
+    # Physical QSVT singular-value channel: W f(Sigma) V^\dagger with f(x)=x^3.
+    matrix_svd_physical = W @ np.diag(singular_values**3) @ Vh
+
+    divergence_error = float(np.linalg.norm(matrix_eigen_expected - matrix_svd_physical))
+    print(f"|| f(A) - f^(SV)(A) ||_F: {divergence_error:.4e}")
+    if divergence_error > 1e-10:
+        print("FATAL: Eigenvalue-based expectation and QSVT singular-value output diverge.")
+    print("-" * 65)
+
+    if plot:
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+
+        diff = matrix_eigen_expected - matrix_svd_physical
+        vmax = float(
+            max(
+                np.max(np.abs(matrix_eigen_expected)),
+                np.max(np.abs(matrix_svd_physical)),
+                np.max(np.abs(diff)),
+            )
+        )
+
+        im1 = ax1.matshow(np.abs(matrix_eigen_expected), cmap="Blues", vmin=0.0, vmax=vmax)
+        ax1.set_title(r"Naive Eigenvalue Function: $f(A)=A^3$", pad=12, fontsize=11)
+        for (i, j), val in np.ndenumerate(matrix_eigen_expected):
+            color = "white" if np.abs(val) > 0.5 * vmax else "black"
+            ax1.text(j, i, f"{np.real(val):.3f}", ha="center", va="center", color=color)
+
+        im2 = ax2.matshow(np.abs(matrix_svd_physical), cmap="Greens", vmin=0.0, vmax=vmax)
+        ax2.set_title(r"QSVT Singular-Value Channel: $W\Sigma^3V^\dagger$", pad=12, fontsize=11)
+        for (i, j), val in np.ndenumerate(matrix_svd_physical):
+            color = "white" if np.abs(val) > 0.5 * vmax else "black"
+            ax2.text(j, i, f"{np.real(val):.3f}", ha="center", va="center", color=color)
+
+        im3 = ax3.matshow(np.abs(diff), cmap="Reds", vmin=0.0, vmax=vmax)
+        ax3.set_title(r"Divergence Matrix: $|f(A)-f^{(SV)}(A)|$", pad=12, fontsize=11)
+        for (i, j), val in np.ndenumerate(diff):
+            color = "white" if np.abs(val) > 0.5 * vmax else "black"
+            ax3.text(j, i, f"{np.abs(val):.3f}", ha="center", va="center", color=color)
+
+        for ax in (ax1, ax2, ax3):
+            ax.set_xticks([0, 1])
+            ax.set_yticks([0, 1])
+
+        fig.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
+        plt.suptitle("Adversarial QSVT: The Non-Normal Eigenvalue Trap", fontsize=14)
+        plt.tight_layout()
+        plt.show()
+
+    return NonNormalTrapResults(
+        A=A,
+        eigenvalues=eigenvalues,
+        singular_values=singular_values,
+        matrix_eigen_expected=matrix_eigen_expected,
+        matrix_svd_physical=matrix_svd_physical,
+        divergence_error=divergence_error,
+        is_normal=is_normal,
+    )
+
+
+def experiment_adversarial_phase_quantization(
+    degree: int = 35,
+    test_bits: tuple[int, ...] = (4, 6, 8, 12),
+    sweep_range: tuple[int, int] = (4, 16),
+    num_points: int = 1001,
+    plot: bool = True,
+) -> PhaseQuantizationResults:
+    """
+    MODULE 15: Adversarial QSVT - The Phase Quantization Limit.
+
+    Simulates finite-bit DAC quantization of phase angles and audits resulting
+    polynomial-shape distortion and fidelity loss.
+    """
+    print("-" * 65)
+    print("MODULE 15: ADVERSARIAL QSVT - THE PHASE QUANTIZATION LIMIT")
+    print("-" * 65)
+
+    if degree < 3:
+        raise ValueError("degree must be >= 3")
+    if num_points < 401:
+        raise ValueError("num_points must be >= 401")
+    if len(test_bits) == 0:
+        raise ValueError("test_bits must be non-empty")
+    if sweep_range[0] < 1 or sweep_range[1] < sweep_range[0]:
+        raise ValueError("sweep_range must satisfy 1 <= min_bits <= max_bits")
+
+    def evaluate_qsp_p(x_vals: np.ndarray, phases: np.ndarray) -> np.ndarray:
+        """Evaluate P(x)=U_00 over x-grid for a fixed phase sequence."""
+        p_out = np.zeros(x_vals.size, dtype=complex)
+        for idx, x in enumerate(x_vals):
+            y = np.sqrt(max(0.0, 1.0 - float(x) * float(x)))
+            U = np.array(
+                [[np.exp(1j * phases[0]), 0.0], [0.0, np.exp(-1j * phases[0])]],
+                dtype=complex,
+            )
+            Wx = np.array([[x, 1j * y], [1j * y, x]], dtype=complex)
+            for phi in phases[1:]:
+                Z_phi = np.array(
+                    [[np.exp(1j * phi), 0.0], [0.0, np.exp(-1j * phi)]],
+                    dtype=complex,
+                )
+                U = U @ Wx @ Z_phi
+            p_out[idx] = U[0, 0]
+        return p_out
+
+    def quantize_phases(phases: np.ndarray, bit_depth: int) -> np.ndarray:
+        """
+        Quantize phases onto a 2^bit_depth uniform DAC grid on [0, 2pi).
+        Mapping preserves phase periodicity used by exp(i*phi).
+        """
+        levels = 2**bit_depth
+        normalized = np.mod(phases, 2.0 * np.pi) / (2.0 * np.pi)
+        quantized_norm = np.round(normalized * levels) / levels
+        return quantized_norm * 2.0 * np.pi
+
+    print(f"Target QSVT Degree: {degree}")
+    x_eval = np.linspace(-1.0, 1.0, num_points)
+
+    # Structured phase profile to expose interference sensitivity at depth.
+    ideal_phases = np.sin(np.linspace(0.0, 3.0 * np.pi, degree + 1)) * np.pi
+    ideal_poly = np.real(evaluate_qsp_p(x_eval, ideal_phases))
+
+    tested_bits = np.asarray(sorted(set(int(b) for b in test_bits)), dtype=int)
+    quantized_polys: Dict[int, np.ndarray] = {}
+    max_errors: Dict[int, float] = {}
+
+    for bits in tested_bits:
+        if bits < 1:
+            raise ValueError("bit depths must be >= 1")
+        q_phases = quantize_phases(ideal_phases, int(bits))
+        q_poly = np.real(evaluate_qsp_p(x_eval, q_phases))
+        quantized_polys[int(bits)] = q_poly
+        err = float(np.max(np.abs(ideal_poly - q_poly)))
+        max_errors[int(bits)] = err
+        print(f"Bit-depth: {bits:2d}-bit | DAC levels: {2**bits:5d} | Max |ΔP|: {err:.4f}")
+
+    if 4 in quantized_polys and max_errors[4] > 0.5:
+        print("CATASTROPHE: 4-bit quantization severely shatters polynomial geometry.")
+
+    min_bits, max_bits = int(sweep_range[0]), int(sweep_range[1])
+    sweep_bits = np.arange(min_bits, max_bits + 1, dtype=int)
+    fidelity_curve = np.zeros_like(sweep_bits, dtype=float)
+
+    for i, bits in enumerate(sweep_bits):
+        q_phases = quantize_phases(ideal_phases, int(bits))
+        q_poly = np.real(evaluate_qsp_p(x_eval, q_phases))
+        mse = float(np.mean(np.abs(ideal_poly - q_poly) ** 2))
+        fidelity_curve[i] = max(0.0, 1.0 - mse)
+
+    print("-" * 65)
+
+    if plot:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5))
+
+        ax1.plot(
+            x_eval,
+            ideal_poly,
+            color="black",
+            linewidth=3.5,
+            alpha=0.35,
+            label="Infinite Precision (reference)",
+        )
+        if 4 in quantized_polys:
+            ax1.plot(
+                x_eval,
+                quantized_polys[4],
+                color="tab:red",
+                linestyle="--",
+                linewidth=2.0,
+                label="4-bit DAC (16 levels)",
+            )
+        if 6 in quantized_polys:
+            ax1.plot(
+                x_eval,
+                quantized_polys[6],
+                color="tab:orange",
+                linewidth=2.3,
+                label="6-bit DAC (64 levels)",
+            )
+        if 8 in quantized_polys:
+            ax1.plot(
+                x_eval,
+                quantized_polys[8],
+                color="tab:blue",
+                linewidth=2.0,
+                alpha=0.9,
+                label="8-bit DAC (256 levels)",
+            )
+        if 12 in quantized_polys:
+            ax1.plot(
+                x_eval,
+                quantized_polys[12],
+                color="tab:green",
+                linestyle=":",
+                linewidth=2.8,
+                label="12-bit DAC (4096 levels)",
+            )
+        ax1.axhline(1.0, color="black", linestyle=":", alpha=0.5)
+        ax1.axhline(-1.0, color="black", linestyle=":", alpha=0.5)
+        ax1.set_title(f"Polynomial Distortion from Phase Quantization (d={degree})", fontsize=12)
+        ax1.set_xlabel("Singular Value x")
+        ax1.set_ylabel("Transformed Amplitude P(x)")
+        ax1.set_ylim(-1.2, 1.2)
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc="lower center", fontsize=8.5)
+
+        ax2.plot(sweep_bits, fidelity_curve, color="tab:purple", marker="o", linewidth=2.8)
+        ax2.axvline(8, color="gray", linestyle="--", label="Typical 8-bit limit")
+        ax2.axhline(1.0, color="black", linestyle="-")
+        ax2.set_title("Functional Fidelity vs DAC Bit-Depth", fontsize=12)
+        ax2.set_xlabel("Phase Resolution (bits)")
+        ax2.set_ylabel("Fidelity Proxy (1 - MSE)")
+        ax2.set_ylim(0.0, 1.05)
+        ax2.grid(True, which="both", alpha=0.3)
+        ax2.legend(loc="lower right")
+
+        plt.suptitle("Adversarial QSVT: The Physical Control-Electronics Bottleneck", fontsize=14)
+        plt.tight_layout()
+        plt.show()
+
+    return PhaseQuantizationResults(
+        degree=int(degree),
+        x_eval=x_eval,
+        ideal_phases=ideal_phases,
+        ideal_poly=ideal_poly,
+        bit_depths_tested=tested_bits,
+        quantized_polys=quantized_polys,
+        sweep_bits=sweep_bits,
+        fidelity_curve=fidelity_curve,
+        max_errors=max_errors,
+    )
+
+
+def experiment_adversarial_subnormalization_hubris(
+    dim: int = 4,
+    target_sigma_max: float = 2.5,
+    valid_margin: float = 0.01,
+    seed: int = 42,
+    plot: bool = True,
+) -> SubnormalizationHubrisResults:
+    """
+    MODULE 16: Adversarial QSVT - The Subnormalization Hubris.
+
+    Demonstrates that forcing alpha=1 for over-norm operators makes the defect
+    matrix non-PSD and breaks block-encoding dilation at the linear-algebra step.
+    """
+    print("-" * 65)
+    print("MODULE 16: ADVERSARIAL QSVT - THE SUBNORMALIZATION HUBRIS")
+    print("-" * 65)
+
+    if dim < 2:
+        raise ValueError("dim must be >= 2")
+    if target_sigma_max <= 1.0:
+        raise ValueError("target_sigma_max must be > 1 to trigger the hubris trap")
+    if valid_margin <= 0.0:
+        raise ValueError("valid_margin must be > 0")
+
+    rng = np.random.default_rng(seed)
+    A_raw = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+    sigma_max_raw = float(np.linalg.svd(A_raw, compute_uv=False).max())
+    A = A_raw * (target_sigma_max / sigma_max_raw)
+
+    true_alpha = float(np.linalg.svd(A, compute_uv=False).max())
+    valid_alpha = true_alpha * (1.0 + valid_margin)
+    cheated_alpha = 1.0
+
+    print(f"Target matrix max singular value: {true_alpha:.4f}")
+    print(f"Valid alpha:   {valid_alpha:.4f}")
+    print(f"Cheated alpha: {cheated_alpha:.4f}")
+
+    # Valid path: defect matrix should remain PSD.
+    A_valid = A / valid_alpha
+    defect_valid = np.eye(dim, dtype=complex) - A_valid @ A_valid.conj().T
+    evals_valid = np.linalg.eigvalsh(defect_valid)
+
+    # Cheated path: forcing alpha=1 generally drives defect eigenvalues negative.
+    A_cheated = A / cheated_alpha
+    defect_invalid = np.eye(dim, dtype=complex) - A_cheated @ A_cheated.conj().T
+    evals_invalid = np.linalg.eigvalsh(defect_invalid)
+
+    print(f"Min defect eigenvalue (valid):   {float(np.min(evals_valid)):.6f}")
+    print(f"Min defect eigenvalue (cheated): {float(np.min(evals_invalid)):.6f}")
+
+    catastrophe_message = ""
+    try:
+        _ = np.linalg.cholesky(defect_invalid)
+        catastrophe_message = "Unexpectedly succeeded (numerically marginal case)."
+    except np.linalg.LinAlgError as exc:
+        catastrophe_message = str(exc)
+        print("FATAL: unitary dilation fails for cheated alpha path.")
+        print(f"  LinAlgError: {catastrophe_message}")
+        print("  Physical meaning: I - A A^dagger is not PSD, so sqrt-defect is invalid.")
+
+    print("-" * 65)
+
+    if plot:
+        fig, ax = plt.subplots(figsize=(9, 6))
+        indices = np.arange(1, dim + 1)
+
+        ax.bar(
+            indices - 0.2,
+            evals_valid,
+            width=0.4,
+            color="tab:green",
+            edgecolor="black",
+            linewidth=1.2,
+            label=rf"Valid ($\alpha={valid_alpha:.2f}$)",
+        )
+        ax.bar(
+            indices + 0.2,
+            evals_invalid,
+            width=0.4,
+            color="tab:red",
+            edgecolor="black",
+            linewidth=1.2,
+            label=rf"Cheated ($\alpha={cheated_alpha:.2f}$)",
+        )
+
+        floor = min(float(np.min(evals_invalid)) - 0.5, -0.5)
+        ax.axhline(0.0, color="black", linewidth=1.8)
+        ax.axhspan(floor, 0.0, color="tab:red", alpha=0.14, label="Forbidden Zone (negative eigenvalues)")
+
+        ax.annotate(
+            r"Cannot form $\sqrt{I-AA^\dagger}$",
+            xy=(indices[-1] + 0.15, float(np.min(evals_invalid))),
+            xytext=(max(1.5, dim * 0.5), floor + 0.2),
+            arrowprops=dict(facecolor="tab:red", shrink=0.05, width=1.4, headwidth=8),
+            color="tab:red",
+            fontsize=10.5,
+            fontweight="bold",
+            ha="center",
+        )
+
+        ax.set_title(r"Defect Spectrum: $I-(A/\alpha)(A/\alpha)^\dagger$", fontsize=13)
+        ax.set_xlabel("Eigenvalue Index")
+        ax.set_ylabel("Eigenvalue Magnitude")
+        ax.set_xticks(indices)
+        ax.set_ylim(floor, max(float(np.max(evals_valid)) * 1.4, 1.5))
+        ax.grid(axis="y", alpha=0.3)
+        ax.legend(loc="upper right")
+
+        plt.suptitle("Adversarial QSVT: Mathematical Impossibility of Cheating Alpha", fontsize=14)
+        plt.tight_layout()
+        plt.show()
+
+    return SubnormalizationHubrisResults(
+        A=A,
+        true_alpha=true_alpha,
+        valid_alpha=valid_alpha,
+        cheated_alpha=cheated_alpha,
+        valid_eigenvalues=evals_valid,
+        invalid_eigenvalues=evals_invalid,
+        catastrophe_message=catastrophe_message,
+    )
+
+
 if __name__ == "__main__":
     run_qsp_engine_diagnostics(plot=True)
     experiment_lcu_block_encoding(plot=True)
@@ -2023,3 +2641,26 @@ if __name__ == "__main__":
     )
     experiment_adversarial_gibbs_catastrophe(degree=41, num_points=5000, plot=True)
     experiment_adversarial_parity_scramble(dim=5, seed=101, plot=True)
+    experiment_adversarial_ill_conditioned_abyss(
+        degree=41,
+        kappas=(5.0, 20.0, 100.0),
+        scale_factor=0.5,
+        outside_weight=50.0,
+        num_points=5001,
+        plot=True,
+    )
+    experiment_adversarial_non_normal_trap(plot=True)
+    experiment_adversarial_phase_quantization(
+        degree=35,
+        test_bits=(4, 6, 8, 12),
+        sweep_range=(4, 16),
+        num_points=1001,
+        plot=True,
+    )
+    experiment_adversarial_subnormalization_hubris(
+        dim=4,
+        target_sigma_max=2.5,
+        valid_margin=0.01,
+        seed=42,
+        plot=True,
+    )
