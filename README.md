@@ -77,11 +77,6 @@ The FPAA engine replaces the standard $\pi$-pulse reflections with a **Generaliz
 * **`fpaa_nesting.png`**: Visual proof of the Chebyshev composition identity and the sharpening effect of nested schedules.
 * **`fpaa_resource_overhead.csv`**: A comparative data table mapping target precision ($\epsilon$) to the required T-count and circuit depth.
 * **Passband Visualizations**: Detailed plots of the success probability $P(\lambda)$ showing the engineered plateau above the threshold $\delta$.
-
----
-
-This updated section for your README reflects the geometric engine, purified-setting audits, and LCU benchmarks implemented in `3_Oblivious_Ampltude_Amplification.py`.
-
 ---
 
 ### III. Oblivious Amplitude Amplification (OAA)
@@ -142,9 +137,6 @@ The engine validates the convexity guarantee required for distributed search: $\
 * **`network_shot_noise.png`**: A visualization of local marked-state fractions ($a_k$) across all nodes, featuring a horizontal threshold at the global average ($a$) to highlight the "lucky nodes."
 * **`compiler_table_csv`**: A detailed breakdown of the partitioning costs and local vs. global query complexities.
 * **Convexity Heatmap**: Data showing how increasing the number of prefix qubits ($j$) affects the variance and maximum available local signal strength.
-
-This updated section for your README reflects the branch-level statistical modeling and asymptotic scaling benchmarks implemented in `5_Variable_Time_Amplitude_Amplification.py`.
-
 ---
 
 ### V. Variable-Time Amplitude Amplification (VTAA)
