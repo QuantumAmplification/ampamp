@@ -1,7 +1,12 @@
-qiskit
-qiskit-aer
-qiskit-algorithms
-matplotlib
-numpy
-scipy
-pylatexenc
+# Core Numerical and Scientific Computing
+numpy>=1.21.0
+scipy>=1.7.0
+
+# Quantum Circuit Synthesis and Simulation
+qiskit>=0.45.0
+qiskit-aer>=0.13.0
+qiskit-algorithms>=0.2.0
+
+# Visualization and Data Artifacts
+matplotlib>=3.5.0
+pylatexenc>=2.10
