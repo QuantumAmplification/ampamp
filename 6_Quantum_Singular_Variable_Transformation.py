@@ -39,8 +39,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+
+
+def _show_figure() -> None:
+    """Show figures on interactive backends and close silently on headless Agg."""
+    if matplotlib.get_backend().lower() == "agg":
+        plt.close(plt.gcf())
+        return
+    plt.show()
 
 
 @dataclass
@@ -441,7 +450,7 @@ def run_qsp_engine_diagnostics(plot: bool = True) -> Dict[str, QSPForwardResults
 
     plt.suptitle("QSVT Forward Engine: Polynomial Extraction & Bounds Auditing")
     plt.tight_layout()
-    plt.show()
+    _show_figure()
 
     return results
 
@@ -612,7 +621,7 @@ def experiment_lcu_block_encoding(plot: bool = True) -> LCUBlockEncodingResults:
 
         plt.suptitle(f"LCU Block-Encoding Audit: Subnormalization $\\alpha={alpha:.2f}$")
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return LCUBlockEncodingResults(
         target_matrix_A=a_target,
@@ -747,7 +756,7 @@ def experiment_qsvt_invariant_subspace(
 
         plt.suptitle("Theorem 17 Validation: Dynamical SVD Plane Factorization")
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return InvariantSubspaceResults(
         matrix_dim=dim_a,
@@ -941,7 +950,7 @@ def experiment_qsvt_hamiltonian_simulation(
 
         plt.suptitle("Phase II Module 4: Hamiltonian Simulation via Jacobi-Anger")
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return HamiltonianSimResults(
         t=float(t),
@@ -1094,7 +1103,7 @@ def experiment_qsvt_matrix_inversion(
 
         plt.suptitle("Phase II Module 5: QSVT Matrix Inversion vs QPE")
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return MatrixInversionResults(
         kappa=float(kappa),
@@ -1255,7 +1264,7 @@ def experiment_qsvt_fixed_point_search(
 
         plt.suptitle("Phase II Module 6: Fixed-Point Search Without Overshoot")
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return FixedPointSearchResults(
         delta=float(delta),
@@ -1380,7 +1389,7 @@ def experiment_lcu_operator_algebra(
 
         plt.suptitle("Phase III Module 7: LCU Operator Algebra and Alpha Growth")
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return OperatorAlgebraResults(
         A=A,
@@ -1538,7 +1547,7 @@ def experiment_qsvt_uniform_amplification(
 
         plt.suptitle("Phase III Module 8: Uniform Singular Value Amplification")
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return UniformAmplificationResults(
         amplification_factor=float(c_amp),
@@ -1698,7 +1707,7 @@ def experiment_markov_brothers_boundary(
 
         plt.suptitle("Phase IV Module 9: Information Limits from Markov/Bernstein Theory")
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return MarkovBoundaryResults(
         d_visual=d_visual,
@@ -1794,7 +1803,7 @@ def experiment_physical_phase_fragility(
 
         # Panel 1: subnormalization / out-of-domain failure.
         ax1.plot(x_extended, np.real(p_ideal_ext), color="tab:blue", linewidth=2.2, label="QSVT polynomial")
-        ax1.axvspan(-1.0, 1.0, color="tab:green", alpha=0.10, label=r"Valid domain $|x|\le1$")
+        ax1.axvspan(-1.0, 1.0, color="tab:green", alpha=0.10, label=r"Valid domain $|x|\leq1$")
         ax1.axhline(1.0, color="black", linestyle="--", linewidth=1.8, label=r"Unitarity bounds $\pm1$")
         ax1.axhline(-1.0, color="black", linestyle="--", linewidth=1.8)
         ax1.annotate(
@@ -1843,8 +1852,9 @@ def experiment_physical_phase_fragility(
         inset.grid(True, alpha=0.3)
 
         plt.suptitle("Phase IV Module 10: QSVT Hardware Fragility")
-        plt.tight_layout()
-        plt.show()
+        # `tight_layout` is incompatible with the manually positioned inset axis.
+        fig.subplots_adjust(left=0.06, right=0.98, bottom=0.12, top=0.86, wspace=0.25)
+        _show_figure()
 
     return PhaseFragilityResults(
         degree=degree,
@@ -1962,7 +1972,7 @@ def experiment_adversarial_gibbs_catastrophe(
         ax.grid(True, alpha=0.3)
         ax.legend(loc="lower right")
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return GibbsCatastropheResults(
         degree=degree,
@@ -2054,7 +2064,7 @@ def experiment_adversarial_parity_scramble(
 
         plt.suptitle("Adversarial QSVT: Parity Scramble on Non-Hermitian Input", fontsize=13)
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return ParityScrambleResults(
         A_raw=A,
@@ -2229,7 +2239,7 @@ def experiment_adversarial_ill_conditioned_abyss(
 
         plt.suptitle("Adversarial QSVT: Ill-Conditioned Abyss Under Fixed Depth", fontsize=15)
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return IllConditionedAbyssResults(
         degree=int(degree),
@@ -2315,7 +2325,7 @@ def experiment_adversarial_non_normal_trap(plot: bool = True) -> NonNormalTrapRe
         fig.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
         plt.suptitle("Adversarial QSVT: The Non-Normal Eigenvalue Trap", fontsize=14)
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return NonNormalTrapResults(
         A=A,
@@ -2486,7 +2496,7 @@ def experiment_adversarial_phase_quantization(
 
         plt.suptitle("Adversarial QSVT: The Physical Control-Electronics Bottleneck", fontsize=14)
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return PhaseQuantizationResults(
         degree=int(degree),
@@ -2611,7 +2621,7 @@ def experiment_adversarial_subnormalization_hubris(
 
         plt.suptitle("Adversarial QSVT: Mathematical Impossibility of Cheating Alpha", fontsize=14)
         plt.tight_layout()
-        plt.show()
+        _show_figure()
 
     return SubnormalizationHubrisResults(
         A=A,
