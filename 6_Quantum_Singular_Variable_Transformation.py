@@ -1,41 +1,29 @@
-"""Phase I: The Core Algebra (Section VII & VIII)
+"""QSVT Unification Laboratory
 
-The SU(2) QSP Engine: The forward-model compiler that takes offline classical
-phases ϕ and generates bounded polynomials P(x) on a single qubit.
+This file implements a complete, phase-structured QSVT laboratory from core
+SU(2) polynomial synthesis to asymptotic limits and hardware fragility.
 
-Module 1:
-1. Generalized Sequence Evaluator (Eq. 78)
-2. Polynomial Extractor (Eq. 80)
-3. Unitarity/Boundedness Auditor (Eq. 83 & 84)
-4. Parity Constraint Checker (Eq. 82)
-5. Canonical Phase Ingestion (sign/cosine proxies)
+Phase I: Core algebra and structural validation
+1. Generalized sequence evaluator (Eq. 78)
+2. Polynomial extractor (Eq. 80)
+3. Unitarity / boundedness auditor (Eq. 83, 84)
+4. Parity constraint checker (Eq. 82)
+5. Canonical phase-sequence diagnostics
+6. Block-encoding synthesizer
+7. Invariant subspace audit (Theorem 17)
 
-Module 2:
-1. LCU PREP/SEL primitives
-2. Subnormalization tracking (alpha)
-3. Global unitary assembly
-4. Ancilla-|0> subspace projector audit
-5. Visual block-embedding evidence
+Phase II: Algorithmic unification
+8. Hamiltonian simulation (Jacobi-Anger synthesis)
+9. Matrix inversion (HHL 2.0 style polynomial inverse)
+10. Fixed-point search (sign-function thresholding)
 
-Module 3:
-1. 8x8 block-encoding generation for a dense 4x4 matrix
-2. SVD singular-vector extraction
-3. Degree-d QSVT trajectory tracker
-4. Trajectory-rank (rank-2) invariant-plane audit
-5. Cross-plane orthogonality audit
+Phase III: Operator calculus
+11. LCU operator algebra (addition / multiplication closure)
+12. Uniform singular value amplification (USVA)
 
-Phase II scaffold:
-1. Module 4: Hamiltonian Simulation (Jacobi-Anger)
-2. Module 5: Matrix Inversion (HHL 2.0)
-3. Module 6: Fixed-Point Search (Sign Function)
-
-Phase III scaffold:
-1. Module 7: LCU Operator Algebra
-2. Module 8: Uniform Singular Value Amplification (USVA)
-
-Phase IV scaffold:
-1. Module 9: Markov Brothers' Boundary
-2. Module 10: Physical Phase-Fragility
+Phase IV: Fundamental limits and realism
+13. Markov/Bernstein extremal derivative boundary
+14. Physical phase-fragility and hardware sensitivity
 """
 
 from __future__ import annotations
@@ -49,7 +37,7 @@ import numpy as np
 
 @dataclass
 class QSPForwardResults:
-    """Container for evaluated QSP polynomial data and structural audits."""
+    """Results for SU(2)-QSP forward evaluation and structural audits."""
 
     target_name: str
     degree: int
@@ -66,7 +54,7 @@ class QSPForwardResults:
 
 @dataclass
 class LCUBlockEncodingResults:
-    """Container for Module 2 block-encoding diagnostics."""
+    """Results for LCU block-encoding synthesis and extraction audits."""
 
     target_matrix_A: np.ndarray
     alpha: float
@@ -79,7 +67,7 @@ class LCUBlockEncodingResults:
 
 @dataclass
 class InvariantSubspaceResults:
-    """Container for Module 3 invariant-subspace evidence."""
+    """Results for invariant-subspace geometry and orthogonality audits."""
 
     matrix_dim: int
     unitary_dim: int
@@ -94,7 +82,7 @@ class InvariantSubspaceResults:
 
 @dataclass
 class HamiltonianSimResults:
-    """Container for Module 4 Hamiltonian-simulation diagnostics."""
+    """Results for Jacobi-Anger Hamiltonian simulation benchmarks."""
 
     t: float
     x_values: np.ndarray
@@ -112,7 +100,7 @@ class HamiltonianSimResults:
 
 @dataclass
 class MatrixInversionResults:
-    """Container for Module 5 matrix inversion diagnostics."""
+    """Results for QSVT-based matrix inversion and resource scaling audits."""
 
     kappa: float
     degree: int
@@ -129,7 +117,7 @@ class MatrixInversionResults:
 
 @dataclass
 class FixedPointSearchResults:
-    """Container for Module 6 fixed-point search diagnostics."""
+    """Results for fixed-point search transfer and convergence diagnostics."""
 
     delta: float
     target_degree: int
@@ -149,7 +137,7 @@ class FixedPointSearchResults:
 
 @dataclass
 class OperatorAlgebraResults:
-    """Container for Module 7 LCU operator-algebra diagnostics."""
+    """Results for LCU addition/multiplication closure and alpha growth."""
 
     A: np.ndarray
     B: np.ndarray
@@ -167,7 +155,7 @@ class OperatorAlgebraResults:
 
 @dataclass
 class UniformAmplificationResults:
-    """Container for Module 8 USVA diagnostics."""
+    """Results for uniform singular-value amplification and rescue dynamics."""
 
     amplification_factor: float
     degree: int
@@ -185,7 +173,7 @@ class UniformAmplificationResults:
 
 @dataclass
 class MarkovBoundaryResults:
-    """Container for Module 9 Markov/Bernstein extremal-slope audits."""
+    """Results for Markov/Bernstein extremal derivative boundary audits."""
 
     d_visual: int
     x_eval: np.ndarray
@@ -200,7 +188,7 @@ class MarkovBoundaryResults:
 
 @dataclass
 class PhaseFragilityResults:
-    """Container for Module 10 physical phase-fragility diagnostics."""
+    """Results for out-of-domain leakage and phase-drift fragility audits."""
 
     degree: int
     x_eval_extended: np.ndarray
@@ -216,21 +204,18 @@ class PhaseFragilityResults:
 
 
 class SU2QSPEngine:
-    """
-    Universal forward-model compiler for Quantum Signal Processing.
-    Translates a classical phase vector into bounded SU(2) polynomials.
-    """
+    """Forward-model SU(2) compiler for Quantum Signal Processing (QSP)."""
 
     @staticmethod
     def w_signal(x: float) -> np.ndarray:
-        """Signal unitary W(x), Eq. 75."""
+        """Return the signal unitary W(x) (Eq. 75)."""
         x = float(np.clip(x, -1.0, 1.0))
         y = np.sqrt(max(0.0, 1.0 - x * x))
         return np.array([[x, 1j * y], [1j * y, x]], dtype=complex)
 
     @staticmethod
     def z_rotation(phi: float) -> np.ndarray:
-        """Phase rotation e^{i phi Z}."""
+        """Return the phase rotation exp(i * phi * Z)."""
         return np.array(
             [[np.exp(1j * phi), 0.0], [0.0, np.exp(-1j * phi)]],
             dtype=complex,
@@ -244,10 +229,7 @@ class SU2QSPEngine:
         num_points: int = 1001,
         audit_tolerance: float = 1e-10,
     ) -> QSPForwardResults:
-        """
-        Evaluate Eq. 78 over x in [-1, 1], extract Eq. 80 polynomials,
-        and run Eq. 82/83/84 structural audits.
-        """
+        """Evaluate Eq. 78 and run Eq. 80/82/83/84 structural audits."""
         phases = np.asarray(phases, dtype=float).ravel()
         if phases.size == 0:
             raise ValueError("phases must contain at least one entry")
@@ -262,13 +244,13 @@ class SU2QSPEngine:
         unitarity_errors = np.zeros(num_points, dtype=float)
 
         for idx, x in enumerate(x_vals):
-            # 1) Generalized sequence evaluator (Eq. 78)
+            # 1) Generalized sequence evaluation (Eq. 78)
             u = cls.z_rotation(phases[0])
             wx = cls.w_signal(x)
             for phi in phases[1:]:
                 u = u @ wx @ cls.z_rotation(phi)
 
-            # 2) Polynomial extractor (Eq. 80)
+            # 2) Polynomial extraction (Eq. 80)
             p_x = u[0, 0]
             y = np.sqrt(max(0.0, 1.0 - x * x))
             if y <= 1e-15:
@@ -279,11 +261,11 @@ class SU2QSPEngine:
             p_vals[idx] = p_x
             q_vals[idx] = q_x
 
-            # 3) Unitarity / boundedness audit (Eq. 83/84)
+            # 3) Unitarity/boundedness audit (Eq. 83/84)
             unitarity_lhs = (abs(p_x) ** 2) + (1.0 - x * x) * (abs(q_x) ** 2)
             unitarity_errors[idx] = abs(1.0 - unitarity_lhs)
 
-        # 4) Parity audit (Eq. 82): P(-x) = (-1)^degree * P(x)
+        # 4) Parity audit (Eq. 82): P(-x) = (-1)^d * P(x)
         parity_factor = (-1) ** (degree % 2)
         parity_errors = np.abs(p_vals[::-1] - parity_factor * p_vals)
         max_parity_error = float(np.max(parity_errors))
@@ -305,7 +287,7 @@ class SU2QSPEngine:
 
 
 def canonical_phase_sets() -> Dict[str, np.ndarray]:
-    """Canonical phase vectors for diagnostics and paper figures."""
+    """Return canonical phase vectors used throughout the diagnostics."""
     return {
         # Degree-3 odd-parity sign proxy.
         "Sign Function Proxy (d=3)": np.array(
@@ -317,7 +299,7 @@ def canonical_phase_sets() -> Dict[str, np.ndarray]:
 
 
 def run_qsp_engine_diagnostics(plot: bool = True) -> Dict[str, QSPForwardResults]:
-    """Run canonical diagnostics and optionally plot extraction evidence."""
+    """Run canonical SU(2)-QSP diagnostics and optional evidence plots."""
     print("-" * 65)
     print("PHASE I: SU(2) QSP ENGINE DIAGNOSTICS")
     print("-" * 65)
@@ -375,7 +357,7 @@ def run_qsp_engine_diagnostics(plot: bool = True) -> Dict[str, QSPForwardResults
 
 
 def _ancilla_zero_subspace_indices(total_dim: int, ancilla_qubit_index: int = 0) -> np.ndarray:
-    """Return basis indices where the selected ancilla qubit is |0>."""
+    """Return computational-basis indices where a chosen ancilla is |0>."""
     n_qubits = int(np.log2(total_dim))
     if (1 << n_qubits) != total_dim:
         raise ValueError("total_dim must be a power of two")
@@ -386,15 +368,12 @@ def _ancilla_zero_subspace_indices(total_dim: int, ancilla_qubit_index: int = 0)
 
 
 def _basis_permutation_ancilla_major() -> np.ndarray:
-    """
-    Two-qubit basis permutation from Qiskit ordering (system⊗ancilla)
-    to visualization ordering (ancilla⊗system).
-    """
+    """Permutation from Qiskit (system⊗ancilla) to ancilla-major ordering."""
     return np.array([0, 2, 1, 3], dtype=int)
 
 
 def _matrix_sqrt_psd(matrix: np.ndarray, eig_clip: float = 1e-14) -> np.ndarray:
-    """Hermitian PSD square root via eigen-decomposition."""
+    """Return the Hermitian PSD matrix square root via eigendecomposition."""
     herm = 0.5 * (matrix + matrix.conj().T)
     eigvals, eigvecs = np.linalg.eigh(herm)
     eigvals = np.where(eigvals < eig_clip, 0.0, eigvals)
@@ -402,10 +381,7 @@ def _matrix_sqrt_psd(matrix: np.ndarray, eig_clip: float = 1e-14) -> np.ndarray:
 
 
 def _embed_local_operator(op: np.ndarray, targets: list[int], dims: list[int]) -> np.ndarray:
-    """
-    Embed a local operator on selected subsystems into a full tensor-product space.
-    Subsystems are ordered as dims[0] x dims[1] x ... in row-major indexing.
-    """
+    """Embed a local operator on selected subsystems into a full tensor space."""
     op = np.asarray(op, dtype=complex)
     targets = list(targets)
     dims = list(dims)
@@ -435,13 +411,7 @@ def _embed_local_operator(op: np.ndarray, targets: list[int], dims: list[int]) -
 
 
 def experiment_lcu_block_encoding(plot: bool = True) -> LCUBlockEncodingResults:
-    """
-    MODULE 2: Block-Encoding Synthesizer.
-
-    Builds PREP and SEL, assembles:
-    (PREP^dagger ⊗ I) * SEL * (PREP ⊗ I),
-    then audits that <0|_a U |0>_a = A / alpha.
-    """
+    """MODULE 2: Build and audit an LCU block-encoding for a non-unitary A."""
     from qiskit import QuantumCircuit, QuantumRegister
     from qiskit.quantum_info import Operator
 
@@ -449,13 +419,13 @@ def experiment_lcu_block_encoding(plot: bool = True) -> LCUBlockEncodingResults:
     print("MODULE 2: LCU BLOCK-ENCODING SYNTHESIZER")
     print("-" * 65)
 
-    # Non-unitary target A = a0*I + a1*X.
+    # Non-unitary target matrix: A = a0*I + a1*X.
     alpha_0, alpha_1 = 1.5, 0.5
     u_0 = np.eye(2, dtype=complex)
     u_1 = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=complex)
     a_target = alpha_0 * u_0 + alpha_1 * u_1
 
-    # Subnormalization factor alpha = sum_j |a_j|.
+    # Subnormalization factor: alpha = sum_j |a_j|.
     alpha = float(abs(alpha_0) + abs(alpha_1))
 
     print(f"Target Matrix A (Non-Unitary):\n{a_target}")
@@ -470,19 +440,19 @@ def experiment_lcu_block_encoding(plot: bool = True) -> LCUBlockEncodingResults:
     qc_prep.ry(theta, ancilla[0])
     prep_matrix = Operator(qc_prep).data
 
-    # SEL applies I on system if ancilla=0, X on system if ancilla=1.
+    # SEL applies I if ancilla=0 and X if ancilla=1.
     qc_sel = QuantumCircuit(ancilla, system, name="SEL")
     qc_sel.cx(ancilla[0], system[0])
     sel_matrix = Operator(qc_sel).data
 
-    # Global assembly via the circuit sequence.
+    # Assemble the full block-encoding circuit.
     qc_full = QuantumCircuit(ancilla, system, name="U_BlockEncode")
     qc_full.append(qc_prep, [ancilla[0], system[0]])
     qc_full.append(qc_sel, [ancilla[0], system[0]])
     qc_full.append(qc_prep.inverse(), [ancilla[0], system[0]])
     u_full = Operator(qc_full).data
 
-    # Independent matrix-path check for (PREP^dagger) * SEL * PREP.
+    # Independent matrix check for PREP^\dagger * SEL * PREP.
     u_formula = prep_matrix.conj().T @ sel_matrix @ prep_matrix
     assembly_error = float(np.linalg.norm(u_full - u_formula))
 
@@ -490,7 +460,7 @@ def experiment_lcu_block_encoding(plot: bool = True) -> LCUBlockEncodingResults:
         np.allclose(u_full @ u_full.conj().T, np.eye(4, dtype=complex), atol=1e-10)
     )
 
-    # Project onto ancilla-|0> subspace.
+    # Project onto the ancilla-|0> subspace and recover the encoded block.
     anc0 = _ancilla_zero_subspace_indices(total_dim=u_full.shape[0], ancilla_qubit_index=0)
     extracted_block = u_full[np.ix_(anc0, anc0)]
     reconstructed_a = alpha * extracted_block
@@ -508,7 +478,7 @@ def experiment_lcu_block_encoding(plot: bool = True) -> LCUBlockEncodingResults:
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-        # Plot target A.
+        # Plot the target matrix A.
         ax1.matshow(np.abs(a_target), cmap="Blues", vmin=0, vmax=2)
         for (i, j), val in np.ndenumerate(a_target):
             label_color = "white" if abs(val) > 1 else "black"
@@ -525,7 +495,7 @@ def experiment_lcu_block_encoding(plot: bool = True) -> LCUBlockEncodingResults:
         ax1.set_xticks([0, 1])
         ax1.set_yticks([0, 1])
 
-        # Reorder basis only for visual clarity so ancilla-|0> block is top-left.
+        # Reorder basis for visualization so the ancilla-|0> block is top-left.
         perm = _basis_permutation_ancilla_major()
         u_vis = u_full[np.ix_(perm, perm)]
         ax2.matshow(np.abs(u_vis), cmap="viridis", vmin=0, vmax=1)
@@ -568,12 +538,7 @@ def experiment_lcu_block_encoding(plot: bool = True) -> LCUBlockEncodingResults:
 def experiment_qsvt_invariant_subspace(
     degree: int = 20, seed: int = 42, plot: bool = True
 ) -> InvariantSubspaceResults:
-    """
-    MODULE 3: QSVT Invariant Subspace Audit (Theorem 17).
-
-    Proves that QSVT evolution for each singular vector remains in a 2D SU(2)
-    plane, and different singular-value planes remain orthogonal.
-    """
+    """MODULE 3: Audit Theorem-17 invariant SU(2) subspace factorization."""
     print("-" * 65)
     print("MODULE 3: QSVT INVARIANT SUBSPACE AUDIT (THEOREM 17)")
     print("-" * 65)
@@ -583,9 +548,8 @@ def experiment_qsvt_invariant_subspace(
 
     rng = np.random.default_rng(seed)
 
-    # Dense Hermitian contraction so left/right singular vectors coincide.
-    # This exposes the SU(2) invariant-plane geometry directly under the
-    # trajectory initialization |0> ⊗ |v_i>.
+    # Dense Hermitian contraction ensures left/right singular vectors coincide.
+    # This makes the invariant-plane geometry explicit for |0> ⊗ |v_i> states.
     random_matrix = rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))
     q_unitary, _ = np.linalg.qr(random_matrix)
     singular_profile = np.array([0.9, 0.7, 0.5, 0.2], dtype=float)
@@ -612,7 +576,7 @@ def experiment_qsvt_invariant_subspace(
     v_0 = vh_a[0, :].conj()
     v_1 = vh_a[1, :].conj()
 
-    # Reflection R_phi = exp(i phi (2Pi - I)), with Pi = |0><0|_a ⊗ I.
+    # Reflection R_phi = exp(i*phi*(2Pi - I)), with Pi = |0><0|_a ⊗ I.
     pi = np.block(
         [
             [ident, np.zeros((dim_a, dim_a), dtype=complex)],
@@ -709,9 +673,7 @@ def experiment_qsvt_invariant_subspace(
 
 
 def phase_2_roadmap() -> Dict[str, str]:
-    """
-    Phase II scaffold (kept in the same file per your workflow).
-    """
+    """Return the Phase II module roadmap."""
     return {
         "Module 4": "Hamiltonian simulation via Jacobi-Anger (even/odd QSVT synthesis).",
         "Module 5": "QSVT matrix inversion (HHL 2.0) on a gapped spectral interval.",
@@ -720,7 +682,7 @@ def phase_2_roadmap() -> Dict[str, str]:
 
 
 def phase_3_roadmap() -> Dict[str, str]:
-    """Phase III scaffold and sequencing."""
+    """Return the Phase III module roadmap."""
     return {
         "Module 7": "LCU Operator Algebra: closure under addition/multiplication with alpha tracking.",
         "Module 8": "Uniform singular value amplification to counter alpha decay.",
@@ -728,7 +690,7 @@ def phase_3_roadmap() -> Dict[str, str]:
 
 
 def phase_4_roadmap() -> Dict[str, str]:
-    """Phase IV scaffold and sequencing."""
+    """Return the Phase IV module roadmap."""
     return {
         "Module 9": "Markov Brothers' boundary: extremal derivative ceilings for bounded degree-d polynomials.",
         "Module 10": "Physical phase-fragility on NISQ hardware and unitary breakdown.",
@@ -742,12 +704,7 @@ def experiment_qsvt_hamiltonian_simulation(
     max_extra_degree: int = 30,
     plot: bool = True,
 ) -> HamiltonianSimResults:
-    """
-    MODULE 4: Hamiltonian Simulation via Jacobi-Anger synthesis.
-
-    Uses Bessel-derived Chebyshev coefficients for cos(tx) and sin(tx), then
-    recombines them as cos(tx) - i sin(tx) to approximate exp(-i t x).
-    """
+    """MODULE 4: Hamiltonian simulation via Jacobi-Anger Chebyshev synthesis."""
     from numpy.polynomial.chebyshev import Chebyshev
     from scipy.special import jv
 
@@ -768,11 +725,7 @@ def experiment_qsvt_hamiltonian_simulation(
     print(f"Target Precision (epsilon): {target_epsilon:.1e}")
 
     def synthesize_ja_polynomials(degree: int, time: float) -> tuple[Chebyshev, Chebyshev, float]:
-        """
-        Eq. 152 parity split:
-        cos(tx) = J0(t) + 2*sum_m (-1)^m J_{2m}(t) T_{2m}(x)
-        sin(tx) = 2*sum_m (-1)^m J_{2m+1}(t) T_{2m+1}(x)
-        """
+        """Construct parity-split Chebyshev series coefficients (Eq. 152)."""
         cos_coeffs = np.zeros(degree + 1, dtype=float)
         sin_coeffs = np.zeros(degree + 1, dtype=float)
 
@@ -783,7 +736,7 @@ def experiment_qsvt_hamiltonian_simulation(
             else:
                 sin_coeffs[k] = 2.0 * ((-1) ** ((k - 1) // 2)) * float(jv(k, time))
 
-        # LCU normalization proxy from Chebyshev L1 coefficient bound.
+        # LCU normalization proxy from a Chebyshev L1-coefficient bound.
         lcu_alpha = float(max(1.0, np.sum(np.abs(cos_coeffs)) + np.sum(np.abs(sin_coeffs))))
 
         return Chebyshev(cos_coeffs), Chebyshev(sin_coeffs), lcu_alpha
@@ -793,7 +746,7 @@ def experiment_qsvt_hamiltonian_simulation(
     approx_cos = p_even(x_vals)
     approx_sin = p_odd(x_vals)
 
-    # Eq. 153/177 coherent recombination with explicit LCU scaling variable.
+    # Eq. 153/177 coherent recombination with explicit LCU scaling.
     bounded_even = approx_cos / alpha_visual
     bounded_odd = approx_sin / alpha_visual
     approx_exp = alpha_visual * (bounded_even - 1j * bounded_odd)
@@ -912,12 +865,7 @@ def experiment_qsvt_matrix_inversion(
     num_points: int = 2001,
     plot: bool = True,
 ) -> MatrixInversionResults:
-    """
-    MODULE 5: QSVT Matrix Inversion (HHL 2.0).
-
-    Synthesizes an odd bounded polynomial approximation to 1/x over a gapped
-    interval and compares ancilla scaling against QPE-based HHL.
-    """
+    """MODULE 5: QSVT matrix inversion (HHL 2.0 style) on a gapped interval."""
     from numpy.polynomial.chebyshev import chebfit, chebval
 
     print("-" * 65)
@@ -944,11 +892,7 @@ def experiment_qsvt_matrix_inversion(
     print(f"Outside-Gap Fit Weight: {outside_weight:.1f}")
 
     def target_inverse(x: np.ndarray) -> np.ndarray:
-        """
-        Gapped odd target:
-        - outside gap:  scale_factor * (1/(kappa*x))
-        - inside gap:   scale_factor * (kappa*x)
-        """
+        """Define the gapped odd reciprocal target used for polynomial fitting."""
         y = np.zeros_like(x, dtype=float)
         outside = np.abs(x) >= gap
         inside = ~outside
@@ -965,7 +909,7 @@ def experiment_qsvt_matrix_inversion(
     cheb_coeffs[::2] = 0.0  # enforce odd parity exactly
     y_approx = chebval(x_eval, cheb_coeffs)
 
-    # Unitarity audit: enforce |P(x)| <= 1 through a final global rescaling if needed.
+    # Unitarity audit: enforce |P(x)| <= 1 via final global rescaling if needed.
     max_amplitude = float(np.max(np.abs(y_approx)))
     if max_amplitude > 1.0:
         cheb_coeffs = cheb_coeffs / (max_amplitude + 1e-12)
@@ -980,7 +924,7 @@ def experiment_qsvt_matrix_inversion(
     print(f"Max Approximation Error (|x| >= 1/kappa): {max_error:.4e}")
     print(f"Odd Parity Audit Error: {odd_parity_error:.4e}")
 
-    # Spatial scaling benchmark.
+    # Spatial resource scaling benchmark.
     epsilons = np.logspace(-1, -6, 60)
     qpe_ancillas = np.ceil(np.log2(1.0 / epsilons)) + 2.0
     qsvt_ancillas = np.full_like(epsilons, 2.0)
@@ -1073,12 +1017,7 @@ def experiment_qsvt_fixed_point_search(
     num_points: int = 2001,
     plot: bool = True,
 ) -> FixedPointSearchResults:
-    """
-    MODULE 6: Fixed-Point Search using sign-function polynomial thresholding.
-
-    Builds an odd bounded sign-like polynomial and compares depth trajectories:
-    standard AA oscillations vs QSVT fixed-point monotone envelope.
-    """
+    """MODULE 6: Fixed-point search via sign-function polynomial thresholding."""
     from numpy.polynomial.chebyshev import chebfit, chebval
     from scipy.special import erf
 
@@ -1132,8 +1071,8 @@ def experiment_qsvt_fixed_point_search(
         coeffs_d = synthesize_sign_poly(int(d))
         qsvt_raw[i] = float(np.abs(chebval(test_x0, coeffs_d)) ** 2)
 
-    # Fixed-point stopping rule: choose best depth-so-far, giving a nondecreasing
-    # operational trajectory and preventing over-rotation collapse.
+    # Fixed-point stopping rule: track best depth-so-far to obtain a nondecreasing
+    # operational curve and avoid over-rotation collapse.
     qsvt_mono = np.maximum.accumulate(qsvt_raw)
 
     raw_viol = int(np.sum(np.diff(qsvt_raw) < -1e-12))
@@ -1237,12 +1176,7 @@ def experiment_qsvt_fixed_point_search(
 def experiment_lcu_operator_algebra(
     seed: int = 1337, depth_max: int = 15, plot: bool = True
 ) -> OperatorAlgebraResults:
-    """
-    MODULE 7: LCU Operator Algebra.
-
-    Verifies closure of block-encodings under addition and multiplication, and
-    audits the resulting subnormalization-amplitude decay.
-    """
+    """MODULE 7: LCU operator algebra and subnormalization-growth audit."""
     print("-" * 65)
     print("MODULE 7: LCU OPERATOR ALGEBRA (ADDITION & MULTIPLICATION)")
     print("-" * 65)
@@ -1271,7 +1205,7 @@ def experiment_lcu_operator_algebra(
     print(f"alpha_A = {alpha_A:.4f}, unitary_error(U_A) = {unitary_error_A:.3e}")
     print(f"alpha_B = {alpha_B:.4f}, unitary_error(U_B) = {unitary_error_B:.3e}")
 
-    # Addition closure: (A+B)/(alpha_A+alpha_B) from coherent LCU.
+    # Addition closure: recover (A+B)/(alpha_A+alpha_B) via coherent LCU.
     alpha_add = alpha_A + alpha_B
     prep = np.array(
         [
@@ -1292,8 +1226,8 @@ def experiment_lcu_operator_algebra(
     add_error = float(np.linalg.norm((A + B) - extracted_add))
     print(f"Addition error ||(A+B)-alpha_add*U_add00||: {add_error:.4e}")
 
-    # Multiplication closure: (B@A)/(alpha_B*alpha_A) from sequential composition.
-    # Register order is [anc_B, anc_A, system], dims=[2,2,2].
+    # Multiplication closure: recover (B@A)/(alpha_B*alpha_A) via composition.
+    # Register order is [anc_B, anc_A, system], with dims=[2, 2, 2].
     dims = [2, 2, 2]
     U_A_full = np.kron(np.eye(2, dtype=complex), U_A)  # anc_B spectator
     U_B_full = _embed_local_operator(U_B, targets=[0, 2], dims=dims)
@@ -1306,7 +1240,7 @@ def experiment_lcu_operator_algebra(
     if add_error < 1e-12 and mult_error < 1e-12:
         print("PASS: Block-encodings are closed under + and × (numerically).")
 
-    # Subnormalization crisis: repeated product amplitude scales as 1/alpha_A^k.
+    # Subnormalization growth: repeated product amplitude scales as 1/alpha_A^k.
     k_values = np.arange(1, depth_max + 1, dtype=int)
     decay_curve = 1.0 / (alpha_A ** k_values)
     print("-" * 65)
@@ -1371,12 +1305,7 @@ def experiment_qsvt_uniform_amplification(
     num_points: int = 2001,
     plot: bool = True,
 ) -> UniformAmplificationResults:
-    """
-    MODULE 8: Uniform Singular Value Amplification (Theorem 30).
-
-    Builds an odd bounded polynomial approximating clamp(c*x, -1, 1), then
-    demonstrates periodic rescue of a decaying block-encoded signal trajectory.
-    """
+    """MODULE 8: Uniform singular value amplification (Theorem 30)."""
     from numpy.polynomial.chebyshev import chebfit, chebval
 
     print("-" * 65)
@@ -1528,12 +1457,7 @@ def experiment_qsvt_uniform_amplification(
 def experiment_markov_brothers_boundary(
     d_visual: int = 15, max_degree: int = 50, plot: bool = True
 ) -> MarkovBoundaryResults:
-    """
-    MODULE 9: Markov Brothers' Boundary (Theorem 73).
-
-    Uses exact Chebyshev extremal polynomials and analytic derivatives to
-    demonstrate global O(d^2) and interior O(d) slope ceilings.
-    """
+    """MODULE 9: Markov Brothers' boundary (Theorem 73)."""
     from numpy.polynomial.chebyshev import chebder, chebval
 
     print("-" * 65)
@@ -1547,7 +1471,7 @@ def experiment_markov_brothers_boundary(
 
     x_eval = np.linspace(-1.0, 1.0, 5001)
 
-    # Visual extremal example with T_d(x).
+    # Visual extremal example using T_d(x).
     coeffs_visual = np.zeros(d_visual + 1, dtype=float)
     coeffs_visual[d_visual] = 1.0
     poly_visual = chebval(x_eval, coeffs_visual)
@@ -1559,7 +1483,7 @@ def experiment_markov_brothers_boundary(
     print(f"Empirical Max Global Slope: {max_slope_visual:.4f}")
     print(f"Markov Limit d^2: {d_visual**2}")
 
-    # Degree sweep (odd only so interior slope at x=0 saturates Bernstein bound).
+    # Degree sweep (odd only) so the interior slope at x=0 saturates Bernstein.
     degrees = np.arange(1, max_degree + 1, 2, dtype=int)
     global_slopes = np.zeros_like(degrees, dtype=float)
     interior_slopes = np.zeros_like(degrees, dtype=float)
@@ -1694,13 +1618,7 @@ def experiment_physical_phase_fragility(
     max_depth: int = 50,
     plot: bool = True,
 ) -> PhaseFragilityResults:
-    """
-    MODULE 10: Physical Phase-Fragility and hardware limits.
-
-    Audits two failure modes:
-    1) Subnormalization miscalibration pushing |x|>1, causing polynomial explosion.
-    2) Systematic analog phase drift (phi -> phi + epsilon), distorting target shape.
-    """
+    """MODULE 10: Physical phase-fragility and hardware-limit audit."""
     print("-" * 65)
     print("MODULE 10: PHYSICAL PHASE-FRAGILITY & HARDWARE LIMITS")
     print("-" * 65)
@@ -1736,20 +1654,20 @@ def experiment_physical_phase_fragility(
     base_phases = np.linspace(-np.pi / 2.0, np.pi / 2.0, degree + 1)
     ideal_phases = base_phases * np.sin(base_phases)
 
-    # 1) Out-of-bounds auditor (x outside [-1, 1]).
+    # 1) Out-of-bounds audit (x outside [-1, 1]).
     x_extended = np.linspace(-x_bound, x_bound, 1201)
     p_ideal_ext = evaluate_qsp_p(x_extended, ideal_phases)
     outside_mask = np.abs(x_extended) > 1.0
     max_leakage = float(np.max(np.abs(p_ideal_ext[outside_mask])))
 
-    # 2) Systematic phase-drift injector in valid domain.
+    # 2) Systematic phase-drift injection in the valid domain.
     noisy_phases = ideal_phases + phase_error
     x_valid = np.linspace(-1.0, 1.0, 601)
     p_ideal_valid = np.real(evaluate_qsp_p(x_valid, ideal_phases))
     p_noisy_valid = np.real(evaluate_qsp_p(x_valid, noisy_phases))
     max_distortion = float(np.max(np.abs(p_ideal_valid - p_noisy_valid)))
 
-    # 3) Fidelity decay vs depth under constant phase drift.
+    # 3) Fidelity decay versus depth under constant phase drift.
     depths = np.arange(5, max_depth + 1, 5, dtype=int)
     fidelity_decay = np.zeros_like(depths, dtype=float)
     for i, d in enumerate(depths):
@@ -1772,7 +1690,7 @@ def experiment_physical_phase_fragility(
     if plot:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5))
 
-        # Panel 1: subnormalization/out-of-domain failure.
+        # Panel 1: subnormalization / out-of-domain failure.
         ax1.plot(x_extended, np.real(p_ideal_ext), color="tab:blue", linewidth=2.2, label="QSVT polynomial")
         ax1.axvspan(-1.0, 1.0, color="tab:green", alpha=0.10, label=r"Valid domain $|x|\le1$")
         ax1.axhline(1.0, color="black", linestyle="--", linewidth=1.8, label=r"Unitarity bounds $\pm1$")
@@ -1793,7 +1711,7 @@ def experiment_physical_phase_fragility(
         ax1.grid(True, alpha=0.3)
         ax1.legend(loc="lower center")
 
-        # Panel 2: phase-drift target destruction + inset fidelity-depth decay.
+        # Panel 2: phase-drift target distortion with fidelity-depth inset.
         ax2.plot(
             x_valid,
             p_ideal_valid,
