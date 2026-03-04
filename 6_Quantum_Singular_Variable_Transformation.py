@@ -24,6 +24,10 @@ Phase III: Operator calculus
 Phase IV: Fundamental limits and realism
 13. Markov/Bernstein extremal derivative boundary
 14. Physical phase-fragility and hardware sensitivity
+
+Phase V: Adversarial QSVT edge cases
+15. Gibbs catastrophe for discontinuous targets
+16. Parity scramble for mixed-parity transforms
 """
 
 from __future__ import annotations
@@ -201,6 +205,33 @@ class PhaseFragilityResults:
     fidelity_decay: np.ndarray
     max_leakage: float
     max_distortion: float
+
+
+@dataclass
+class GibbsCatastropheResults:
+    """Results for adversarial Gibbs-ringing and boundedness-violation audits."""
+
+    degree: int
+    x_eval: np.ndarray
+    target_raw: np.ndarray
+    poly_raw: np.ndarray
+    max_amplitude: float
+    unitarity_violation: float
+
+
+@dataclass
+class ParityScrambleResults:
+    """Results for adversarial mixed-parity routing on non-Hermitian inputs."""
+
+    A_raw: np.ndarray
+    W: np.ndarray
+    Sigma: np.ndarray
+    Vh: np.ndarray
+    P_even_coeffs: np.ndarray
+    P_odd_coeffs: np.ndarray
+    matrix_naive_expected: np.ndarray
+    matrix_physical_reality: np.ndarray
+    scramble_error: float
 
 
 class SU2QSPEngine:
@@ -694,6 +725,14 @@ def phase_4_roadmap() -> Dict[str, str]:
     return {
         "Module 9": "Markov Brothers' boundary: extremal derivative ceilings for bounded degree-d polynomials.",
         "Module 10": "Physical phase-fragility on NISQ hardware and unitary breakdown.",
+    }
+
+
+def phase_5_roadmap() -> Dict[str, str]:
+    """Return the Phase V module roadmap."""
+    return {
+        "Module 11": "Gibbs catastrophe: discontinuous target fitting and unitarity failure.",
+        "Module 12": "Parity scramble: invariant-plane breakdown under parity violation.",
     }
 
 
@@ -1759,6 +1798,214 @@ def experiment_physical_phase_fragility(
     )
 
 
+def experiment_adversarial_gibbs_catastrophe(
+    degree: int = 41, num_points: int = 5000, plot: bool = True
+) -> GibbsCatastropheResults:
+    """
+    MODULE 11: Adversarial QSVT - Gibbs Catastrophe.
+
+    Fits a discontinuous raw sign target with an odd Chebyshev polynomial and
+    audits the resulting boundedness violation caused by Gibbs ringing.
+    """
+    from numpy.polynomial.chebyshev import chebfit, chebval
+
+    print("-" * 65)
+    print("MODULE 11: ADVERSARIAL QSVT - THE GIBBS CATASTROPHE")
+    print("-" * 65)
+
+    if degree < 3 or degree % 2 == 0:
+        raise ValueError("degree must be odd and >= 3")
+    if num_points < 1001:
+        raise ValueError("num_points must be >= 1001")
+
+    x_eval = np.linspace(-1.0, 1.0, num_points)
+
+    # Raw discontinuous Boolean target (unsmoothed sign function).
+    target_raw = np.sign(x_eval)
+
+    # Naive odd-parity Chebyshev fit with no smoothing safeguard.
+    coeffs_raw = chebfit(x_eval, target_raw, degree)
+    coeffs_raw[::2] = 0.0
+    poly_raw = chebval(x_eval, coeffs_raw)
+
+    # Unitarity-violation audit.
+    max_amplitude = float(np.max(np.abs(poly_raw)))
+    unitarity_violation = max(0.0, max_amplitude - 1.0)
+
+    print(f"Target Degree: {degree}")
+    print(f"Max Synthesized Amplitude: {max_amplitude:.4f}")
+    if unitarity_violation > 0.0:
+        print(f"FATAL: Unitarity violated by {unitarity_violation * 100:.2f}%")
+        print("       |P(x)| exceeds 1, so physical amplitude bounds are broken.")
+    print("-" * 65)
+
+    if plot:
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        ax.plot(
+            x_eval,
+            target_raw,
+            color="black",
+            linestyle=":",
+            linewidth=3,
+            label="Raw Boolean Target (discontinuous)",
+        )
+        ax.plot(
+            x_eval,
+            poly_raw,
+            color="tab:red",
+            linewidth=2.5,
+            label=rf"Naive Chebyshev Fit ($d={degree}$)",
+        )
+
+        ax.axhline(
+            1.0,
+            color="black",
+            linestyle="--",
+            linewidth=2,
+            label=r"Physical Unitarity Bound ($|P(x)| \leq 1$)",
+        )
+        ax.axhline(-1.0, color="black", linestyle="--", linewidth=2)
+
+        # Shade regions where boundedness is violated.
+        zone_pos = poly_raw > 1.0
+        zone_neg = poly_raw < -1.0
+        ax.fill_between(
+            x_eval,
+            1.0,
+            poly_raw,
+            where=zone_pos,
+            color="tab:red",
+            alpha=0.30,
+            label="Unitarity Violation (Gibbs ringing)",
+        )
+        ax.fill_between(x_eval, -1.0, poly_raw, where=zone_neg, color="tab:red", alpha=0.30)
+
+        peak_idx = int(np.argmax(np.abs(poly_raw)))
+        ax.annotate(
+            f"Fatal Overshoot\nMax Amp: {max_amplitude:.2f}",
+            xy=(x_eval[peak_idx], poly_raw[peak_idx]),
+            xytext=(0.20, 1.20 if poly_raw[peak_idx] > 0 else -1.20),
+            arrowprops=dict(facecolor="tab:red", shrink=0.05, width=1.5, headwidth=8),
+            color="tab:red",
+            fontweight="bold",
+            fontsize=11,
+        )
+
+        ax.set_title("Adversarial QSVT: The Gibbs Catastrophe", fontsize=14)
+        ax.set_xlabel("Singular Value x", fontsize=12)
+        ax.set_ylabel("Synthesized Amplitude P(x)", fontsize=12)
+        ax.set_ylim(-1.3, 1.3)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="lower right")
+        plt.tight_layout()
+        plt.show()
+
+    return GibbsCatastropheResults(
+        degree=degree,
+        x_eval=x_eval,
+        target_raw=target_raw,
+        poly_raw=poly_raw,
+        max_amplitude=max_amplitude,
+        unitarity_violation=unitarity_violation,
+    )
+
+
+def experiment_adversarial_parity_scramble(
+    dim: int = 5, seed: int = 101, plot: bool = True
+) -> ParityScrambleResults:
+    """
+    MODULE 12: Adversarial QSVT - Parity Scramble.
+
+    Demonstrates that mixed-parity polynomials on non-Hermitian matrices route
+    even and odd terms into incompatible singular-vector spaces.
+    """
+    print("-" * 65)
+    print("MODULE 12: ADVERSARIAL QSVT - THE PARITY SCRAMBLE")
+    print("-" * 65)
+
+    if dim < 2:
+        raise ValueError("dim must be >= 2")
+
+    rng = np.random.default_rng(seed)
+
+    # Strongly non-Hermitian, non-normal target matrix.
+    base = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+    skew = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+    A = base + 0.75 * np.triu(skew, 1)
+    A = A / (np.linalg.norm(A, ord=2) * 1.1)
+
+    # SVD: A = W * Sigma * V^\dagger.
+    W, Sigma, Vh = np.linalg.svd(A, full_matrices=True)
+    V = Vh.conj().T
+    hermitian_flag = bool(np.allclose(A, A.conj().T, atol=1e-12))
+    basis_gap = float(np.linalg.norm(W - V))
+    print(f"Target Matrix A is Hermitian? {hermitian_flag}")
+    print(f"Left/right singular-basis mismatch ||W - V||: {basis_gap:.4e}")
+
+    # Mixed-parity polynomial:
+    # P(x) = c_even * x^2 + c_odd * x.
+    # Start from requested coefficients and normalize if needed to keep boundedness.
+    c_even_raw, c_odd_raw = 0.8, 0.6
+    max_on_unit = float(np.max(np.abs(c_even_raw * (Sigma**2) + c_odd_raw * Sigma)))
+    norm_scale = 1.0 / max_on_unit if max_on_unit > 1.0 else 1.0
+    c_even = c_even_raw * norm_scale
+    c_odd = c_odd_raw * norm_scale
+    print(
+        f"Mixed-Parity Polynomial: P(x) = {c_even:.4f}x^2 + {c_odd:.4f}x "
+        f"(normalized from 0.8x^2+0.6x)"
+    )
+
+    # Naive expectation: W * P(Sigma) * V^\dagger.
+    p_sigma_naive = c_even * (Sigma**2) + c_odd * Sigma
+    M_naive = W @ np.diag(p_sigma_naive) @ Vh
+
+    # Physical routing in QSVT for non-Hermitian block-encodings:
+    # even terms: V * P_even(Sigma) * V^\dagger
+    # odd terms:  W * P_odd(Sigma)  * V^\dagger
+    M_even = V @ np.diag(c_even * (Sigma**2)) @ Vh
+    M_odd = W @ np.diag(c_odd * Sigma) @ Vh
+    M_physical = M_even + M_odd
+
+    scramble_error = float(np.linalg.norm(M_naive - M_physical))
+    print(f"||M_expected - M_physical||: {scramble_error:.4e}")
+    if scramble_error > 1e-10:
+        print("FATAL: Output is parity-scrambled across incompatible singular bases.")
+    print("-" * 65)
+
+    if plot:
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+        vmax = float(max(np.max(np.abs(M_naive)), np.max(np.abs(M_physical))))
+
+        cax1 = ax1.matshow(np.abs(M_naive), cmap="Blues", vmin=0.0, vmax=vmax)
+        ax1.set_title(r"Naive: $W P(\Sigma) V^\dagger$", pad=12, fontsize=11)
+        cax2 = ax2.matshow(np.abs(M_physical), cmap="Reds", vmin=0.0, vmax=vmax)
+        ax2.set_title(r"Physical: $V P_e(\Sigma) V^\dagger + W P_o(\Sigma) V^\dagger$", pad=12, fontsize=11)
+        cax3 = ax3.matshow(np.abs(M_naive - M_physical), cmap="inferno", vmin=0.0, vmax=vmax)
+        ax3.set_title(r"Scramble Error $|M_{exp} - M_{phys}|$", pad=12, fontsize=11)
+
+        fig.colorbar(cax3, ax=ax3, fraction=0.046, pad=0.04)
+        for ax in (ax1, ax2, ax3):
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        plt.suptitle("Adversarial QSVT: Parity Scramble on Non-Hermitian Input", fontsize=13)
+        plt.tight_layout()
+        plt.show()
+
+    return ParityScrambleResults(
+        A_raw=A,
+        W=W,
+        Sigma=Sigma,
+        Vh=Vh,
+        P_even_coeffs=np.array([c_even], dtype=float),
+        P_odd_coeffs=np.array([c_odd], dtype=float),
+        matrix_naive_expected=M_naive,
+        matrix_physical_reality=M_physical,
+        scramble_error=scramble_error,
+    )
+
+
 if __name__ == "__main__":
     run_qsp_engine_diagnostics(plot=True)
     experiment_lcu_block_encoding(plot=True)
@@ -1774,3 +2021,5 @@ if __name__ == "__main__":
     experiment_physical_phase_fragility(
         degree=25, phase_error=0.08, x_bound=1.15, max_depth=50, plot=True
     )
+    experiment_adversarial_gibbs_catastrophe(degree=41, num_points=5000, plot=True)
+    experiment_adversarial_parity_scramble(dim=5, seed=101, plot=True)
