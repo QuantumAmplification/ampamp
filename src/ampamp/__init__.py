@@ -1,17 +1,19 @@
-# src/ampamp/__init__.py
 from .foundations import GroverEngine
 from .fixed_point import FixedPointEngine
 from .oblivious import ObliviousEngine
-from .foqa import FOQAEngine 
+from .foqa import FOQAEngine
+from .distributed import DQAAEngine, OracleSynthesizer # <--- New
 
 from .diagnostics import (
     GroverAuditor, 
     FPAAAuditor, 
     ObliviousAuditor,
-    FOQAAuditor      
+    FOQAAuditor,
+    DistributedAuditor # <--- New
 )
 
 __all__ = [
-    "GroverEngine", "FixedPointEngine", "ObliviousEngine", "FOQAEngine",
-    "GroverAuditor", "FPAAAuditor", "ObliviousAuditor", "FOQAAuditor"
+    "GroverEngine", "FixedPointEngine", "ObliviousEngine", "FOQAEngine", 
+    "DQAAEngine", "OracleSynthesizer",
+    "GroverAuditor", "FPAAAuditor", "ObliviousAuditor", "FOQAAuditor", "DistributedAuditor"
 ]
