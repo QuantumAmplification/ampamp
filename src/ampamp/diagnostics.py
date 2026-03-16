@@ -145,3 +145,44 @@ class ObliviousAuditor:
         h_norm = target_hamiltonian / alpha
         distance = np.linalg.norm(actual_matrix - h_norm)
         return distance
+
+
+class FOQAAuditor:
+    """Diagnostic laboratory for FOQA recurrence limits and boundaries."""
+    
+    def __init__(self, engine):
+        """Expects a FOQAEngine instance."""
+        self.engine = engine
+
+    def audit_damping_regimes(self, iterations=120, mizel_c=1.4):
+        """Module 2: Sweeps under/over/critical damping."""
+        under = self.engine.generate_constant_schedule(0.02, iterations)
+        over = self.engine.generate_constant_schedule(1.5, iterations)
+        mizel = self.engine.generate_mizel_schedule(mizel_c, iterations)
+        
+        return {
+            "underdamped": self.engine.simulate_recurrence(under),
+            "overdamped": self.engine.simulate_recurrence(over),
+            "critical": self.engine.simulate_recurrence(mizel)
+        }
+
+    def audit_asymptotic_complexity(self, target_success=0.99):
+        """Module 4: Runs lambda sweeps to verify the -0.5 log-log slope."""
+        # Implementation of your while-loop lambda sweep goes here
+        pass
+
+    def audit_empty_database_paradox(self, iterations=50):
+        """Module 6: Verifies strict suppression of false positives at theta=0."""
+        # Temporarily override theta to 0 for the test
+        original_theta = self.engine.theta
+        self.engine.theta = 0.0
+        
+        mizel = self.engine.generate_mizel_schedule(1.5, iterations)
+        empty_probs = self.engine.simulate_recurrence(mizel)
+        
+        # Restore original theta
+        self.engine.theta = original_theta
+        
+        return empty_probs
+    
+    # Add audit_zeno_catastrophe and audit_nonlinear_recurrence here...
