@@ -222,3 +222,41 @@ class DistributedAuditor:
         """
         # Logic from experiment_classical_network_statistics
         pass
+
+
+class VTAAAuditor:
+    """Diagnostic suite for Variable-Time Amplitude Amplification."""
+    
+    def __init__(self, engine: VTAAEngine):
+        self.engine = engine
+
+    def sweep_cost_ratios(self, total_ps: float, t1: float, t2: float, t3: float):
+        """Sweeps early-success ratio and compares VTAA to worst-case AA."""
+        # Logic from your experiment_vtaa_cost_sweep
+        pass
+
+class FundamentalLimitsAuditor:
+    """
+    Diagnostic suite for hardware realism, subspace boundaries, 
+    and open-system trajectories across all AA algorithms.
+    """
+    
+    def audit_subspace_svd(self, n: int, k_max: int, rank_threshold: float = 1e-12):
+        """Constructs history matrix H and SVD-audits empirical rank."""
+        # Logic from your experiment_2d_subspace_extractor
+        pass
+
+    def audit_open_system_trajectory(self, n: int, k_max: int, phase_damp_1q: float, phase_damp_2q: float):
+        """Simulates AA via Density Matrix and tracks trace-distance to the 2D plane."""
+        # Logic from your experiment_open_system_trajectory
+        pass
+
+    def audit_ftqc_diffusion_scaling(self, n_min: int, n_max: int):
+        """Compiles MCX diffusion to Clifford+T to record scaling metrics."""
+        # Logic from your experiment_ftqc_diffusion_scaling
+        pass
+        
+    def audit_phase_leakage(self, eps_oracle_deg: float, eps_diff_deg: float):
+        """Tracks rank-growth under phase mismatch and analog control skew."""
+        # Logic from your experiment_phase_mismatch_leakage
+        pass
