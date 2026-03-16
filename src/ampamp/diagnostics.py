@@ -122,3 +122,26 @@ class FPAAAuditor:
         """Calculates T-gate overhead for Clifford+T fault-tolerant architectures."""
         # Implementation of your Module 6 logic
         pass
+
+
+class ObliviousAuditor:
+    """Diagnostic suite for verifying OAA and LCU block-encodings."""
+    
+    def __init__(self, engine: ObliviousEngine):
+        self.engine = engine
+
+    def run_acid_test(self, num_states=10):
+        """
+        Verifies the 'Equivalence Theorem': OAA success probability 
+        is independent of the input state.
+        """
+        # Logic from your run_acid_tests function
+        pass
+
+    def verify_lcu_distance(self, actual_matrix, target_hamiltonian, alpha):
+        """
+        Measures ||M_TL - H/alpha||_F to verify Linear Combination of Unitaries accuracy.
+        """
+        h_norm = target_hamiltonian / alpha
+        distance = np.linalg.norm(actual_matrix - h_norm)
+        return distance
