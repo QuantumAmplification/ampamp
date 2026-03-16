@@ -260,3 +260,49 @@ class FundamentalLimitsAuditor:
         """Tracks rank-growth under phase mismatch and analog control skew."""
         # Logic from your experiment_phase_mismatch_leakage
         pass
+
+
+class QSVTAuditor:
+    """
+    Diagnostic suite for QSVT hardware limits, adversarial edge cases, 
+    and operator calculus.
+    """
+    def __init__(self, engine):
+        """Expects an SU2QSPEngine instance."""
+        self.engine = engine
+
+    def audit_unitarity_and_parity(self, phases: np.ndarray, tolerance: float = 1e-10):
+        """Phase I: Validates P(x) against strict mathematical bounds."""
+        x_vals = np.linspace(-1.0, 1.0, 1001)
+        p_vals, q_vals = self.engine.evaluate_sequence(phases, x_vals)
+        
+        unitarity_lhs = (np.abs(p_vals) ** 2) + (1.0 - x_vals**2) * (np.abs(q_vals) ** 2)
+        max_unitarity_err = float(np.max(np.abs(1.0 - unitarity_lhs)))
+        
+        parity_factor = (-1) ** ((len(phases) - 1) % 2)
+        max_parity_err = float(np.max(np.abs(p_vals[::-1] - parity_factor * p_vals)))
+        
+        return max_unitarity_err < tolerance, max_parity_err < tolerance
+
+    def audit_gibbs_catastrophe(self, degree: int):
+        """Phase V: Exposes unitarity violations when fitting discontinuous targets."""
+        # Logic from experiment_adversarial_gibbs_catastrophe
+        pass
+
+    def audit_subnormalization_hubris(self, dim: int, target_sigma_max: float = 2.5):
+        """
+        Phase V: Proves that artificially shrinking the block-encoding factor (alpha) 
+        creates non-PSD defect matrices, breaking unitary dilation.
+        """
+        # Logic from experiment_adversarial_subnormalization_hubris
+        pass
+
+    def audit_phase_quantization(self, degree: int, bit_depth: int):
+        """Phase V: Simulates finite DAC bit-depth and tracks fidelity collapse."""
+        # Logic from experiment_adversarial_phase_quantization
+        pass
+        
+    def audit_parity_scramble(self, dim: int):
+        """Phase V: Demonstrates mixed-parity failure on non-Hermitian inputs."""
+        # Logic from experiment_adversarial_parity_scramble
+        pass
