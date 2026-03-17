@@ -3,15 +3,19 @@
 This module numerically validates the convexity guarantee used by distributed
 quantum amplitude amplification:
 
-    max_k a_k >= a
+    max_k p_k >= p
 
 where:
-- a is the global marked-state fraction in a 2^n search space,
-- a_k is the local marked-state fraction in node k after partitioning by j
+- p is the global success probability in a 2^n search space,
+- p_k is the local success probability in node k after partitioning by j
   prefix qubits into 2^j nodes.
 
-The primary evidence artifact is a bar chart of all local a_k values with a
-horizontal line at the global average a.
+The primary evidence artifact is a bar chart of all local p_k values with a
+horizontal line at the global average p.
+
+Compatibility note:
+- Dataclass fields keep historical names ``global_a`` and ``local_ak`` for API
+  stability; they represent global ``p`` and local ``p_k`` respectively.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ import argparse
 import csv
 import json
 import re
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +32,7 @@ from typing import Any, Optional
 
 import numpy as np
 import sympy as sp
+from one_click_utils import start_one_click_session
 
 try:
     from qiskit import QuantumCircuit
@@ -63,14 +69,17 @@ except Exception:  # pragma: no cover
 
 @dataclass
 class LuckyNodeInstanceResult:
-    """Results for a single random global-search instance."""
+    """Results for one random global-search instance.
+
+    ``global_a`` and ``local_ak`` are legacy field names carrying p and p_k.
+    """
 
     n: int
     j: int
-    num_marked: int
+    num_good: int
     seed: Optional[int]
     global_a: float
-    local_marked_counts: np.ndarray
+    local_good_counts: np.ndarray
     local_ak: np.ndarray
     lucky_indices: list[int]
     max_ak: float
@@ -80,11 +89,14 @@ class LuckyNodeInstanceResult:
 
 @dataclass
 class LuckyNodeMonteCarloResult:
-    """Aggregate results over many random marked-state distributions."""
+    """Aggregate results over many random H_Good-subspace distributions.
+
+    Gap statistics are computed for max_k(p_k - p), stored in legacy names.
+    """
 
     n: int
     j: int
-    num_marked: int
+    num_good: int
     trials: int
     seed: Optional[int]
     max_gap_samples: np.ndarray
@@ -98,12 +110,15 @@ class LuckyNodeMonteCarloResult:
 
 @dataclass
 class DistributedFPAAResults:
-    """Results for distributed FPAA execution (Algorithm 3 proof-of-concept)."""
+    """Results for distributed FPAA execution (Algorithm 3 proof-of-concept).
+
+    ``global_a`` is a legacy field name for global success probability p.
+    """
 
     global_n: int
     j: int
     local_n: int
-    global_targets: list[str]
+    global_goods: list[str]
     node_targets: dict[str, list[str]]
     global_a: float
     epsilon: float
@@ -112,7 +127,7 @@ class DistributedFPAAResults:
     alphas: np.ndarray
     betas: np.ndarray
     node_probabilities: dict[str, np.ndarray]
-    node_target_success: dict[str, float]
+    node_good_success: dict[str, float]
     node_top_suffix: dict[str, str]
     node_top_probability: dict[str, float]
     lucky_nodes: list[str]
@@ -126,7 +141,7 @@ class HardwareCompilationResults:
     global_n: int
     j: int
     local_n: int
-    global_targets: list[str]
+    global_goods: list[str]
     node_targets: dict[str, list[str]]
     basis_gates: list[str]
     topology: str
@@ -143,14 +158,14 @@ class EntanglementObstructionResults:
     global_n: int
     j: int
     local_n: int
-    target_global: str
-    target_suffix: str
+    good_global: str
+    good_suffix: str
     global_a_for_schedule: float
     epsilon: float
     L: int
     k_values: np.ndarray
-    separable_target_probs: np.ndarray
-    entangled_target_probs: np.ndarray
+    separable_good_probs: np.ndarray
+    entangled_good_probs: np.ndarray
     separable_suffix_purity: float
     entangled_suffix_purity: float
     entangled_suffix_entropy_bits: float
@@ -166,7 +181,7 @@ class NISQNoiseResults:
     global_n: int
     j: int
     local_n: int
-    global_targets: list[str]
+    global_goods: list[str]
     node_targets: dict[str, list[str]]
     epsilon: float
     global_a_for_schedule: float
@@ -234,7 +249,7 @@ class NetworkStatisticsResults:
     global_n: int
     j: int
     local_n: int
-    global_targets: list[str]
+    global_goods: list[str]
     node_targets: dict[str, list[str]]
     epsilon: float
     global_a_for_schedule: float
@@ -282,22 +297,22 @@ def _require_qiskit_transpiler() -> None:
         raise RuntimeError("Qiskit transpiler is required for hardware compilation trade-off experiment.")
 
 
-def _validate_inputs(n: int, j: int, num_marked: int, trials: Optional[int] = None) -> None:
+def _validate_inputs(n: int, j: int, num_good: int, trials: Optional[int] = None) -> None:
     if n < 1:
         raise ValueError("n must be >= 1.")
     if j < 0 or j > n:
         raise ValueError("j must satisfy 0 <= j <= n.")
-    if num_marked < 1 or num_marked > 2**n:
-        raise ValueError("num_marked must satisfy 1 <= num_marked <= 2^n.")
+    if num_good < 1 or num_good > 2**n:
+        raise ValueError("num_good must satisfy 1 <= num_good <= 2^n.")
     if trials is not None and trials < 1:
         raise ValueError("trials must be >= 1.")
 
 
-def _compute_local_marked_counts(marked_states: np.ndarray, n: int, j: int) -> np.ndarray:
+def _compute_local_good_counts(good_states: np.ndarray, n: int, j: int) -> np.ndarray:
     num_nodes = 2**j
     suffix_bits = n - j
     counts = np.zeros(num_nodes, dtype=int)
-    for state in marked_states:
+    for state in good_states:
         node = int(state) >> suffix_bits
         counts[node] += 1
     return counts
@@ -326,15 +341,15 @@ def _generate_fpaa_phases(L: int, delta: float) -> tuple[np.ndarray, np.ndarray]
     return alpha, beta
 
 
-def _partition_targets_by_prefix(global_targets: list[str], j: int) -> dict[str, list[str]]:
+def _partition_targets_by_prefix(global_goods: list[str], j: int) -> dict[str, list[str]]:
     """Map global n-bit targets into node-local suffix targets keyed by j-bit prefix."""
-    if not global_targets:
-        raise ValueError("global_targets must not be empty.")
-    n = len(global_targets[0])
+    if not global_goods:
+        raise ValueError("global_goods must not be empty.")
+    n = len(global_goods[0])
     num_nodes = 2**j
 
     out: dict[str, list[str]] = {format(k, f"0{j}b"): [] for k in range(num_nodes)}
-    for bitstring in global_targets:
+    for bitstring in global_goods:
         if len(bitstring) != n or any(ch not in "01" for ch in bitstring):
             raise ValueError("All global targets must be binary strings with identical length.")
         prefix, suffix = bitstring[:j], bitstring[j:]
@@ -381,18 +396,18 @@ def _build_local_diffusion(local_n: int, alpha_phase: float) -> "QuantumCircuit"
     return qc
 
 
-def _build_phase_oracle(num_qubits: int, marked_bitstrings: list[str], phase: float = np.pi) -> "QuantumCircuit":
+def _build_phase_oracle(num_qubits: int, good_bitstrings: list[str], phase: float = np.pi) -> "QuantumCircuit":
     """Phase oracle that marks all listed basis states with e^{i*phase}."""
     _require_qiskit()
     qc = QuantumCircuit(num_qubits, name="oracle")
-    if not marked_bitstrings:
+    if not good_bitstrings:
         return qc
 
     controls = list(range(num_qubits - 1))
     target = num_qubits - 1
-    for bitstring in marked_bitstrings:
+    for bitstring in good_bitstrings:
         if len(bitstring) != num_qubits or any(ch not in "01" for ch in bitstring):
-            raise ValueError("Invalid marked bitstring for oracle.")
+            raise ValueError("Invalid H_Good bitstring for oracle.")
         rev = bitstring[::-1]
         for q, bit in enumerate(rev):
             if bit == "0":
@@ -422,12 +437,12 @@ def _build_grover_diffusion(num_qubits: int, phase: float = np.pi) -> "QuantumCi
     return qc
 
 
-def _build_grover_step(num_qubits: int, marked_bitstrings: list[str]) -> "QuantumCircuit":
+def _build_grover_step(num_qubits: int, good_bitstrings: list[str]) -> "QuantumCircuit":
     """One Grover iteration: oracle then diffusion from uniform superposition."""
     _require_qiskit()
     qc = QuantumCircuit(num_qubits, name=f"GroverStep_n{num_qubits}")
     qc.h(range(num_qubits))
-    qc.append(_build_phase_oracle(num_qubits, marked_bitstrings, phase=np.pi).to_gate(), range(num_qubits))
+    qc.append(_build_phase_oracle(num_qubits, good_bitstrings, phase=np.pi).to_gate(), range(num_qubits))
     qc.append(_build_grover_diffusion(num_qubits, phase=np.pi).to_gate(), range(num_qubits))
     return qc
 
@@ -488,20 +503,20 @@ def _extract_compilation_metrics(
 def experiment_lucky_node_verification(
     n: int = 8,
     j: int = 3,
-    num_marked: int = 12,
+    num_good: int = 12,
     seed: Optional[int] = 42,
 ) -> LuckyNodeInstanceResult:
     """Run one theorem-check instance and return all local/global statistics."""
-    _validate_inputs(n, j, num_marked)
+    _validate_inputs(n, j, num_good)
 
     rng = np.random.default_rng(seed)
     n_global = 2**n
     n_local = 2 ** (n - j)
 
-    marked_states = rng.choice(n_global, size=num_marked, replace=False)
-    global_a = float(num_marked / n_global)
+    good_states = rng.choice(n_global, size=num_good, replace=False)
+    global_a = float(num_good / n_global)
 
-    local_counts = _compute_local_marked_counts(marked_states, n=n, j=j)
+    local_counts = _compute_local_good_counts(good_states, n=n, j=j)
     local_ak = local_counts / n_local
 
     max_ak = float(np.max(local_ak))
@@ -512,10 +527,10 @@ def experiment_lucky_node_verification(
     return LuckyNodeInstanceResult(
         n=n,
         j=j,
-        num_marked=num_marked,
+        num_good=num_good,
         seed=seed,
         global_a=global_a,
-        local_marked_counts=local_counts,
+        local_good_counts=local_counts,
         local_ak=local_ak,
         lucky_indices=lucky_indices,
         max_ak=max_ak,
@@ -527,7 +542,7 @@ def experiment_lucky_node_verification(
 def experiment_distributed_fpaa_execution(
     global_n: int = 6,
     j: int = 2,
-    global_targets: tuple[str, ...] = ("110110", "111111", "011001"),
+    global_goods: tuple[str, ...] = ("110110", "111111", "011001"),
     epsilon: float = 0.3,
 ) -> DistributedFPAAResults:
     """Exact Hua-Qiu style distributed FPAA simulation with 4 independent nodes."""
@@ -539,9 +554,9 @@ def experiment_distributed_fpaa_execution(
     if not (0.0 < epsilon < 1.0):
         raise ValueError("epsilon must be in (0, 1).")
 
-    targets = [s.strip() for s in global_targets if s.strip()]
+    targets = [s.strip() for s in global_goods if s.strip()]
     if not targets:
-        raise ValueError("global_targets must contain at least one bitstring.")
+        raise ValueError("global_goods must contain at least one bitstring.")
     if any(len(t) != global_n for t in targets):
         raise ValueError("Every global target must have length global_n.")
 
@@ -552,13 +567,13 @@ def experiment_distributed_fpaa_execution(
 
     global_a = float(len(targets) / (2**global_n))
 
-    # The schedule length is derived from global a and epsilon (same for every node).
+    # The schedule length is derived from global p and epsilon (same for every node).
     l_opt = int(np.ceil((0.5 * np.log(2.0 / epsilon)) / np.sqrt(global_a)))
     L = int(2 * l_opt + 1)
     alphas, betas = _generate_fpaa_phases(L=L, delta=epsilon)
 
     node_probabilities: dict[str, np.ndarray] = {}
-    node_target_success: dict[str, float] = {}
+    node_good_success: dict[str, float] = {}
     node_top_suffix: dict[str, str] = {}
     node_top_probability: dict[str, float] = {}
 
@@ -577,10 +592,10 @@ def experiment_distributed_fpaa_execution(
         node_probabilities[prefix] = probs
 
         if local_targets:
-            marked_idxs = [int(sfx, 2) for sfx in local_targets]
-            node_target_success[prefix] = float(np.sum(probs[marked_idxs]))
+            good_idxs = [int(sfx, 2) for sfx in local_targets]
+            node_good_success[prefix] = float(np.sum(probs[good_idxs]))
         else:
-            node_target_success[prefix] = 0.0
+            node_good_success[prefix] = 0.0
 
         top_idx = int(np.argmax(probs))
         node_top_suffix[prefix] = format(top_idx, f"0{local_n}b")
@@ -590,7 +605,7 @@ def experiment_distributed_fpaa_execution(
         global_n=global_n,
         j=j,
         local_n=local_n,
-        global_targets=targets,
+        global_goods=targets,
         node_targets=node_targets,
         global_a=global_a,
         epsilon=epsilon,
@@ -599,7 +614,7 @@ def experiment_distributed_fpaa_execution(
         alphas=alphas,
         betas=betas,
         node_probabilities=node_probabilities,
-        node_target_success=node_target_success,
+        node_good_success=node_good_success,
         node_top_suffix=node_top_suffix,
         node_top_probability=node_top_probability,
         lucky_nodes=lucky_nodes,
@@ -610,7 +625,7 @@ def experiment_distributed_fpaa_execution(
 def experiment_hardware_compilation_tradeoff(
     global_n: int = 6,
     j: int = 2,
-    global_targets: tuple[str, ...] = ("110110", "111111", "011001"),
+    global_goods: tuple[str, ...] = ("110110", "111111", "011001"),
     basis_gates: tuple[str, ...] = ("cx", "id", "rz", "sx", "x"),
     seed_transpiler: int = 42,
 ) -> HardwareCompilationResults:
@@ -621,9 +636,9 @@ def experiment_hardware_compilation_tradeoff(
     if j <= 0 or j >= global_n:
         raise ValueError("j must satisfy 1 <= j < global_n.")
 
-    targets = [s.strip() for s in global_targets if s.strip()]
+    targets = [s.strip() for s in global_goods if s.strip()]
     if not targets:
-        raise ValueError("global_targets must not be empty.")
+        raise ValueError("global_goods must not be empty.")
     if any(len(t) != global_n for t in targets):
         raise ValueError("All global targets must be global_n-bit strings.")
 
@@ -634,7 +649,7 @@ def experiment_hardware_compilation_tradeoff(
     cmap_global = CouplingMap.from_line(global_n)
     cmap_local = CouplingMap.from_line(local_n)
 
-    # Monolithic: full n-qubit oracle with the exact target set.
+    # Monolithic: full n-qubit oracle with the exact H_Good set.
     qc_monolithic = _build_grover_step(global_n, targets)
     mono_metrics = _extract_compilation_metrics(
         qc_monolithic,
@@ -678,7 +693,7 @@ def experiment_hardware_compilation_tradeoff(
         global_n=global_n,
         j=j,
         local_n=local_n,
-        global_targets=targets,
+        global_goods=targets,
         node_targets=node_targets,
         basis_gates=basis,
         topology=f"line_{global_n} vs line_{local_n}",
@@ -762,21 +777,21 @@ def _build_entangled_cross_register_ansatz(global_n: int, j: int) -> "QuantumCir
 
 def _local_fpaa_density_curve(
     rho0: "DensityMatrix",
-    target_suffix: str,
+    good_suffix: str,
     alphas: np.ndarray,
     betas: np.ndarray,
 ) -> np.ndarray:
     """Apply local FPAA schedule to a suffix density matrix and return target curve."""
     _require_qiskit_density_matrix()
     local_n = int(np.log2(rho0.data.shape[0]))
-    if len(target_suffix) != local_n or any(ch not in "01" for ch in target_suffix):
-        raise ValueError("target_suffix must match local register width.")
+    if len(good_suffix) != local_n or any(ch not in "01" for ch in good_suffix):
+        raise ValueError("good_suffix must match local register width.")
     if len(alphas) != len(betas):
         raise ValueError("alphas and betas must have same length.")
 
-    target_idx = int(target_suffix, 2)
+    good_idx = int(good_suffix, 2)
     proj = np.zeros((2**local_n, 2**local_n), dtype=complex)
-    proj[target_idx, target_idx] = 1.0
+    proj[good_idx, good_idx] = 1.0
 
     rho = np.array(rho0.data, dtype=complex)
     out = np.zeros(len(alphas) + 1, dtype=float)
@@ -785,7 +800,7 @@ def _local_fpaa_density_curve(
     for step, (alpha, beta) in enumerate(zip(alphas, betas), start=1):
         iterate = QuantumCircuit(local_n)
         iterate.global_phase += np.pi
-        iterate.append(_build_local_oracle(local_n, [target_suffix], float(beta)).to_gate(), range(local_n))
+        iterate.append(_build_local_oracle(local_n, [good_suffix], float(beta)).to_gate(), range(local_n))
         iterate.append(_build_local_diffusion(local_n, float(alpha)).to_gate(), range(local_n))
         u = Operator(iterate).data
         rho = u @ rho @ u.conj().T
@@ -797,7 +812,7 @@ def _local_fpaa_density_curve(
 def experiment_entanglement_obstruction(
     global_n: int = 6,
     j: int = 2,
-    target_global: str = "110110",
+    good_global: str = "110110",
     epsilon: float = 0.3,
     global_a_for_schedule: float = 3.0 / 64.0,
     L: Optional[int] = None,
@@ -808,16 +823,16 @@ def experiment_entanglement_obstruction(
         raise ValueError("global_n must be >= 2.")
     if j <= 0 or j >= global_n:
         raise ValueError("j must satisfy 1 <= j < global_n.")
-    if len(target_global) != global_n or any(ch not in "01" for ch in target_global):
-        raise ValueError("target_global must be a binary string of length global_n.")
+    if len(good_global) != global_n or any(ch not in "01" for ch in good_global):
+        raise ValueError("good_global must be a binary string of length global_n.")
     if not (0.0 < epsilon < 1.0):
         raise ValueError("epsilon must be in (0, 1).")
     if not (0.0 < global_a_for_schedule <= 1.0):
         raise ValueError("global_a_for_schedule must be in (0, 1].")
 
     local_n = global_n - j
-    node_prefix = target_global[:j]
-    target_suffix = target_global[j:]
+    node_prefix = good_global[:j]
+    good_suffix = good_global[j:]
 
     if L is None:
         l_opt = int(np.ceil((0.5 * np.log(2.0 / epsilon)) / np.sqrt(global_a_for_schedule)))
@@ -837,8 +852,8 @@ def experiment_entanglement_obstruction(
     sv_ent = Statevector.from_instruction(A_ent)
     rho_ent_local = partial_trace(DensityMatrix(sv_ent), list(range(local_n, global_n)))
 
-    sep_curve = _local_fpaa_density_curve(rho_sep_local, target_suffix=target_suffix, alphas=alphas, betas=betas)
-    ent_curve = _local_fpaa_density_curve(rho_ent_local, target_suffix=target_suffix, alphas=alphas, betas=betas)
+    sep_curve = _local_fpaa_density_curve(rho_sep_local, good_suffix=good_suffix, alphas=alphas, betas=betas)
+    ent_curve = _local_fpaa_density_curve(rho_ent_local, good_suffix=good_suffix, alphas=alphas, betas=betas)
 
     sep_purity = float(np.real(np.trace(rho_sep_local.data @ rho_sep_local.data)))
     ent_purity = float(np.real(np.trace(rho_ent_local.data @ rho_ent_local.data)))
@@ -849,14 +864,14 @@ def experiment_entanglement_obstruction(
         global_n=global_n,
         j=j,
         local_n=local_n,
-        target_global=target_global,
-        target_suffix=target_suffix,
+        good_global=good_global,
+        good_suffix=good_suffix,
         global_a_for_schedule=float(global_a_for_schedule),
         epsilon=epsilon,
         L=L,
         k_values=np.arange(L + 1, dtype=int),
-        separable_target_probs=sep_curve,
-        entangled_target_probs=ent_curve,
+        separable_good_probs=sep_curve,
+        entangled_good_probs=ent_curve,
         separable_suffix_purity=sep_purity,
         entangled_suffix_purity=ent_purity,
         entangled_suffix_entropy_bits=ent_entropy,
@@ -921,7 +936,7 @@ def _load_hardware_noise_backend(
 def experiment_nisq_noise_resilience(
     global_n: int = 6,
     j: int = 2,
-    global_targets: tuple[str, ...] = ("110110", "111111", "011001"),
+    global_goods: tuple[str, ...] = ("110110", "111111", "011001"),
     epsilon: float = 0.3,
     global_a_for_schedule: float = 3.0 / 64.0,
     L: Optional[int] = None,
@@ -947,11 +962,11 @@ def experiment_nisq_noise_resilience(
     if shots < 256:
         raise ValueError("shots must be >= 256 for stable statistics.")
 
-    targets = [s.strip() for s in global_targets if s.strip()]
+    targets = [s.strip() for s in global_goods if s.strip()]
     if not targets:
-        raise ValueError("global_targets must not be empty.")
+        raise ValueError("global_goods must not be empty.")
     if any(len(s) != global_n or any(ch not in "01" for ch in s) for s in targets):
-        raise ValueError("All global_targets must be binary strings of length global_n.")
+        raise ValueError("All global_goods must be binary strings of length global_n.")
 
     local_n = global_n - j
     node_targets = _partition_targets_by_prefix(targets, j=j)
@@ -1038,7 +1053,7 @@ def experiment_nisq_noise_resilience(
             node_probs_noisy.append(p_n)
             dist_node_noisy[prefix][idx] = p_n
 
-        # Global distributed success: at least one node outputs a marked suffix.
+        # Global distributed success: at least one node outputs an H_Good suffix.
         one_minus = 1.0
         for p in node_probs_ideal:
             one_minus *= 1.0 - p
@@ -1062,7 +1077,7 @@ def experiment_nisq_noise_resilience(
         global_n=global_n,
         j=j,
         local_n=local_n,
-        global_targets=targets,
+        global_goods=targets,
         node_targets=node_targets,
         epsilon=epsilon,
         global_a_for_schedule=float(global_a_for_schedule),
@@ -1082,7 +1097,7 @@ def experiment_nisq_noise_resilience(
 def experiment_classical_network_statistics(
     global_n: int = 6,
     j: int = 2,
-    global_targets: tuple[str, ...] = ("110110", "111111", "011001"),
+    global_goods: tuple[str, ...] = ("110110", "111111", "011001"),
     epsilon: float = 0.3,
     global_a_for_schedule: float = 3.0 / 64.0,
     L: Optional[int] = None,
@@ -1107,11 +1122,11 @@ def experiment_classical_network_statistics(
     if sifting_sigma <= 0.0:
         raise ValueError("sifting_sigma must be > 0.")
 
-    targets = [s.strip() for s in global_targets if s.strip()]
+    targets = [s.strip() for s in global_goods if s.strip()]
     if not targets:
-        raise ValueError("global_targets must not be empty.")
+        raise ValueError("global_goods must not be empty.")
     if any(len(s) != global_n or any(ch not in "01" for ch in s) for s in targets):
-        raise ValueError("All global_targets must be binary strings of length global_n.")
+        raise ValueError("All global_goods must be binary strings of length global_n.")
 
     local_n = global_n - j
     node_targets = _partition_targets_by_prefix(targets, j=j)
@@ -1145,7 +1160,7 @@ def experiment_classical_network_statistics(
     uniform_std = float(np.sqrt(shots_per_node * p_uniform * (1.0 - p_uniform)))
     threshold = int(np.ceil(uniform_mean + float(sifting_sigma) * uniform_std))
 
-    target_set = set(targets)
+    good_set = set(targets)
     flagged: list[str] = []
     verified: list[str] = []
     false_pos: list[str] = []
@@ -1159,7 +1174,7 @@ def experiment_classical_network_statistics(
             candidate = f"{prefix}{suffix}"
             flagged.append(candidate)
             queries += 1
-            if candidate in target_set:
+            if candidate in good_set:
                 verified.append(candidate)
             else:
                 false_pos.append(candidate)
@@ -1172,7 +1187,7 @@ def experiment_classical_network_statistics(
         global_n=global_n,
         j=j,
         local_n=local_n,
-        global_targets=targets,
+        global_goods=targets,
         node_targets=node_targets,
         epsilon=epsilon,
         global_a_for_schedule=float(global_a_for_schedule),
@@ -1567,24 +1582,24 @@ def experiment_automated_oracle_partitioning(
 def run_lucky_node_monte_carlo(
     n: int = 8,
     j: int = 3,
-    num_marked: int = 12,
+    num_good: int = 12,
     trials: int = 2000,
     seed: Optional[int] = 1234,
 ) -> LuckyNodeMonteCarloResult:
     """Run many random instances to empirically verify universal validity."""
-    _validate_inputs(n, j, num_marked, trials=trials)
+    _validate_inputs(n, j, num_good, trials=trials)
 
     rng = np.random.default_rng(seed)
     n_global = 2**n
     n_local = 2 ** (n - j)
-    global_a = float(num_marked / n_global)
+    global_a = float(num_good / n_global)
 
     max_gap_samples = np.zeros(trials, dtype=float)
     lucky_count_samples = np.zeros(trials, dtype=int)
 
     for t in range(trials):
-        marked_states = rng.choice(n_global, size=num_marked, replace=False)
-        local_counts = _compute_local_marked_counts(marked_states, n=n, j=j)
+        good_states = rng.choice(n_global, size=num_good, replace=False)
+        local_counts = _compute_local_good_counts(good_states, n=n, j=j)
         local_ak = local_counts / n_local
         max_gap_samples[t] = float(np.max(local_ak) - global_a)
         lucky_count_samples[t] = int(np.count_nonzero(local_ak >= global_a))
@@ -1594,7 +1609,7 @@ def run_lucky_node_monte_carlo(
     return LuckyNodeMonteCarloResult(
         n=n,
         j=j,
-        num_marked=num_marked,
+        num_good=num_good,
         trials=trials,
         seed=seed,
         max_gap_samples=max_gap_samples,
@@ -1628,7 +1643,7 @@ def plot_distributed_fpaa_histograms(
     fig.suptitle(
         "Distributed FPAA Execution (Hua-Qiu POC)\n"
         f"n={result.global_n}, j={result.j}, local_qubits={result.local_n}, "
-        f"a={result.global_a:.5f}, epsilon={result.epsilon:.2f}, L={result.L}",
+        f"p={result.global_a:.5f}, epsilon={result.epsilon:.2f}, L={result.L}",
         fontsize=15,
     )
 
@@ -1638,7 +1653,7 @@ def plot_distributed_fpaa_histograms(
         color = "tab:green" if is_lucky else "0.60"
         bars = ax.bar(x, probs, color=color, edgecolor="black", linewidth=0.7, alpha=0.88)
 
-        # Highlight known marked suffixes on lucky nodes.
+        # Highlight known H_Good suffixes on lucky nodes.
         for suffix in result.node_targets[prefix]:
             bars[int(suffix, 2)].set_color("tab:orange")
 
@@ -1649,7 +1664,7 @@ def plot_distributed_fpaa_histograms(
         status = "Lucky" if is_lucky else "Unlucky"
         ax.set_title(
             f"Node {node_id} (prefix={prefix}) [{status}]\n"
-            f"P(target set)={result.node_target_success[prefix]:.4f}, "
+            f"p_k (H_Good set)={result.node_good_success[prefix]:.4f}, "
             f"top={result.node_top_suffix[prefix]}:{result.node_top_probability[prefix]:.4f}",
             fontsize=11,
         )
@@ -1661,7 +1676,7 @@ def plot_distributed_fpaa_histograms(
     for ax in axes[-1, :]:
         ax.set_xlabel(f"Local suffix outcome ({result.local_n}-bit)")
     for ax in axes[:, 0]:
-        ax.set_ylabel("Measurement probability")
+        ax.set_ylabel("Measurement probability p(outcome)")
 
     plt.tight_layout()
     plt.subplots_adjust(top=0.87)
@@ -1689,7 +1704,7 @@ def plot_entanglement_obstruction(
     plt.figure(figsize=(10.5, 6.2))
     plt.plot(
         result.k_values,
-        result.separable_target_probs,
+        result.separable_good_probs,
         color="tab:blue",
         marker="o",
         linewidth=2.3,
@@ -1697,7 +1712,7 @@ def plot_entanglement_obstruction(
     )
     plt.plot(
         result.k_values,
-        result.entangled_target_probs,
+        result.entangled_good_probs,
         color="tab:red",
         marker="x",
         linestyle="--",
@@ -1713,12 +1728,12 @@ def plot_entanglement_obstruction(
     )
     plt.title(
         "Negative Proof: Entanglement Obstruction in DQAA\n"
-        f"target={result.target_global}, L={result.L}, "
+        f"H_Good={result.good_global}, L={result.L}, "
         f"peak ratio={result.obstruction_ratio_peak:.1f}x",
         fontsize=13,
     )
     plt.xlabel("Local FPAA prefix of schedule (k)")
-    plt.ylabel(f"Probability of target suffix |{result.target_suffix}>")
+    plt.ylabel(f"Local success probability p_k for H_Good suffix |{result.good_suffix}>")
     plt.ylim(0.0, 1.02)
     plt.xticks(result.k_values)
     plt.grid(alpha=0.28)
@@ -1805,7 +1820,7 @@ def plot_nisq_noise_resilience(
         fontsize=12.5,
     )
     plt.xlabel("FPAA schedule prefix length (k)")
-    plt.ylabel("Observed success probability")
+    plt.ylabel("Observed success probability p_k")
     plt.ylim(0.0, 1.02)
     plt.xticks(k)
     plt.grid(alpha=0.28)
@@ -1892,7 +1907,7 @@ def plot_lucky_node_barchart(
     save_path: Optional[str] = None,
     show_plot: bool = False,
 ) -> None:
-    """Plot local a_k bars and global average line for Figure-X style evidence."""
+    """Plot local p_k bars and global average p line for Figure-X style evidence."""
     try:
         import matplotlib.pyplot as plt
         from matplotlib.patches import Patch
@@ -1910,21 +1925,21 @@ def plot_lucky_node_barchart(
         color="tab:red",
         linestyle="--",
         linewidth=2.2,
-        label=f"Global average a={result.global_a:.4f}",
+        label=f"Global average p={result.global_a:.4f}",
     )
     plt.xlabel(f"Distributed node index k (prefix partition, 2^{result.j} nodes)")
-    plt.ylabel("Local success probability a_k")
+    plt.ylabel("Local success probability p_k")
     plt.title(
-        f"Lucky Node Verification (n={result.n}, j={result.j}, marked={result.num_marked})\n"
-        f"max(a_k)-a={result.max_gap:.4f}, lucky nodes={len(result.lucky_indices)}"
+        f"Lucky Node Verification (n={result.n}, j={result.j}, M={result.num_good})\n"
+        f"max(p_k)-p={result.max_gap:.4f}, lucky nodes={len(result.lucky_indices)}"
     )
     plt.xticks(xs)
     plt.ylim(0.0, max(1.0, float(np.max(result.local_ak) * 1.15)))
     plt.grid(axis="y", linestyle=":", alpha=0.5)
     legend_elements = [
-        plt.Line2D([0], [0], color="tab:red", linestyle="--", linewidth=2.2, label="Global a"),
-        Patch(facecolor="tab:green", edgecolor="black", label="Lucky node (a_k >= a)"),
-        Patch(facecolor="0.60", edgecolor="black", label="a_k < a"),
+        plt.Line2D([0], [0], color="tab:red", linestyle="--", linewidth=2.2, label="Global p"),
+        Patch(facecolor="tab:green", edgecolor="black", label="Lucky node (p_k >= p)"),
+        Patch(facecolor="0.60", edgecolor="black", label="p_k < p"),
     ]
     plt.legend(handles=legend_elements, loc="upper right")
     plt.tight_layout()
@@ -1942,7 +1957,7 @@ def plot_lucky_node_monte_carlo_evidence(
     save_path: Optional[str] = None,
     show_plot: bool = False,
 ) -> None:
-    """Plot global evidence that max_k(a_k-a) never crosses below zero."""
+    """Plot global evidence that max_k(p_k-p) never crosses below zero."""
     try:
         import matplotlib.pyplot as plt
     except Exception as exc:  # pragma: no cover
@@ -1952,10 +1967,10 @@ def plot_lucky_node_monte_carlo_evidence(
 
     ax1.hist(mc.max_gap_samples, bins=36, color="tab:blue", edgecolor="black", alpha=0.85)
     ax1.axvline(0.0, color="tab:red", linestyle="--", linewidth=2.0, label="Theorem boundary: 0")
-    ax1.set_xlabel("max_k(a_k - a)")
+    ax1.set_xlabel("max_k(p_k - p)")
     ax1.set_ylabel("Trial count")
     ax1.set_title(
-        f"Monte Carlo Convexity Check (n={mc.n}, j={mc.j}, marked={mc.num_marked}, trials={mc.trials})\n"
+        f"Monte Carlo Convexity Check (n={mc.n}, j={mc.j}, M={mc.num_good}, trials={mc.trials})\n"
         f"violations={mc.violation_count}, min_gap={mc.min_gap:.6f}"
     )
     ax1.grid(axis="y", linestyle=":", alpha=0.4)
@@ -1985,7 +2000,7 @@ def summarize_distributed_fpaa(result: DistributedFPAAResults) -> dict[str, Any]
         "global_n": result.global_n,
         "j": result.j,
         "local_n": result.local_n,
-        "global_targets": result.global_targets,
+        "global_goods": result.global_goods,
         "node_targets": result.node_targets,
         "global_a": result.global_a,
         "epsilon": result.epsilon,
@@ -1994,7 +2009,7 @@ def summarize_distributed_fpaa(result: DistributedFPAAResults) -> dict[str, Any]
         "success_threshold_1_minus_epsilon_sq": float(1.0 - result.epsilon * result.epsilon),
         "lucky_nodes": result.lucky_nodes,
         "unlucky_nodes": result.unlucky_nodes,
-        "node_target_success": result.node_target_success,
+        "node_good_success": result.node_good_success,
         "node_top_suffix": result.node_top_suffix,
         "node_top_probability": result.node_top_probability,
     }
@@ -2027,7 +2042,7 @@ def summarize_hardware_tradeoff(result: HardwareCompilationResults) -> dict[str,
         "global_n": result.global_n,
         "j": result.j,
         "local_n": result.local_n,
-        "global_targets": result.global_targets,
+        "global_goods": result.global_goods,
         "node_targets": result.node_targets,
         "basis_gates": result.basis_gates,
         "topology": result.topology,
@@ -2045,8 +2060,8 @@ def summarize_entanglement_obstruction(result: EntanglementObstructionResults) -
         "global_n": result.global_n,
         "j": result.j,
         "local_n": result.local_n,
-        "target_global": result.target_global,
-        "target_suffix": result.target_suffix,
+        "good_global": result.good_global,
+        "good_suffix": result.good_suffix,
         "global_a_for_schedule": result.global_a_for_schedule,
         "epsilon": result.epsilon,
         "L": result.L,
@@ -2054,13 +2069,13 @@ def summarize_entanglement_obstruction(result: EntanglementObstructionResults) -
         "separable_suffix_purity": result.separable_suffix_purity,
         "entangled_suffix_purity": result.entangled_suffix_purity,
         "entangled_suffix_entropy_bits": result.entangled_suffix_entropy_bits,
-        "separable_peak_probability": float(np.max(result.separable_target_probs)),
-        "entangled_peak_probability": float(np.max(result.entangled_target_probs)),
+        "separable_peak_probability": float(np.max(result.separable_good_probs)),
+        "entangled_peak_probability": float(np.max(result.entangled_good_probs)),
         "obstruction_ratio_peak": result.obstruction_ratio_peak,
-        "k_at_separable_peak": int(np.argmax(result.separable_target_probs)),
-        "k_at_entangled_peak": int(np.argmax(result.entangled_target_probs)),
-        "separable_curve": result.separable_target_probs.astype(float).tolist(),
-        "entangled_curve": result.entangled_target_probs.astype(float).tolist(),
+        "k_at_separable_peak": int(np.argmax(result.separable_good_probs)),
+        "k_at_entangled_peak": int(np.argmax(result.entangled_good_probs)),
+        "separable_curve": result.separable_good_probs.astype(float).tolist(),
+        "entangled_curve": result.entangled_good_probs.astype(float).tolist(),
     }
 
 
@@ -2077,7 +2092,7 @@ def summarize_nisq_noise_resilience(result: NISQNoiseResults) -> dict[str, Any]:
         "global_n": result.global_n,
         "j": result.j,
         "local_n": result.local_n,
-        "global_targets": result.global_targets,
+        "global_goods": result.global_goods,
         "node_targets": result.node_targets,
         "epsilon": result.epsilon,
         "global_a_for_schedule": result.global_a_for_schedule,
@@ -2106,14 +2121,14 @@ def summarize_nisq_noise_resilience(result: NISQNoiseResults) -> dict[str, Any]:
 
 def summarize_network_statistics(result: NetworkStatisticsResults) -> dict[str, Any]:
     """JSON-safe summary for end-to-end classical post-processing benchmark."""
-    recovered_all = set(result.verified_answers) == set(result.global_targets)
+    recovered_all = set(result.verified_answers) == set(result.global_goods)
     query_fraction = float(result.classical_queries_made / max(1, result.total_shots))
 
     return {
         "global_n": result.global_n,
         "j": result.j,
         "local_n": result.local_n,
-        "global_targets": result.global_targets,
+        "global_goods": result.global_goods,
         "node_targets": result.node_targets,
         "epsilon": result.epsilon,
         "global_a_for_schedule": result.global_a_for_schedule,
@@ -2265,10 +2280,10 @@ def summarize_instance(result: LuckyNodeInstanceResult) -> dict[str, Any]:
     return {
         "n": result.n,
         "j": result.j,
-        "num_marked": result.num_marked,
+        "num_good": result.num_good,
         "seed": result.seed,
         "global_a": result.global_a,
-        "local_marked_counts": result.local_marked_counts.astype(int).tolist(),
+        "local_good_counts": result.local_good_counts.astype(int).tolist(),
         "local_ak": result.local_ak.astype(float).tolist(),
         "lucky_indices": result.lucky_indices,
         "max_ak": result.max_ak,
@@ -2282,7 +2297,7 @@ def summarize_monte_carlo(mc: LuckyNodeMonteCarloResult) -> dict[str, Any]:
     return {
         "n": mc.n,
         "j": mc.j,
-        "num_marked": mc.num_marked,
+        "num_good": mc.num_good,
         "trials": mc.trials,
         "seed": mc.seed,
         "violation_count": mc.violation_count,
@@ -2301,7 +2316,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Lucky Node numerical proof for distributed FPAA Theorem 3.")
     parser.add_argument("--n", type=int, default=8, help="Global search qubit count.")
     parser.add_argument("--j", type=int, default=3, help="Prefix qubits for partitioning.")
-    parser.add_argument("--num-marked", type=int, default=12, help="Number of marked states globally.")
+    parser.add_argument("--num-good", type=int, default=12, help="Number of H_Good states globally (M).")
     parser.add_argument("--seed", type=int, default=42, help="Seed for the single-instance run.")
     parser.add_argument("--trials", type=int, default=2000, help="Monte Carlo trial count.")
     parser.add_argument("--mc-seed", type=int, default=1234, help="Seed for Monte Carlo run.")
@@ -2312,10 +2327,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="FPAA epsilon for distributed execution (threshold is 1-epsilon^2).",
     )
     parser.add_argument(
-        "--global-targets",
+        "--global-goods",
         type=str,
         default="110110,111111,011001",
-        help="Comma-separated n-bit target strings for distributed FPAA.",
+        help="Comma-separated n-bit H_Good strings for distributed FPAA.",
     )
     parser.add_argument("--out-prefix", type=str, default="lucky_node", help="Output artifact prefix.")
     parser.add_argument("--show-plots", action="store_true", help="Display matplotlib windows.")
@@ -2343,16 +2358,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run negative proof for tensor-factorization failure under cross-register entanglement.",
     )
     parser.add_argument(
-        "--target-global",
+        "--good-global",
         type=str,
         default="110110",
-        help="Global target bitstring used in entanglement obstruction module.",
+        help="Global H_Good bitstring used in entanglement obstruction module.",
     )
     parser.add_argument(
         "--schedule-global-a",
         type=float,
         default=3.0 / 64.0,
-        help="Global a used to derive local FPAA schedule in obstruction module.",
+        help="Global success probability p used to derive local FPAA schedule in obstruction module.",
     )
     parser.add_argument(
         "--obstruction-L",
@@ -2461,7 +2476,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         result = experiment_lucky_node_verification(
             n=args.n,
             j=args.j,
-            num_marked=args.num_marked,
+            num_good=args.num_good,
             seed=args.seed,
         )
         print(json.dumps(summarize_instance(result), indent=2))
@@ -2473,13 +2488,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         result = experiment_lucky_node_verification(
             n=args.n,
             j=args.j,
-            num_marked=args.num_marked,
+            num_good=args.num_good,
             seed=args.seed,
         )
         mc = run_lucky_node_monte_carlo(
             n=args.n,
             j=args.j,
-            num_marked=args.num_marked,
+            num_good=args.num_good,
             trials=args.trials,
             seed=args.mc_seed,
         )
@@ -2499,7 +2514,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         }
 
     if args.run_distributed_fpaa:
-        targets = tuple(t.strip() for t in args.global_targets.split(",") if t.strip())
+        targets = tuple(t.strip() for t in args.global_goods.split(",") if t.strip())
         # Convenience default: if user did not override shared --n/--j, use the
         # canonical Hua-Qiu proof-of-concept parameters.
         dist_n = 6 if (args.n == 8 and args.j == 3) else args.n
@@ -2507,7 +2522,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         dist = experiment_distributed_fpaa_execution(
             global_n=dist_n,
             j=dist_j,
-            global_targets=targets,
+            global_goods=targets,
             epsilon=args.epsilon,
         )
         dist_plot = f"{args.out_prefix}_distributed_fpaa.png"
@@ -2516,14 +2531,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         summary["distributed_fpaa_artifact"] = {"four_panel_histogram": dist_plot}
 
     if args.run_hardware_tradeoff:
-        targets = tuple(t.strip() for t in args.global_targets.split(",") if t.strip())
+        targets = tuple(t.strip() for t in args.global_goods.split(",") if t.strip())
         # Same convenience default as distributed module.
         tradeoff_n = 6 if (args.n == 8 and args.j == 3) else args.n
         tradeoff_j = 2 if (args.n == 8 and args.j == 3) else args.j
         hw = experiment_hardware_compilation_tradeoff(
             global_n=tradeoff_n,
             j=tradeoff_j,
-            global_targets=targets,
+            global_goods=targets,
         )
         table_csv = f"{args.out_prefix}_hardware_resource_table.csv"
         save_hardware_tradeoff_table_csv(hw, table_csv)
@@ -2537,7 +2552,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         obstruction = experiment_entanglement_obstruction(
             global_n=obstruction_n,
             j=obstruction_j,
-            target_global=args.target_global.strip(),
+            good_global=args.good_global.strip(),
             epsilon=args.epsilon,
             global_a_for_schedule=float(args.schedule_global_a),
             L=args.obstruction_L,
@@ -2551,11 +2566,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         # Same convenience default as distributed module.
         noise_n = 6 if (args.n == 8 and args.j == 3) else args.n
         noise_j = 2 if (args.n == 8 and args.j == 3) else args.j
-        targets = tuple(t.strip() for t in args.global_targets.split(",") if t.strip())
+        targets = tuple(t.strip() for t in args.global_goods.split(",") if t.strip())
         noise = experiment_nisq_noise_resilience(
             global_n=noise_n,
             j=noise_j,
-            global_targets=targets,
+            global_goods=targets,
             epsilon=args.epsilon,
             global_a_for_schedule=float(args.schedule_global_a),
             L=args.obstruction_L,
@@ -2590,11 +2605,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         # Same convenience default as distributed module.
         network_n = 6 if (args.n == 8 and args.j == 3) else args.n
         network_j = 2 if (args.n == 8 and args.j == 3) else args.j
-        targets = tuple(t.strip() for t in args.global_targets.split(",") if t.strip())
+        targets = tuple(t.strip() for t in args.global_goods.split(",") if t.strip())
         network = experiment_classical_network_statistics(
             global_n=network_n,
             j=network_j,
-            global_targets=targets,
+            global_goods=targets,
             epsilon=args.epsilon,
             global_a_for_schedule=float(args.schedule_global_a),
             L=args.obstruction_L,
@@ -2618,4 +2633,24 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 
 if __name__ == "__main__":
+    start_one_click_session(__file__, figure_prefix="dqaa")
+    if len(sys.argv) == 1:
+        stem = Path(__file__).stem
+        raise SystemExit(
+            main(
+                [
+                    "--run-all",
+                    "--run-distributed-fpaa",
+                    "--run-hardware-tradeoff",
+                    "--run-entanglement-obstruction",
+                    "--run-noise-benchmark",
+                    "--run-oracle-compiler",
+                    "--run-network-statistics",
+                    "--out-prefix",
+                    stem,
+                    "--save-json",
+                    f"{stem}_summary.json",
+                ]
+            )
+        )
     raise SystemExit(main())
