@@ -7,6 +7,13 @@ This script keeps only the six requested modules:
 4) Recursive nesting demonstration (circuit + numerical composition)
 5) NISQ phase-noise sensitivity benchmark
 6) Fault-tolerant Clifford+T compilation (T-count overhead)
+
+Standing notation aligned with final.tex:
+- H_Good / H_Bad: target and non-target subspaces
+- Pi_Good / Pi_Bad: corresponding orthogonal projectors
+- |All> = A|0>^{⊗n}: prepared input state before amplification
+- p = ||Pi_Good|All>||^2 (for unstructured search, p=M/N)
+- sin^2(theta0)=p and Grover step angle theta=2*theta0
 """
 
 from __future__ import annotations
@@ -14,10 +21,13 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
+from one_click_utils import start_one_click_session
 
 try:
     from qiskit import QuantumCircuit, transpile
@@ -54,26 +64,27 @@ def _require_qiskit() -> None:
         raise RuntimeError("Qiskit is required for circuit-level modules.")
 
 
-def _validate_marked_indices(num_qubits: int, marked_indices: Sequence[int]) -> List[int]:
+def _validate_good_indices(num_qubits: int, good_indices: Sequence[int]) -> List[int]:
+    """Validate computational-basis indices spanning H_Good."""
     dim = 2**num_qubits
     out: List[int] = []
-    for idx in marked_indices:
+    for idx in good_indices:
         i = int(idx)
         if i < 0 or i >= dim:
             raise ValueError(f"Marked index {i} out of range for {num_qubits} qubits.")
         out.append(i)
     if not out:
-        raise ValueError("marked_indices must not be empty.")
+        raise ValueError("H_Good index set must not be empty.")
     return sorted(set(out))
 
 
-def _marked_state_to_indices(num_qubits: int, marked_state: Optional[str]) -> List[int]:
-    """Convert optional bitstring target into marked index list."""
-    if marked_state is None:
+def _good_state_to_indices(num_qubits: int, good_state: Optional[str]) -> List[int]:
+    """Convert optional H_Good bitstring representative into basis indices."""
+    if good_state is None:
         return [2**num_qubits - 1]
-    if len(marked_state) != num_qubits or any(ch not in "01" for ch in marked_state):
-        raise ValueError("marked_state must be a binary bitstring of length num_qubits.")
-    return [int(marked_state, 2)]
+    if len(good_state) != num_qubits or any(ch not in "01" for ch in good_state):
+        raise ValueError("H_Good state must be a binary bitstring of length num_qubits.")
+    return [int(good_state, 2)]
 
 
 # -----------------------------------------------------------------------------
@@ -144,16 +155,16 @@ def test_table_i_exact_match(delta: float = 0.1, atol: float = 1e-8) -> None:
 # Module 2: Generalized Grover iterate (Qiskit)
 # -----------------------------------------------------------------------------
 
-def generalized_oracle(num_qubits: int, marked_indices: Sequence[int], beta: float) -> "QuantumCircuit":
-    """S_t(beta): apply phase beta to each marked basis state using mcp."""
+def generalized_oracle(num_qubits: int, good_indices: Sequence[int], beta: float) -> "QuantumCircuit":
+    """S_t(beta): apply target phase on basis states spanning H_Good."""
     _require_qiskit()
-    marked = _validate_marked_indices(num_qubits, marked_indices)
+    good = _validate_good_indices(num_qubits, good_indices)
     qc = QuantumCircuit(num_qubits, name=f"S_t({beta:.3f})")
 
     controls = list(range(num_qubits - 1))
     target = num_qubits - 1
 
-    for idx in marked:
+    for idx in good:
         bits = format(idx, f"0{num_qubits}b")[::-1]  # little-endian map
         for q, bit in enumerate(bits):
             if bit == "0":
@@ -186,7 +197,7 @@ def generalized_diffusion(num_qubits: int, alpha: float) -> "QuantumCircuit":
 
 def build_fpaa_circuit_from_phases(
     num_qubits: int,
-    marked_indices: Sequence[int],
+    good_indices: Sequence[int],
     alphas: np.ndarray,
     betas: np.ndarray,
     initialize_superposition: bool = True,
@@ -195,7 +206,7 @@ def build_fpaa_circuit_from_phases(
     _require_qiskit()
     if len(alphas) != len(betas):
         raise ValueError("alphas and betas must have the same length.")
-    marked = _validate_marked_indices(num_qubits, marked_indices)
+    good = _validate_good_indices(num_qubits, good_indices)
 
     qc = QuantumCircuit(num_qubits, name=f"FPAA_L{len(alphas)}")
     if initialize_superposition:
@@ -204,7 +215,7 @@ def build_fpaa_circuit_from_phases(
     # Circuit order is left-to-right execution of G_1, ..., G_L.
     for a_j, b_j in zip(alphas, betas):
         qc.global_phase += np.pi  # explicit '-' in G definition
-        qc.append(generalized_oracle(num_qubits, marked, float(b_j)).to_gate(), range(num_qubits))
+        qc.append(generalized_oracle(num_qubits, good, float(b_j)).to_gate(), range(num_qubits))
         qc.append(generalized_diffusion(num_qubits, float(a_j)).to_gate(), range(num_qubits))
 
     return qc
@@ -215,33 +226,33 @@ def build_fpaa_circuit(
     L: int,
     delta: float,
     epsilon: float = 0.0,
-    marked_state: Optional[str] = None,
-    marked_indices: Optional[Sequence[int]] = None,
+    good_state: Optional[str] = None,
+    good_indices: Optional[Sequence[int]] = None,
 ) -> "QuantumCircuit":
     """Convenience builder from schedule parameters."""
-    if marked_indices is None:
-        marked_indices = _marked_state_to_indices(num_qubits, marked_state)
+    if good_indices is None:
+        good_indices = _good_state_to_indices(num_qubits, good_state)
     alphas, betas = generate_fpaa_phases(L=L, delta=delta, epsilon=epsilon)
-    return build_fpaa_circuit_from_phases(num_qubits, marked_indices, alphas, betas, initialize_superposition=True)
+    return build_fpaa_circuit_from_phases(num_qubits, good_indices, alphas, betas, initialize_superposition=True)
 
 
 def build_standard_grover_circuit(
     num_qubits: int,
     iterations: int,
-    marked_state: Optional[str] = None,
-    marked_indices: Optional[Sequence[int]] = None,
+    good_state: Optional[str] = None,
+    good_indices: Optional[Sequence[int]] = None,
 ) -> "QuantumCircuit":
     """Grover as trivial FPAA schedule alpha=beta=pi."""
-    if marked_indices is None:
-        marked_indices = _marked_state_to_indices(num_qubits, marked_state)
+    if good_indices is None:
+        good_indices = _good_state_to_indices(num_qubits, good_state)
     alphas = np.full(iterations, np.pi, dtype=float)
     betas = np.full(iterations, np.pi, dtype=float)
-    return build_fpaa_circuit_from_phases(num_qubits, marked_indices, alphas, betas, initialize_superposition=True)
+    return build_fpaa_circuit_from_phases(num_qubits, good_indices, alphas, betas, initialize_superposition=True)
 
 
 def test_grover_fallback_rigor(
     num_qubits: int = 4,
-    marked_indices: Sequence[int] = (5,),
+    good_indices: Sequence[int] = (5,),
     L: int = 3,
     atol: float = 1e-8,
 ) -> None:
@@ -250,13 +261,14 @@ def test_grover_fallback_rigor(
     if Statevector is None:
         raise RuntimeError("qiskit.quantum_info.Statevector is required for fallback testing.")
 
-    marked = _validate_marked_indices(num_qubits, marked_indices)
-    qc = build_standard_grover_circuit(num_qubits, L, marked_indices=marked)
+    good = _validate_good_indices(num_qubits, good_indices)
+    qc = build_standard_grover_circuit(num_qubits, L, good_indices=good)
     state = Statevector.from_instruction(qc)
 
-    success_prob = float(sum(np.abs(state.data[idx]) ** 2 for idx in marked))
-    lam = len(marked) / (2**num_qubits)
-    theta = 2.0 * np.arcsin(np.sqrt(lam))
+    success_prob = float(sum(np.abs(state.data[idx]) ** 2 for idx in good))
+    p_value = len(good) / (2**num_qubits)
+    theta0 = np.arcsin(np.sqrt(p_value))
+    theta = 2.0 * theta0
     theoretical_prob = float(np.sin((2 * L + 1) * theta / 2.0) ** 2)
 
     if not np.isclose(success_prob, theoretical_prob, atol=atol):
@@ -268,16 +280,16 @@ def test_grover_fallback_rigor(
 # -----------------------------------------------------------------------------
 
 def simulate_2d_fpaa_sequence(lam: float, alphas: np.ndarray, betas: np.ndarray) -> float:
-    """Simulate FPAA in invariant basis {|Bad>, |Good>} for continuous lambda."""
+    """Simulate FPAA in invariant basis {|H_Bad>,|H_Good>} for input probability p."""
     if len(alphas) != len(betas):
         raise ValueError("alphas and betas must have same length.")
 
-    lam = float(np.clip(lam, 0.0, 1.0))
-    if lam <= 0.0:
+    p = float(np.clip(lam, 0.0, 1.0))
+    if p <= 0.0:
         return 0.0
 
     # Initial vector and projectors in the 2D invariant subspace.
-    s = np.array([math.sqrt(1.0 - lam), math.sqrt(lam)], dtype=complex)
+    s = np.array([math.sqrt(1.0 - p), math.sqrt(p)], dtype=complex)
     state = s.copy()
     I = np.eye(2, dtype=complex)
     Pi_t = np.array([[0.0, 0.0], [0.0, 1.0]], dtype=complex)
@@ -292,10 +304,10 @@ def simulate_2d_fpaa_sequence(lam: float, alphas: np.ndarray, betas: np.ndarray)
 
 
 def _grover_closed_form_success(lam: float, iterations: int) -> float:
-    lam = float(np.clip(lam, 0.0, 1.0))
-    if lam <= 0.0:
+    p_value = float(np.clip(lam, 0.0, 1.0))
+    if p_value <= 0.0:
         return 0.0
-    theta = 2.0 * np.arcsin(np.sqrt(lam))
+    theta = 2.0 * np.arcsin(np.sqrt(p_value))
     return float(np.sin((2 * iterations + 1) * theta / 2.0) ** 2)
 
 
@@ -303,25 +315,25 @@ def sweep_passband(
     L: int,
     delta: float,
     epsilon: float = 0.0,
-    lambda_min: float = 1e-3,
-    lambda_max: float = 1.0,
+    p_min: float = 1e-3,
+    p_max: float = 1.0,
     num_points: int = 1000,
 ) -> Dict[str, np.ndarray]:
-    """Sweep continuous lambda and compare FPAA vs standard Grover."""
-    lambdas = np.linspace(lambda_min, lambda_max, num_points)
+    """Sweep continuous p and compare FPAA vs standard Grover."""
+    p_values = np.linspace(p_min, p_max, num_points)
     alphas, betas = generate_fpaa_phases(L=L, delta=delta, epsilon=epsilon)
 
-    fpaa = np.array([simulate_2d_fpaa_sequence(lam, alphas, betas) for lam in lambdas], dtype=float)
-    grover = np.array([_grover_closed_form_success(lam, L) for lam in lambdas], dtype=float)
+    fpaa = np.array([simulate_2d_fpaa_sequence(p, alphas, betas) for p in p_values], dtype=float)
+    grover = np.array([_grover_closed_form_success(p, L) for p in p_values], dtype=float)
 
     w = passband_edge(L, delta)
     floor = 1.0 - delta * delta
-    mask = lambdas >= w
+    mask = p_values >= w
     min_passband = float(np.min(fpaa[mask])) if np.any(mask) else float("nan")
     max_violation = float(max(0.0, floor - min_passband)) if np.isfinite(min_passband) else float("nan")
 
     return {
-        "lambda": lambdas,
+        "p": p_values,
         "fpaa": fpaa,
         "grover": grover,
         "passband_edge": np.array([w]),
@@ -334,23 +346,23 @@ def sweep_passband(
 def _plot_passband(curve: Dict[str, np.ndarray], output: str, title: str) -> None:
     import matplotlib.pyplot as plt
 
-    lam = curve["lambda"]
+    p_values = curve["p"]
     edge = float(curve["passband_edge"][0])
     floor = float(curve["target_floor"][0])
     min_passband = float(curve["min_passband"][0])
     max_violation = float(curve["max_violation"][0])
 
     plt.figure(figsize=(10, 6))
-    plt.plot(lam, curve["grover"], "--", color="red", alpha=0.75, label="Standard Grover")
-    plt.plot(lam, curve["fpaa"], color="blue", linewidth=2.4, label="FPAA")
+    plt.plot(p_values, curve["grover"], "--", color="red", alpha=0.75, label="Standard Grover")
+    plt.plot(p_values, curve["fpaa"], color="blue", linewidth=2.4, label="FPAA")
     plt.axvline(edge, color="green", linestyle=":", label=f"Passband edge w={edge:.4f}")
     plt.axhline(floor, color="black", linestyle=":", label=f"Target floor 1-delta^2={floor:.4f}")
-    plt.fill_between(lam, floor, 1.0, where=(lam >= edge), color="green", alpha=0.08)
+    plt.fill_between(p_values, floor, 1.0, where=(p_values >= edge), color="green", alpha=0.08)
     plt.ylim(0.0, 1.02)
     plt.xlim(0.0, 1.0)
-    plt.xlabel("Initial Success Probability (lambda)")
-    plt.ylabel("Final Success Probability")
-    plt.title(f"{title}\nmin(FPAA|lambda>=w)={min_passband:.6f}, violation={max_violation:.2e}")
+    plt.xlabel("Initial Success Probability (p)")
+    plt.ylabel("Final Success Probability p_k")
+    plt.title(f"{title}\nmin(FPAA|p>=w)={min_passband:.6f}, violation={max_violation:.2e}")
     plt.grid(alpha=0.3)
     plt.legend(loc="lower right")
     plt.tight_layout()
@@ -363,8 +375,8 @@ def plot_passband_plateau(
     delta: float,
     output: str = "fpaa_passband.png",
     epsilon: float = 0.0,
-    lambda_min: float = 1e-3,
-    lambda_max: float = 1.0,
+    p_min: float = 1e-3,
+    p_max: float = 1.0,
     num_points: int = 1000,
 ) -> Dict[str, np.ndarray]:
     """Generate Module-3 journal evidence plot."""
@@ -372,8 +384,8 @@ def plot_passband_plateau(
         L=L,
         delta=delta,
         epsilon=epsilon,
-        lambda_min=lambda_min,
-        lambda_max=lambda_max,
+        p_min=p_min,
+        p_max=p_max,
         num_points=num_points,
     )
     _plot_passband(curve, output, f"FPAA Passband (L={L}, delta={delta})")
@@ -402,18 +414,18 @@ def build_nested_fpaa_circuit(
     L1: int,
     L2: int,
     delta: float,
-    marked_state: Optional[str] = None,
-    marked_indices: Optional[Sequence[int]] = None,
+    good_state: Optional[str] = None,
+    good_indices: Optional[Sequence[int]] = None,
 ) -> "QuantumCircuit":
     """Build nested circuit: outer source reflection about |psi_L1> = U_L1|0>."""
     _require_qiskit()
-    if marked_indices is None:
-        marked_indices = _marked_state_to_indices(num_qubits, marked_state)
-    marked = _validate_marked_indices(num_qubits, marked_indices)
+    if good_indices is None:
+        good_indices = _good_state_to_indices(num_qubits, good_state)
+    good = _validate_good_indices(num_qubits, good_indices)
 
     # Inner unitary U_L1 (as gate) and inverse.
     a1, b1 = generate_fpaa_phases(L1, delta)
-    u1 = build_fpaa_circuit_from_phases(num_qubits, marked, a1, b1, initialize_superposition=True).to_gate(
+    u1 = build_fpaa_circuit_from_phases(num_qubits, good, a1, b1, initialize_superposition=True).to_gate(
         label=f"U_L{L1}"
     )
     u1_dag = u1.inverse()
@@ -424,7 +436,7 @@ def build_nested_fpaa_circuit(
     qc.append(u1, range(num_qubits))
     for a_j, b_j in zip(a2, b2):
         qc.global_phase += np.pi
-        qc.append(generalized_oracle(num_qubits, marked, float(b_j)).to_gate(), range(num_qubits))
+        qc.append(generalized_oracle(num_qubits, good, float(b_j)).to_gate(), range(num_qubits))
         qc.append(u1_dag, range(num_qubits))
         qc.append(_s0_reflection_gate(num_qubits, float(a_j)), range(num_qubits))
         qc.append(u1, range(num_qubits))
@@ -435,22 +447,22 @@ def recursive_nesting_curves(
     L1: int = 3,
     L2: int = 3,
     delta: float = 0.1,
-    lambda_min: float = 1e-4,
-    lambda_max: float = 0.4,
+    p_min: float = 1e-4,
+    p_max: float = 0.4,
     num_points: int = 1000,
 ) -> Dict[str, np.ndarray]:
     """Compare base L1, nested L1xL2, and native L1*L2 in SU(2) simulation."""
     a1, b1 = generate_fpaa_phases(L1, delta)
     ac, bc = generate_fpaa_phases(L1 * L2, delta)
-    lam = np.linspace(lambda_min, lambda_max, num_points)
+    p_values = np.linspace(p_min, p_max, num_points)
 
-    base = np.array([simulate_2d_fpaa_sequence(x, a1, b1) for x in lam], dtype=float)
+    base = np.array([simulate_2d_fpaa_sequence(x, a1, b1) for x in p_values], dtype=float)
     nested = np.array([simulate_2d_fpaa_sequence(p, a1, b1) for p in base], dtype=float)
-    native = np.array([simulate_2d_fpaa_sequence(x, ac, bc) for x in lam], dtype=float)
+    native = np.array([simulate_2d_fpaa_sequence(x, ac, bc) for x in p_values], dtype=float)
 
     diff = np.abs(nested - native)
     return {
-        "lambda": lam,
+        "p": p_values,
         "base_l1": base,
         "nested": nested,
         "native": native,
@@ -466,24 +478,24 @@ def plot_recursive_nesting_proof(
     L2: int = 3,
     delta: float = 0.1,
     output: str = "fpaa_nesting.png",
-    lambda_min: float = 1e-4,
-    lambda_max: float = 0.4,
+    p_min: float = 1e-4,
+    p_max: float = 0.4,
     num_points: int = 1000,
 ) -> Dict[str, np.ndarray]:
     """Generate Module-4 overlay proof: nested (L1xL2) vs native (L1*L2)."""
     import matplotlib.pyplot as plt
 
-    c = recursive_nesting_curves(L1, L2, delta, lambda_min, lambda_max, num_points)
+    c = recursive_nesting_curves(L1, L2, delta, p_min, p_max, num_points)
     max_diff = float(c["max_abs_diff"][0])
 
     plt.figure(figsize=(10, 6))
-    plt.plot(c["lambda"], c["base_l1"], color="gray", linestyle=":", linewidth=2.0, label=f"Base L={L1}")
-    plt.plot(c["lambda"], c["native"], color="blue", linewidth=3.0, alpha=0.55, label=f"Native L={L1*L2}")
-    plt.plot(c["lambda"], c["nested"], color="red", linestyle="--", linewidth=2.0, label=f"Nested {L1}x{L2}")
+    plt.plot(c["p"], c["base_l1"], color="gray", linestyle=":", linewidth=2.0, label=f"Base L={L1}")
+    plt.plot(c["p"], c["native"], color="blue", linewidth=3.0, alpha=0.55, label=f"Native L={L1*L2}")
+    plt.plot(c["p"], c["nested"], color="red", linestyle="--", linewidth=2.0, label=f"Nested {L1}x{L2}")
     plt.axvline(float(c["w_l1"][0]), color="gray", linestyle=":", alpha=0.6)
     plt.axvline(float(c["w_comp"][0]), color="blue", linestyle=":", alpha=0.6)
-    plt.xlabel("Initial Success Probability (lambda)")
-    plt.ylabel("Final Success Probability")
+    plt.xlabel("Initial Success Probability (p)")
+    plt.ylabel("Final Success Probability p_k")
     plt.title(f"Recursive Nesting: T_{L2}(T_{L1}(x)) = T_{L1*L2}(x)\nmax |nested-native|={max_diff:.2e}")
     plt.grid(alpha=0.3)
     plt.legend(loc="lower right")
@@ -524,25 +536,25 @@ def noise_sensitivity_sweep(
     L: int,
     delta: float,
     epsilons: Iterable[float] = (0.0, 0.01, 0.05, 0.10),
-    lambda_min: float = 1e-3,
-    lambda_max: float = 1.0,
+    p_min: float = 1e-3,
+    p_max: float = 1.0,
     num_points: int = 1000,
 ) -> Dict[float, Dict[str, np.ndarray]]:
     """Run noisy passband sweeps and report degradation metrics per epsilon."""
     alphas, betas = generate_fpaa_phases(L=L, delta=delta)
-    lam = np.linspace(lambda_min, lambda_max, num_points)
+    p_values = np.linspace(p_min, p_max, num_points)
     w = passband_edge(L, delta)
     floor = 1.0 - delta * delta
-    mask = lam >= w
+    mask = p_values >= w
 
     out: Dict[float, Dict[str, np.ndarray]] = {}
     for eps in epsilons:
-        p = np.array([simulate_noisy_fpaa_sequence(x, alphas, betas, float(eps)) for x in lam], dtype=float)
-        min_passband = float(np.min(p[mask])) if np.any(mask) else float("nan")
+        p_final = np.array([simulate_noisy_fpaa_sequence(x, alphas, betas, float(eps)) for x in p_values], dtype=float)
+        min_passband = float(np.min(p_final[mask])) if np.any(mask) else float("nan")
         max_violation = float(max(0.0, floor - min_passband)) if np.isfinite(min_passband) else float("nan")
         out[float(eps)] = {
-            "lambda": lam,
-            "fpaa": p,
+            "p": p_values,
+            "fpaa": p_final,
             "passband_edge": np.array([w]),
             "target_floor": np.array([floor]),
             "min_passband": np.array([min_passband]),
@@ -561,7 +573,7 @@ def _plot_noise(noise_curves: Dict[float, Dict[str, np.ndarray]], output: str, t
     for eps, curve in sorted(noise_curves.items(), key=lambda kv: kv[0]):
         label = "Ideal (0% Error)" if eps == 0.0 else f"{100*eps:.0f}% Phase Error"
         plt.plot(
-            curve["lambda"],
+            curve["p"],
             curve["fpaa"],
             color=colors.get(float(eps), None),
             linestyle=styles.get(float(eps), "--"),
@@ -577,8 +589,8 @@ def _plot_noise(noise_curves: Dict[float, Dict[str, np.ndarray]], output: str, t
 
     plt.xlim(0.0, 1.0)
     plt.ylim(0.0, 1.02)
-    plt.xlabel("Initial Success Probability (lambda)")
-    plt.ylabel("Final Success Probability")
+    plt.xlabel("Initial Success Probability (p)")
+    plt.ylabel("Final Success Probability p_k")
     plt.title(title)
     plt.grid(alpha=0.3)
     plt.legend(loc="lower right")
@@ -592,12 +604,12 @@ def plot_nisq_robustness_benchmark(
     delta: float = 0.1,
     output: str = "fpaa_noise.png",
     epsilons: Iterable[float] = (0.0, 0.01, 0.05, 0.10),
-    lambda_min: float = 1e-3,
-    lambda_max: float = 1.0,
+    p_min: float = 1e-3,
+    p_max: float = 1.0,
     num_points: int = 1000,
 ) -> Dict[float, Dict[str, np.ndarray]]:
     """Generate Module-5 degradation plot and return metrics."""
-    curves = noise_sensitivity_sweep(L, delta, epsilons, lambda_min, lambda_max, num_points)
+    curves = noise_sensitivity_sweep(L, delta, epsilons, p_min, p_max, num_points)
     _plot_noise(curves, output, f"NISQ Robustness: FPAA Plateau Degradation (L={L}, delta={delta})")
     return curves
 
@@ -659,23 +671,23 @@ def benchmark_t_gate_blowup(
     num_qubits: int,
     L: int,
     delta: float,
-    marked_state: Optional[str] = None,
-    marked_indices: Optional[Sequence[int]] = None,
+    good_state: Optional[str] = None,
+    good_indices: Optional[Sequence[int]] = None,
     synthesis_eps: float = 1e-3,
     optimization_level: int = 3,
 ) -> List[CompilationResult]:
-    """Compile Grover vs FPAA into Clifford+T and compare T-gate overhead."""
+    """Compile Grover vs FPAA into Clifford+T and compare query-oracle overhead proxies."""
     _require_qiskit()
     if transpile is None:
         raise RuntimeError("Qiskit transpiler is unavailable.")
 
-    if marked_indices is None:
-        marked_indices = _marked_state_to_indices(num_qubits, marked_state)
-    marked = _validate_marked_indices(num_qubits, marked_indices)
+    if good_indices is None:
+        good_indices = _good_state_to_indices(num_qubits, good_state)
+    good = _validate_good_indices(num_qubits, good_indices)
 
     # Equal algorithmic depth benchmark (same L).
-    grover = build_standard_grover_circuit(num_qubits, L, marked_indices=marked)
-    fpaa = build_fpaa_circuit(num_qubits, L, delta, marked_indices=marked)
+    grover = build_standard_grover_circuit(num_qubits, L, good_indices=good)
+    fpaa = build_fpaa_circuit(num_qubits, L, delta, good_indices=good)
 
     def direct_t_count(qc: "QuantumCircuit") -> Optional[int]:
         try:
@@ -759,12 +771,12 @@ def _save_resource_table(rows: List[CompilationResult], output_csv: str) -> None
 # CLI orchestration
 # -----------------------------------------------------------------------------
 
-def main() -> None:
+def main(argv: Optional[Sequence[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="FPAA Section III architectural trade-off study")
     parser.add_argument("--L", type=int, default=3, help="FPAA sequence length")
     parser.add_argument("--delta", type=float, default=0.1, help="Failure bound parameter")
     parser.add_argument("--qubits", type=int, default=4, help="Qubit count for circuit benchmarks")
-    parser.add_argument("--marked", type=str, default=None, help="Marked state bitstring, e.g. 1111")
+    parser.add_argument("--good", type=str, default=None, help="H_Good basis-state bitstring, e.g. 1111")
     parser.add_argument("--out-prefix", type=str, default="fpaa", help="Output artifact prefix")
     parser.add_argument(
         "--synthesis-eps",
@@ -773,14 +785,14 @@ def main() -> None:
         help="Per-rotation synthesis precision for FTQC T-count estimation fallback",
     )
     parser.add_argument("--run-all", action="store_true", help="Run all six modules and emit artifacts")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Core rigor checks for Modules 1 and 2.
     test_table_i_exact_match(delta=0.1)
     print("Phase schedule test (L=3 analytical Table-I check): PASSED")
 
     try:
-        test_grover_fallback_rigor(num_qubits=4, marked_indices=(5,), L=3)
+        test_grover_fallback_rigor(num_qubits=4, good_indices=(5,), L=3)
         print("Generalized iterate test (Grover fallback at alpha=beta=pi): PASSED")
     except RuntimeError as exc:
         print(f"Generalized iterate test skipped: {exc}")
@@ -800,7 +812,7 @@ def main() -> None:
         "Passband rigor:"
         f" w={float(pass_curve['passband_edge'][0]):.6f},"
         f" target={float(pass_curve['target_floor'][0]):.6f},"
-        f" min(FPAA|lambda>=w)={float(pass_curve['min_passband'][0]):.6f},"
+        f" min(FPAA|p>=w)={float(pass_curve['min_passband'][0]):.6f},"
         f" violation={float(pass_curve['max_violation'][0]):.2e}"
     )
 
@@ -812,7 +824,7 @@ def main() -> None:
     print(f"NISQ robustness diagnostics (L={noise_L}):")
     for eps, c in sorted(noise.items(), key=lambda kv: kv[0]):
         print(
-            f"  eps={100*eps:>4.0f}% | min(FPAA|lambda>=w)={float(c['min_passband'][0]):.6f}"
+            f"  eps={100*eps:>4.0f}% | min(FPAA|p>=w)={float(c['min_passband'][0]):.6f}"
             f" | violation={float(c['max_violation'][0]):.2e}"
         )
 
@@ -829,7 +841,7 @@ def main() -> None:
             num_qubits=args.qubits,
             L=args.L,
             delta=args.delta,
-            marked_state=args.marked,
+            good_state=args.good,
             synthesis_eps=args.synthesis_eps,
         )
         table_csv = f"{args.out_prefix}_resource_overhead.csv"
@@ -845,4 +857,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    start_one_click_session(__file__, figure_prefix="fpaa")
+    if len(sys.argv) == 1:
+        script_stem = Path(__file__).stem
+        main(["--run-all", "--out-prefix", script_stem])
+    else:
+        main()
