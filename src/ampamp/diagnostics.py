@@ -10,12 +10,20 @@ from qiskit import transpile, QuantumCircuit
 from qiskit_aer import AerSimulator
 from qiskit.quantum_info import partial_trace
 
+from .foundations import GroverEngine
+from .fixed_point import FixedPointEngine
+from .oblivious import ObliviousEngine
+from .fpoa import FOQAEngine
+from .distributed import DQAAEngine
+from .variable_time import VTAAEngine
+from .qsvt import SU2QSPEngine
+
 class GroverAuditor:
     """Diagnostic suite for Grover's Algorithm.
 
     Handles the 'Soufflé' problem, cloning barriers, and subspace verification.
     """
-    def __init__(self, engine):
+    def __init__(self, engine: GroverEngine):
         """Initializes the GroverAuditor.
 
         Args:
@@ -34,7 +42,7 @@ class GroverAuditor:
             if idx not in engine.marked:
                 self.bad_vec[idx] = 1.0 / np.sqrt(engine.N - engine.M)
 
-    def verify_subspace_rotation(self, max_k: int):
+    def verify_subspace_rotation(self, max_k: int) -> dict:
         """Audits the Invariant Subspace Theorem.
 
         Verifies that $|a|^2 + |b|^2 = 1.0$ throughout the rotation.
@@ -65,7 +73,7 @@ class GroverAuditor:
             
         return results
 
-    def run_cloning_test(self, max_k: int):
+    def run_cloning_test(self, max_k: int) -> tuple:
         """Empirical proof of the No-Cloning Theorem.
 
         Measures purity collapse after a naive CNOT copy attempt.
@@ -109,7 +117,7 @@ class GroverAuditor:
         return purity_original, purity_cloned
 
     @staticmethod
-    def generate_souffle_heatmap(k_max: int, lambda_max: float, res: int = 200):
+    def generate_souffle_heatmap(k_max: int, lambda_max: float, res: int = 200) -> tuple:
         """Vectorized analytic heatmap of the Soufflé Problem.
 
         Args:
@@ -134,7 +142,7 @@ class GroverAuditor:
 class FPAAAuditor:
     """Diagnostic suite for FPAA robustness and resource costs."""
     
-    def __init__(self, engine):
+    def __init__(self, engine: FixedPointEngine):
         """Initializes the FPAAAuditor.
 
         Args:
@@ -142,7 +150,7 @@ class FPAAAuditor:
         """
         self.engine = engine
 
-    def audit_passband(self, lambda_range=None):
+    def audit_passband(self, lambda_range: np.ndarray = None) -> None:
         """Analyzes the 'Plateau' behavior where success prob stays near 1.
 
         Args:
@@ -155,7 +163,7 @@ class FPAAAuditor:
         # Verification of the 'Floor' 1 - delta^2
         pass
 
-    def estimate_ftqc_cost(self, synthesis_epsilon=1e-3):
+    def estimate_ftqc_cost(self, synthesis_epsilon: float = 1e-3) -> None:
         """Calculates T-gate overhead for Clifford+T fault-tolerant architectures.
 
         Args:
@@ -168,7 +176,7 @@ class FPAAAuditor:
 class ObliviousAuditor:
     """Diagnostic suite for verifying OAA and LCU block-encodings."""
     
-    def __init__(self, engine):
+    def __init__(self, engine: ObliviousEngine):
         """Initializes the ObliviousAuditor.
 
         Args:
@@ -176,7 +184,7 @@ class ObliviousAuditor:
         """
         self.engine = engine
 
-    def run_acid_test(self, num_states=10):
+    def run_acid_test(self, num_states: int = 10) -> None:
         """Verifies the 'Equivalence Theorem'.
 
         Checks that OAA success probability is practically independent of the input state.
@@ -187,7 +195,7 @@ class ObliviousAuditor:
         # Logic from your run_acid_tests function
         pass
 
-    def verify_lcu_distance(self, actual_matrix, target_hamiltonian, alpha):
+    def verify_lcu_distance(self, actual_matrix: np.ndarray, target_hamiltonian: np.ndarray, alpha: float) -> float:
         """Measures $||M_{TL} - H/\\alpha||_F$ to verify Linear Combination of Unitaries accuracy.
 
         Args:
@@ -206,7 +214,7 @@ class ObliviousAuditor:
 class FOQAAuditor:
     """Diagnostic laboratory for FOQA recurrence limits and boundaries."""
     
-    def __init__(self, engine):
+    def __init__(self, engine: FOQAEngine):
         """Initializes the FOQAAuditor.
 
         Args:
@@ -214,7 +222,7 @@ class FOQAAuditor:
         """
         self.engine = engine
 
-    def audit_damping_regimes(self, iterations=120, mizel_c=1.4):
+    def audit_damping_regimes(self, iterations: int = 120, mizel_c: float = 1.4) -> dict:
         """Module 2: Sweeps under/over/critical damping behaviors.
 
         Args:
@@ -234,7 +242,7 @@ class FOQAAuditor:
             "critical": self.engine.simulate_recurrence(mizel)
         }
 
-    def audit_asymptotic_complexity(self, target_success=0.99):
+    def audit_asymptotic_complexity(self, target_success: float = 0.99) -> None:
         """Module 4: Runs $\\lambda$ sweeps to verify the -0.5 log-log slope.
 
         Args:
@@ -243,7 +251,7 @@ class FOQAAuditor:
         # Implementation of your while-loop lambda sweep goes here
         pass
 
-    def audit_empty_database_paradox(self, iterations=50):
+    def audit_empty_database_paradox(self, iterations: int = 50) -> np.ndarray:
         """Module 6: Verifies strict suppression of false positives at $\\theta=0$.
 
         Args:
@@ -269,7 +277,7 @@ class FOQAAuditor:
 class DistributedAuditor:
     """Diagnostic suite for DQAA network stats, noise, and hardware compilation."""
     
-    def __init__(self, engine):
+    def __init__(self, engine: DQAAEngine):
         """Initializes the DistributedAuditor.
 
         Args:
@@ -277,7 +285,7 @@ class DistributedAuditor:
         """
         self.engine = engine
 
-    def verify_lucky_node_theorem(self, num_marked: int, trials: int = 2000):
+    def verify_lucky_node_theorem(self, num_marked: int, trials: int = 2000) -> None:
         """Runs Monte Carlo simulations to empirically verify the convexity guarantee.
 
         Evaluates the property: $\\max_k a_k \\ge a$.
@@ -289,7 +297,7 @@ class DistributedAuditor:
         # Logic from your run_lucky_node_monte_carlo function goes here
         pass
 
-    def audit_entanglement_obstruction(self, target_global: str):
+    def audit_entanglement_obstruction(self, target_global: str) -> None:
         """Negative proof for external state decoherence.
 
         Validates that cross-register entanglement destroys the local FPAA 
@@ -301,7 +309,7 @@ class DistributedAuditor:
         # Logic from your experiment_entanglement_obstruction function goes here
         pass
 
-    def benchmark_nisq_noise(self, noise_model, shots=4096):
+    def benchmark_nisq_noise(self, noise_model: object, shots: int = 4096) -> None:
         """Compares Monolithic vs Distributed execution under hardware noise.
 
         Args:
@@ -311,7 +319,7 @@ class DistributedAuditor:
         # Logic from your experiment_nisq_noise_resilience goes here
         pass
         
-    def simulate_network_sifting(self, shots_per_node: int, sigma: float = 4.0):
+    def simulate_network_sifting(self, shots_per_node: int, sigma: float = 4.0) -> None:
         """End-to-end classical master-node statistical sifting simulation.
 
         Args:
@@ -325,7 +333,7 @@ class DistributedAuditor:
 class VTAAAuditor:
     """Diagnostic suite for Variable-Time Amplitude Amplification."""
     
-    def __init__(self, engine):
+    def __init__(self, engine: VTAAEngine):
         """Initializes the VTAAAuditor.
 
         Args:
@@ -333,7 +341,7 @@ class VTAAAuditor:
         """
         self.engine = engine
 
-    def sweep_cost_ratios(self, total_ps: float, t1: float, t2: float, t3: float):
+    def sweep_cost_ratios(self, total_ps: float, t1: float, t2: float, t3: float) -> None:
         """Sweeps early-success ratio and compares VTAA to worst-case AA.
 
         Args:
@@ -352,7 +360,7 @@ class FundamentalLimitsAuditor:
     across all quantum amplitude amplification algorithms.
     """
     
-    def audit_subspace_svd(self, n: int, k_max: int, rank_threshold: float = 1e-12):
+    def audit_subspace_svd(self, n: int, k_max: int, rank_threshold: float = 1e-12) -> None:
         """Constructs history matrix $H$ and SVD-audits empirical rank.
 
         Args:
@@ -363,7 +371,7 @@ class FundamentalLimitsAuditor:
         # Logic from your experiment_2d_subspace_extractor
         pass
 
-    def audit_open_system_trajectory(self, n: int, k_max: int, phase_damp_1q: float, phase_damp_2q: float):
+    def audit_open_system_trajectory(self, n: int, k_max: int, phase_damp_1q: float, phase_damp_2q: float) -> None:
         """Simulates AA via Density Matrix and tracks trace-distance to the 2D plane.
 
         Args:
@@ -375,7 +383,7 @@ class FundamentalLimitsAuditor:
         # Logic from your experiment_open_system_trajectory
         pass
 
-    def audit_ftqc_diffusion_scaling(self, n_min: int, n_max: int):
+    def audit_ftqc_diffusion_scaling(self, n_min: int, n_max: int) -> None:
         """Compiles MCX diffusion to Clifford+T to record scaling metrics.
 
         Args:
@@ -385,7 +393,7 @@ class FundamentalLimitsAuditor:
         # Logic from your experiment_ftqc_diffusion_scaling
         pass
         
-    def audit_phase_leakage(self, eps_oracle_deg: float, eps_diff_deg: float):
+    def audit_phase_leakage(self, eps_oracle_deg: float, eps_diff_deg: float) -> None:
         """Tracks rank-growth under phase mismatch and analog control skew.
 
         Args:
@@ -402,7 +410,7 @@ class QSVTAuditor:
     Tracks adversarial edge cases, robustness mapping bounds, 
     and general operator calculus.
     """
-    def __init__(self, engine):
+    def __init__(self, engine: SU2QSPEngine):
         """Expects an SU2QSPEngine instance.
 
         Args:
@@ -410,7 +418,7 @@ class QSVTAuditor:
         """
         self.engine = engine
 
-    def audit_unitarity_and_parity(self, phases: np.ndarray, tolerance: float = 1e-10):
+    def audit_unitarity_and_parity(self, phases: np.ndarray, tolerance: float = 1e-10) -> tuple:
         """Phase I: Validates $P(x)$ against strict mathematical bounds.
 
         Args:
@@ -431,7 +439,7 @@ class QSVTAuditor:
         
         return max_unitarity_err < tolerance, max_parity_err < tolerance
 
-    def audit_gibbs_catastrophe(self, degree: int):
+    def audit_gibbs_catastrophe(self, degree: int) -> None:
         """Phase V: Exposes unitarity violations when fitting discontinuous targets.
 
         Args:
@@ -440,7 +448,7 @@ class QSVTAuditor:
         # Logic from experiment_adversarial_gibbs_catastrophe
         pass
 
-    def audit_subnormalization_hubris(self, dim: int, target_sigma_max: float = 2.5):
+    def audit_subnormalization_hubris(self, dim: int, target_sigma_max: float = 2.5) -> None:
         """Phase V: Proves that artificially shrinking the block-encoding.
 
         Shrinking factor $\\alpha$ creates non-PSD defect matrices, breaking unitary dilation.
@@ -452,7 +460,7 @@ class QSVTAuditor:
         # Logic from experiment_adversarial_subnormalization_hubris
         pass
 
-    def audit_phase_quantization(self, degree: int, bit_depth: int):
+    def audit_phase_quantization(self, degree: int, bit_depth: int) -> None:
         """Phase V: Simulates finite DAC bit-depth and tracks fidelity collapse.
 
         Args:
@@ -462,7 +470,7 @@ class QSVTAuditor:
         # Logic from experiment_adversarial_phase_quantization
         pass
         
-    def audit_parity_scramble(self, dim: int):
+    def audit_parity_scramble(self, dim: int) -> None:
         """Phase V: Demonstrates mixed-parity failure on non-Hermitian inputs.
 
         Args:

@@ -1,0 +1,130 @@
+/* PyTorch-Inspired Professional 2026 Theme */
+
+:root {
+  /* PyTorch Signature Orange/Red */
+  --md-primary-fg-color: #EE4C2C;
+  --md-primary-fg-color--light: #F27357;
+  --md-primary-fg-color--dark: #C63F24;
+  --md-primary-bg-color: #ffffff;
+  
+  --md-accent-fg-color: #EE4C2C;
+  --md-text-font-family: "Outfit", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+  --md-code-font-family: "JetBrains Mono", SFMono-Regular, Consolas, Menlo, monospace;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #EE4C2C;
+  --md-primary-fg-color--light: #F27357;
+  --md-primary-fg-color--dark: #C63F24;
+  --md-default-bg-color: #1a1a1c;
+  --md-default-fg-color: #e5e7eb;
+  --md-accent-fg-color: #EE4C2C;
+}
+
+/* Bold, Solid Header (No translucent glassmorphism) */
+.md-header {
+  background-color: var(--md-primary-fg-color) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+[data-md-color-scheme="slate"] .md-header {
+  background-color: #1a1a1c !important;
+  color: #ffffff !important;
+  border-bottom: 2px solid var(--md-primary-fg-color);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3) !important;
+}
+
+.md-header__button.md-logo img, .md-header__button.md-logo svg {
+  fill: currentColor !important;
+}
+
+.md-header__button {
+  color: inherit !important;
+}
+
+/* PyTorch-Style Feature Cards */
+.mdx-container .grid.cards > * {
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background-color: #ffffff;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+[data-md-color-scheme="slate"] .mdx-container .grid.cards > * {
+  background-color: #242426;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.mdx-container .grid.cards > *:hover {
+  transform: translateY(-2px);
+  border-color: var(--md-primary-fg-color);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+[data-md-color-scheme="slate"] .mdx-container .grid.cards > *:hover {
+  border-color: var(--md-primary-fg-color);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Crisp Search Bar */
+[data-md-color-scheme="default"] .md-search__input {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  color: #fff !important;
+}
+[data-md-color-scheme="default"] .md-search__input::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+[data-md-color-scheme="default"] .md-search__input:hover {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+[data-md-color-scheme="slate"] .md-search__input {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Typography Hierarchy */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--md-default-fg-color--light);
+}
+
+[data-md-color-scheme="slate"] h1, 
+[data-md-color-scheme="slate"] h2, 
+[data-md-color-scheme="slate"] h3 {
+  color: #ffffff;
+}
+
+/* Sophisticated Inline Code styling */
+code {
+  border-radius: 4px !important;
+  padding: 0.2em 0.4em !important;
+  font-size: 0.85em !important;
+  background-color: rgba(0,0,0,0.04);
+}
+
+[data-md-color-scheme="slate"] code {
+  background-color: rgba(255,255,255,0.06);
+}
+
+/* Links */
+a {
+  color: var(--md-primary-fg-color);
+  font-weight: 500;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* Sidebar active states */
+.md-nav__link--active {
+  font-weight: 700 !important;
+  color: var(--md-primary-fg-color) !important;
+}

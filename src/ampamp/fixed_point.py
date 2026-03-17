@@ -28,7 +28,7 @@ class FixedPointEngine:
         self.delta = delta
         self.alphas, self.betas = self._generate_phases()
 
-    def _generate_phases(self):
+    def _generate_phases(self) -> tuple:
         """Analytical FPAA phase schedule synthesis.
 
         Calculates the phase differences alpha and beta used precisely to ensure
@@ -51,7 +51,7 @@ class FixedPointEngine:
         
         return alpha, -alpha[::-1]
 
-    def build_fixed_point_circuit(self, num_qubits, marked_indices):
+    def build_fixed_point_circuit(self, num_qubits: int, marked_indices: list[int]) -> QuantumCircuit:
         """Synthesizes the Generalized Grover Iterate sequence.
 
         Constructs the complete quantum circuit utilizing the derived phase schedules.
