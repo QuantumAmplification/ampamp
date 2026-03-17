@@ -4,34 +4,44 @@ from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 from qiskit.quantum_info import partial_trace, state_fidelity
 
+from one_click_utils import start_one_click_session
+
 class GroverGeometricLab:
     """
     Module for Section II: Grover's Algorithm.
     A rigorous numerical study of 2D geometry, instability, and cloning barriers.
+
+    Standing notation aligned with final.tex:
+    - H_Good / H_Bad: target and non-target subspaces
+    - |All> = H^{⊗n}|0>^{⊗n}: prepared input state
+    - p = ||Pi_Good |All>||^2 = M/N: initial success probability
+    - sin^2(theta0) = p and Grover step angle theta = 2*theta0
     """
-    def __init__(self, n_qubits, marked_indices):
+    def __init__(self, n_qubits, good_indices):
         """
         Initializes the GroverGeometricLab simulation environment.
 
         Args:
             n_qubits (int): Total number of qubits in the quantum register.
-            marked_indices (list of int): Integer representations of the marked (target) states.
+            good_indices (list of int): Computational-basis indices spanning H_Good.
         """
         # Define the dimensionality of the quantum state space
         self.n = n_qubits
         self.N = 2**n_qubits
         
-        # Store properties related to the search targets
-        self.marked = marked_indices
-        self.M = len(marked_indices)
+        # Store properties related to the H_Good subspace
+        self.good_indices = good_indices
+        self.M = len(good_indices)
         
-        # Calculate the initial probability of measuring a marked state (solution density)
-        self.lambda_val = self.M / self.N
+        # Initial success probability p = M/N = ||Pi_Good |All>||^2
+        self.p = self.M / self.N
+        self.p_init = self.p
         
-        # Calculate the geometric rotation angle theta between the initial state and the unmarked subspace
-        self.theta = 2 * np.arcsin(np.sqrt(self.lambda_val))
+        # theta0 satisfies sin^2(theta0)=p; Grover rotation step is theta=2*theta0
+        self.theta0 = np.arcsin(np.sqrt(self.p))
+        self.theta = 2 * self.theta0
         
-        # Optimal k* ≈ floor(pi/(4*arcsin(sqrt(lambda))) - 1/2) as provided in test cases
+        # Optimal k* ≈ floor(pi/(4*arcsin(sqrt(p))) - 1/2) as provided in test cases
         # This represents the theoretical optimum number of Grover iterations to maximize success probability
         self.k_optimal = int(np.floor(np.pi / (2 * self.theta) - 0.5))
         
@@ -43,23 +53,23 @@ class GroverGeometricLab:
         self.good_vec = np.zeros(self.N, dtype=complex)
         self.bad_vec = np.zeros(self.N, dtype=complex)
         
-        # Populate the 'good' state vector uniformly superpositioned over all target states
-        for idx in self.marked:
+        # Populate |Good> uniformly over basis states in H_Good
+        for idx in self.good_indices:
             self.good_vec[idx] = 1.0 / np.sqrt(self.M)
             
-        # Populate the 'bad' state vector uniformly superpositioned over all non-target states
+        # Populate |Bad> uniformly over basis states in H_Bad
         for idx in range(self.N):
-            if idx not in self.marked:
+            if idx not in self.good_indices:
                 self.bad_vec[idx] = 1.0 / np.sqrt(self.N - self.M)
 
-    def grover_success_prob(self, lambda_value: float, k: int) -> float:
-        """Standard Grover success probability in terms of lambda = M/N."""
-        if lambda_value < 0 or lambda_value > 1:
-            raise ValueError("lambda_value must be in [0, 1]")
-        if lambda_value == 0:
+    def grover_success_prob(self, p_value: float, k: int) -> float:
+        """Standard Grover success probability in terms of p (with p=M/N in search)."""
+        if p_value < 0 or p_value > 1:
+            raise ValueError("p_value must be in [0, 1]")
+        if p_value == 0:
             return 0.0
 
-        theta = 2.0 * np.arcsin(np.sqrt(lambda_value))
+        theta = 2.0 * np.arcsin(np.sqrt(p_value))
         angle = (2 * k + 1) * theta / 2.0
         return float(np.sin(angle) ** 2)
         
@@ -67,31 +77,31 @@ class GroverGeometricLab:
         self.good_vec = np.zeros(self.N, dtype=complex)
         self.bad_vec = np.zeros(self.N, dtype=complex)
         
-        for idx in self.marked:
+        for idx in self.good_indices:
             self.good_vec[idx] = 1.0 / np.sqrt(self.M)
             
         for idx in range(self.N):
-            if idx not in self.marked:
+            if idx not in self.good_indices:
                 self.bad_vec[idx] = 1.0 / np.sqrt(self.N - self.M)
 
     def get_oracle(self):
         """
         Standard Phase Oracle for Section II.
         
-        Constructs a quantum circuit that flips the phase of the marked states.
-        This is accomplished by flipping the target state to all 1s, applying a multi-controlled Z gate 
+        Constructs a phase oracle O = I - 2*Pi_Good that flips phase on H_Good.
+        This is accomplished by flipping each marked basis state to all 1s, applying a multi-controlled Z gate 
         (simulated using H, Multi-Controlled X, and H), and uncomputing the bit flips.
         
         Returns:
             QuantumCircuit: The synthesized phase oracle circuit.
         """
         qc = QuantumCircuit(self.n)
-        for index in self.marked:
-            # Convert the target index to its binary string representation (little-endian for Qiskit)
-            target_bin = format(index, f'0{self.n}b')[::-1]
+        for index in self.good_indices:
+            # Convert the good index to its binary string representation (little-endian for Qiskit)
+            good_bin = format(index, f'0{self.n}b')[::-1]
             
-            # Apply X-gates to transform the zero-bits of the target state into ones
-            for i, bit in enumerate(target_bin):
+            # Apply X-gates to transform the zero-bits of the good state into ones
+            for i, bit in enumerate(good_bin):
                 if bit == '0': qc.x(i)
                 
             # Apply a multi-controlled Z gate by wrapping a multi-controlled X (MCX) in Hadamard gates
@@ -100,7 +110,7 @@ class GroverGeometricLab:
             qc.h(self.n - 1)
             
             # Uncompute the initial X-gates to restore the state basis
-            for i, bit in enumerate(target_bin):
+            for i, bit in enumerate(good_bin):
                 if bit == '0': qc.x(i)
         return qc
 
@@ -109,8 +119,7 @@ class GroverGeometricLab:
         Standard Diffusion Reflection.
         
         Constructs the Grover diffusion operator (inversion about the mean).
-        This operator reflects the quantum state across the uniform superposition state 
-        to amplify the amplitudes of marked states.
+        This operator reflects about |All> to amplify overlap with H_Good.
         
         Returns:
             QuantumCircuit: The synthesized diffusion operator circuit.
@@ -142,13 +151,13 @@ class GroverGeometricLab:
         
         Observes the precise quantum state vector at each step of Grover's iteration to 
         empirically verify that the operation constitutes a rotation in a 2D invariant subspace 
-        spanned by the uniform target and non-target states.
+        spanned by |Good> and |Bad>.
         
         Args:
             max_k (int): Maximum number of iterations to simulate.
             
         Returns:
-            tuple: Arrays containing 'good' amplitudes, 'bad' amplitudes, the total subspace probability, 
+            tuple: Arrays containing |Good> and |Bad> amplitudes, total subspace probability, 
                    and the empirical success probabilities.
         """
         a_k_vals = []
@@ -178,7 +187,7 @@ class GroverGeometricLab:
             state_k = np.array(result.get_statevector())
             
             # Step C: The Projection Logic
-            # Calculate the projection coefficients for the good and bad basis vectors
+            # Projection coefficients in the {|Good>,|Bad>} plane
             ak = np.dot(self.good_vec.conj(), state_k)
             bk = np.dot(self.bad_vec.conj(), state_k)
             
@@ -189,7 +198,7 @@ class GroverGeometricLab:
             b_k_vals.append(bk)
             p_total_vals.append(prob_in_subspace)
             
-            # The actual success probability is |ak|^2, corresponding to a measurement collapsing to a marked state
+            # Success probability is |ak|^2 = ||Pi_Good|psi_k>||^2
             success_probs.append(np.abs(ak)**2)
             
         return np.array(a_k_vals), np.array(b_k_vals), np.array(p_total_vals), success_probs
@@ -251,7 +260,7 @@ class GroverGeometricLab:
             
         return purity_original, purity_after_copy
 
-    def sensitivity_heatmap(self, k_max, lambda_max, resolution=500):
+    def sensitivity_heatmap(self, k_max, p_max, resolution=500):
         """
         Module 5: Generates the 2D Soufflé Instability Heatmap.
         
@@ -260,7 +269,7 @@ class GroverGeometricLab:
         
         Args:
             k_max (int): The upper limit for the number of Grover iterations.
-            lambda_max (float): The upper limit for the solution density (M/N).
+            p_max (float): Upper bound for p = M/N.
             resolution (int): Resolution of the discretized test grid.
             
         Returns:
@@ -268,8 +277,8 @@ class GroverGeometricLab:
         """
         # 1. Create the Meshgrid for extensive parametric sampling
         k_range = np.arange(0, k_max)
-        lambda_range = np.linspace(0.001, lambda_max, resolution)
-        K, L = np.meshgrid(k_range, lambda_range)
+        p_range = np.linspace(0.001, p_max, resolution)
+        K, L = np.meshgrid(k_range, p_range)
         
         # 2. Vectorized Analytic Calculation
         theta = 2 * np.arcsin(np.sqrt(L))
@@ -287,16 +296,17 @@ class GroverGeometricLab:
         Args:
             k1 (int): Application count for an inner-layer Grover operator.
             k2 (int): Application count for an outer-layer meta-Grover operator.
-            max_lambda (float): Upper boundary for solution density on the evaluated smooth curve.
+            max_lambda (float): Backward-compatible name; interpreted as max_p.
             
         Returns:
             tuple: Solution density arrays, nested level probability curves, and gate depth analysis mappings.
         """
-        # 1. Analytical Evaluation utilizing discretized smooth curves for theoretical predictions
-        lambda_vals = np.linspace(0.0001, max_lambda, 500)
+        # 1. Analytical evaluation over p-grid (p = M/N)
+        max_p = max_lambda
+        p_vals = np.linspace(0.0001, max_p, 500)
         
         # Level 1 probability P1
-        theta_1 = 2 * np.arcsin(np.sqrt(lambda_vals))
+        theta_1 = 2 * np.arcsin(np.sqrt(p_vals))
         p1_vals = np.sin((2 * k1 + 1) * theta_1 / 2)**2
         
         # Level 2 Probability P2 (Treating P1 as the initial state)
@@ -329,9 +339,10 @@ class GroverGeometricLab:
             'k_equiv': k_equiv
         }
         
-        return lambda_vals, p1_vals, p2_vals, depth_data
+        return p_vals, p1_vals, p2_vals, depth_data
 
 if __name__ == "__main__":
+    start_one_click_session(__file__, figure_prefix="grover")
     # --------------------------------------------------------------------------------
     # Experimental Execution Block
     # Handles rigorous module evaluation, simulation visualization, and mathematical proof outputs.
@@ -360,27 +371,27 @@ if __name__ == "__main__":
         if M > N:
             continue
 
-        lambda_value = M / N
+        p_value = M / N
         # We can leverage the existing formulas inside the Lab
-        temp_lab = GroverGeometricLab(n_qubits=10, marked_indices=list(range(M)))
+        temp_lab = GroverGeometricLab(n_qubits=10, good_indices=list(range(M)))
         k_star = temp_lab.k_optimal
-        success_prob = temp_lab.grover_success_prob(lambda_value, k_star)
+        success_prob = temp_lab.grover_success_prob(p_value, k_star)
 
-        print(f"  λ = M/N = {lambda_value:.6f}")
+        print(f"  p = M/N = {p_value:.6f}")
         print(f"  k* (near-optimal Grover iterations) = {k_star}")
         print(f"  Grover success probability at k* = {success_prob:.6f}")
 
     print("\n" + "=" * 70)
     print("Running Grover Geometric Lab Analysis...")
-    lab = GroverGeometricLab(n_qubits=6, marked_indices=[10, 25])
+    lab = GroverGeometricLab(n_qubits=6, good_indices=[10, 25])
     max_k = lab.k_optimal * 3
 
     print("Running Grover Geometric Lab Analysis...")
     a_vals, b_vals, p_total, probs = lab.analyze_geometry(max_k)
     pur_orig, pur_copy = lab.simulate_cloning_barrier(max_k)
-    lam_vals, p1_curve, p2_curve, gate_depths = lab.recursive_nesting_analysis(k1=3, k2=3, max_lambda=0.15)
+    p_vals_nesting, p1_curve, p2_curve, gate_depths = lab.recursive_nesting_analysis(k1=3, k2=3, max_lambda=0.15)
     
-    heatmap_K, heatmap_L, success_heatmap = lab.sensitivity_heatmap(k_max=50, lambda_max=0.5, resolution=500)
+    heatmap_K, heatmap_L, success_heatmap = lab.sensitivity_heatmap(k_max=50, p_max=0.5, resolution=500)
     
     # Machine Precision Check
     mean_sq_dev = np.mean((1.0 - p_total)**2)
@@ -418,13 +429,19 @@ if __name__ == "__main__":
 
     ax1.set_title("The Soufflé Problem: Instability vs. Iterations")
     ax1.set_xlabel("Iterations (k)")
-    ax1.set_ylabel("Probability of Success")
+    ax1.set_ylabel("Success Probability p_k")
     ax1.set_ylim(-0.05, 1.05)
     ax1.legend()
 
     # Plot 2: Invariant Subspace Proof
     ax2 = plt.subplot(2, 3, 2)
-    ax2.plot(range(max_k + 1), p_total, color='blue', marker='x', label='|ak|^2 + |bk|^2')
+    ax2.plot(
+        range(max_k + 1),
+        p_total,
+        color='blue',
+        marker='x',
+        label=r'$|\langle H_{\mathrm{Good}}|\psi_k\rangle|^2 + |\langle H_{\mathrm{Bad}}|\psi_k\rangle|^2$',
+    )
     ax2.set_title("Invariant Subspace Verification (P = 1.0)")
     ax2.set_xlabel("Iterations (k)")
     ax2.set_ylabel("Total Probability in 2D Plane")
@@ -437,8 +454,8 @@ if __name__ == "__main__":
     theta_ideal = np.linspace(0, np.pi/2, 100)
     ax3.plot(np.cos(theta_ideal), np.sin(theta_ideal), color='gray', linestyle='--', alpha=0.5, label='Ideal Unit Circle')
     ax3.set_title("Geometric Rotation in Invariant Subspace")
-    ax3.set_xlabel("Unmarked Amplitude ($b_k$)")
-    ax3.set_ylabel("Marked Amplitude ($a_k$)")
+    ax3.set_xlabel(r"$H_{\mathrm{Bad}}$ Amplitude ($b_k$)")
+    ax3.set_ylabel(r"$H_{\mathrm{Good}}$ Amplitude ($a_k$)")
     ax3.set_aspect('equal')
     ax3.grid(True)
     ax3.legend()
@@ -446,11 +463,11 @@ if __name__ == "__main__":
     # ---- BOTTOM ROW ----
     # Plot 4: Recursive Nesting
     ax4 = plt.subplot(2, 3, 4)
-    ax4.plot(lam_vals, p1_curve, color='blue', linestyle='--', label='Level 1 (k=3)')
-    ax4.plot(lam_vals, p2_curve, color='red', linestyle='-', label='Level 2 (k1=3, k2=3)')
+    ax4.plot(p_vals_nesting, p1_curve, color='blue', linestyle='--', label='Level 1 (k=3)')
+    ax4.plot(p_vals_nesting, p2_curve, color='red', linestyle='-', label='Level 2 (k1=3, k2=3)')
     ax4.set_title("Self-Similar Scaling (Sharpening Effect)")
-    ax4.set_xlabel("Solution Density (λ = M/N)")
-    ax4.set_ylabel("Success Probability P(λ)")
+    ax4.set_xlabel("Initial Success Probability (p = M/N)")
+    ax4.set_ylabel("Success Probability P(p)")
     ax4.grid(True)
     ax4.legend()
 
@@ -470,9 +487,9 @@ if __name__ == "__main__":
     # Plot 6: Soufflé Sensitivity Heatmap
     ax6 = plt.subplot(2, 3, 6)
     contour = ax6.pcolormesh(heatmap_L, heatmap_K, success_heatmap, shading='auto', cmap='inferno')
-    fig.colorbar(contour, ax=ax6, label='Success Probability')
+    fig.colorbar(contour, ax=ax6, label='Success Probability p_k')
     ax6.set_title("Grover Sensitivity Heatmap: The Soufflé Islands", fontsize=15)
-    ax6.set_xlabel(r"Solution Density ($\lambda = M/N$)", fontsize=12)
+    ax6.set_xlabel(r"Initial Success Probability ($p = M/N$)", fontsize=12)
     ax6.set_ylabel("Iteration Count ($k$)", fontsize=12)
 
     plt.tight_layout()
@@ -485,7 +502,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     def run_optional_qiskit_demo() -> None:
         """
-        Optional 3-qubit circuit demo for marked state '101'.
+        Optional 3-qubit circuit demo for H_Good state '101'.
         """
         try:
             from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
@@ -497,7 +514,7 @@ if __name__ == "__main__":
             creg = ClassicalRegister(3, "c")
             qc = QuantumCircuit(data, anc, creg)
 
-            def apply_phase_oracle_mark_101(qcircuit: QuantumCircuit):
+            def apply_phase_oracle_good_101(qcircuit: QuantumCircuit):
                 qcircuit.x(data[1])
                 qcircuit.mcp(np.pi, [data[0], data[1], data[2]], anc[0])
                 qcircuit.x(data[1])
@@ -513,7 +530,7 @@ if __name__ == "__main__":
 
             qc.h(data)
             qc.x(anc[0])
-            apply_phase_oracle_mark_101(qc)
+            apply_phase_oracle_good_101(qc)
             apply_diffusion_operator_3q(qc)
             qc.measure(data, creg)
 
@@ -523,14 +540,14 @@ if __name__ == "__main__":
             result = backend.run(compiled, shots=shots).result()
             counts = result.get_counts()
 
-            marked_state = "101"
-            marked_probability = counts.get(marked_state, 0) / shots
+            good_state = "101"
+            good_probability = counts.get(good_state, 0) / shots
             print("\n" + "=" * 70)
-            print("Qiskit circuit demo (target=101):")
+            print("Qiskit circuit demo (H_Good=101):")
             print("Counts:", counts)
-            print(f"P({marked_state}) = {marked_probability:.4f}")
+            print(f"p(H_Good={good_state}) = {good_probability:.4f}")
 
-            plot_histogram(counts, title="Grover Search (3-bit, 1 iteration, target=101)")
+            plot_histogram(counts, title="Grover Search (3-bit, 1 iteration, H_Good=101)")
             plt.tight_layout()
             plt.savefig("grover_circuit_histogram.png", dpi=150, bbox_inches="tight")
             plt.close()
