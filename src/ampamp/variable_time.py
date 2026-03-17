@@ -1,3 +1,9 @@
+"""Variable-Time Amplitude Amplification module.
+
+Provides classes and utilities for evaluating and constructing 
+variable-time quantum search algorithms.
+"""
+
 import numpy as np
 from dataclasses import dataclass
 from typing import Sequence, Tuple
@@ -11,11 +17,20 @@ class VariableTimeBranch:
     success_given_branch: float
 
 class VTAAEngine:
-    """
-    Core engine for Variable-Time Amplitude Amplification.
+    """Core engine for Variable-Time Amplitude Amplification.
+
     Calculates asymptotic scaling, expected costs, and branch mass.
     """
     def __init__(self, branches: Sequence[VariableTimeBranch]):
+        """Initializes the VTAA Engine.
+
+        Args:
+            branches (Sequence[VariableTimeBranch]): A sequence of branches defining 
+                the variable-time algorithm.
+
+        Raises:
+            ValueError: If the branches sequence is empty.
+        """
         if not branches:
             raise ValueError("At least one branch is required.")
             
@@ -34,14 +49,28 @@ class VTAAEngine:
         self.theta = float(np.arcsin(np.sqrt(self.p_success))) if self.p_success > 0 else 0.0
 
     def stopping_time_moments(self) -> Tuple[float, float, float]:
-        """Return (E[T], sqrt(E[T^2]), T_max) under the branch distribution."""
+        """Return the moments of the stopping time distribution.
+
+        Returns:
+            Tuple[float, float, float]: A tuple containing $(E[T], \\sqrt{E[T^2]}, T_{max})$ 
+                under the branch distribution.
+        """
         t_mean = float(np.sum(self.weights * self.stop_times))
         t_rms = float(np.sqrt(np.sum(self.weights * (self.stop_times ** 2))))
         t_max = float(np.max(self.stop_times))
         return t_mean, t_rms, t_max
 
     def vtaa_asymptotic_bound(self, polylog_factor: float = 1.0, c_tmax: float = 1.0, c_trms: float = 1.0) -> float:
-        """Parameterized Ambainis-style VTAA scaling estimate."""
+        """Parameterized Ambainis-style VTAA scaling estimate.
+
+        Args:
+            polylog_factor (float): The logarithmic overhead factor. Defaults to 1.0.
+            c_tmax (float): The constant scaling factor for $T_{max}$. Defaults to 1.0.
+            c_trms (float): The constant scaling factor for $T_{rms}$. Defaults to 1.0.
+
+        Returns:
+            float: The asymptotic complexity bound. Returns infinity if success probability is non-positive.
+        """
         if self.p_success <= 0.0:
             return float("inf")
         _, t_rms, t_max = self.stopping_time_moments()
@@ -49,9 +78,19 @@ class VTAAEngine:
 
     @staticmethod
     def build_staged_state_circuit(p_s1: float, p_fail_cond: float) -> QuantumCircuit:
-        """
-        Synthesizes a coherent variable-time state with flag registers.
-        Encoding: |00> continue, |01> success, |10> fail.
+        """Synthesizes a coherent variable-time state with flag registers.
+
+        Encoding convention used:
+        - $|00\\rangle$: continue
+        - $|01\\rangle$: success
+        - $|10\\rangle$: fail
+
+        Args:
+            p_s1 (float): The probability of early success at stage 1.
+            p_fail_cond (float): The conditional probability of failure given continuation.
+
+        Returns:
+            QuantumCircuit: The synthesized variable-time quantum state circuit.
         """
         stage_reg = QuantumRegister(1, "stage_j")
         flag_reg = QuantumRegister(2, "flag")

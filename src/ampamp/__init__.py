@@ -1,3 +1,11 @@
+"""Amplitude Amplification Library.
+
+This package provides a production-ready, pip-installable library for 
+research-grade quantum computing amplitude amplification algorithms. 
+It includes various engines for Grover, Fixed-Point, Oblivious, FOQA, 
+Distributed Quantum Amplitude Amplification, Variable-Time, and QSVT.
+"""
+
 # src/ampamp/__init__.py
 from .foundations import GroverEngine
 from .fixed_point import FixedPointEngine
