@@ -4,18 +4,29 @@ using Qiskit.
 Defines :class:`ObliviousAmplificationLab` which builds circuits and
 runs basic tests for the block encoding, iteration operator, and fidelity
 checks. Intended for use from a script or notebook.
+
+Standing notation aligned with final.tex:
+- H_Good / H_Bad: target and non-target sectors
+- Pi_Good / Pi_Bad: corresponding projectors
+- p = ||Pi_Good |All>||^2 is the success parameter
+- sin^2(theta0)=p for the canonical two-dimensional geometry
+- complexity is discussed in oracle/query calls to the OAA iterate Q
 """
 
 from __future__ import annotations
 
 import logging
 import csv
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, List, Optional
 
 import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister, transpile
 from qiskit.quantum_info import Operator, Statevector, random_unitary
+
+from one_click_utils import start_one_click_session
 
 # configure logger for informative output
 logger = logging.getLogger(__name__)
@@ -95,12 +106,13 @@ class ObliviousAmplificationLab:
     The central objects are::
 
         U    : random m-qubit unitary
-        p    : success probability (a float in (0,1])
+        p    : success probability parameter (a float in (0,1])
         B    : \\sqrt{p} U (the operator we wish to block encode)
         A    : unitary acting on m + l qubits with
-               P_1 A P_1 = B (= top-left block) where P_1 = |0^l><0^l|_anc.
+               P_1 A P_1 = B (= top-left block) where
+               P_1 = |0^l><0^l|_anc is the clean-ancilla projector.
         R_0  : reflection about the clean ancilla subspace
-        R_b  : phase flip on all bad ancilla states (orthogonal to |0^l>)
+        R_b  : phase flip on the non-target ancilla sector (orthogonal to |0^l>)
         Q    : full iteration operator A R_0 A^{-1} R_b
 
     The public methods mirror these definitions.  In the comments below we
@@ -148,7 +160,8 @@ class ObliviousAmplificationLab:
 
     def _ancilla_rotation_gate(self) -> QuantumCircuit:
         """Circuit preparing the ancilla in
-        ``sqrt(p)|0> + sqrt(1-p)|1>`` (for ``l == 1``).
+        ``sqrt(p)|0> + sqrt(1-p)|1>`` (for ``l == 1``),
+        consistent with ``sin^2(theta0)=p``.
         """
         circ = QuantumCircuit(self.l)
         if self.l == 1:
@@ -209,7 +222,7 @@ class ObliviousAmplificationLab:
         return 2 * np.kron(P0, np.eye(self.dim_data)) - np.eye(self.dim_total)
 
     def R_bad(self) -> np.ndarray:
-        """Phase flip on non-zero ancilla states.        """
+        """Phase flip on non-zero ancilla states (effective H_Bad sector)."""
         P0 = np.zeros((self.dim_anc, self.dim_anc))
         P0[0, 0] = 1
         return np.kron(2 * P0 - np.eye(self.dim_anc), np.eye(self.dim_data))
@@ -304,8 +317,8 @@ class ObliviousAmplificationLab:
         mean_prob = probs.mean()
         var_prob = probs.var()
         msd = msd_accum / (num_states * (max_k + 1))
-        logger.info("success probability: mean=%.6f", mean_prob)
-        logger.info("success probability variance across inputs: %.6e", var_prob)
+        logger.info("success probability p: mean=%.6f", mean_prob)
+        logger.info("success probability p variance across inputs: %.6e", var_prob)
         logger.info("mean square deviation over trajectories: %.3e", msd)
         if k_opt <= max_k:
             fid_at_opt = fidelity_curve[:, k_opt]
@@ -368,7 +381,7 @@ def experiment_subnormalization_rescue(
         Q = A R_0 A^{-1} R_bad
 
     for increasing iteration counts, while tracking the probability of the clean
-    ancilla ``|0>`` through exact statevector simulation.
+    ancilla ``|0>`` (the effective ``Pi_Good`` event) through exact statevector simulation.
     """
     if not (0.0 < p < 1.0):
         raise ValueError("p must be in (0, 1).")
@@ -402,13 +415,14 @@ def experiment_subnormalization_rescue(
 
     # Reflection on |0> ancilla: I - 2|0><0| = XZX (up to global phase
     # conventions this works as the required oracle/diffusion reflection here).
-    R_qc = QuantumCircuit(anc, data, name="R0/Rbad")
+    R_qc = QuantumCircuit(anc, data, name="R0/R_H_Bad")
     R_qc.x(anc[0])
     R_qc.z(anc[0])
     R_qc.x(anc[0])
 
-    theta = np.arcsin(np.sqrt(p))
-    k_opt = int(np.floor(np.pi / (4.0 * theta)))
+    theta0 = np.arcsin(np.sqrt(p))
+    theta = theta0  # kept for backward-compatible result field name
+    k_opt = int(np.floor(np.pi / (4.0 * theta0)))
     max_k = max(1, int(np.floor(overshoot_factor * k_opt)))
 
     k_values = np.arange(max_k + 1, dtype=int)
@@ -431,9 +445,9 @@ def experiment_subnormalization_rescue(
             np.sum(np.abs(state.data[0::2]) ** 2)
         )
 
-    print(f"Initial Success Probability p: {p:.6f}")
+    print(f"Initial success probability p: {p:.6f}")
     print(f"Theoretical OAA optimum k*: {k_opt}")
-    print(f"Best simulated probability: {success_probs.max():.6f} at k={int(np.argmax(success_probs))}")
+    print(f"Best simulated success probability p_k: {success_probs.max():.6f} at k={int(np.argmax(success_probs))}")
 
     plt.figure(figsize=(10, 6))
     plt.plot(
@@ -461,7 +475,7 @@ def experiment_subnormalization_rescue(
     )
     plt.title("Subnormalization Rescue via OAA (Circuit-Level)")
     plt.xlabel("Number of OAA iterations (k)")
-    plt.ylabel("P(clean ancilla = |0>)")
+    plt.ylabel("Success probability p_k (clean ancilla)")
     plt.ylim(0.0, 1.02)
     plt.grid(alpha=0.25)
     plt.legend(loc="lower right")
@@ -499,7 +513,7 @@ def experiment_geometric_obstruction(
 
     The data qubit starts in |+>, and the target is U|phi>=|+> (U=I demo).
     We track both:
-    - P(ancilla=|0>) after k OAA iterations
+    - success probability p = P(ancilla=|0>) after k OAA iterations
     - Fidelity of conditional data state (given ancilla=|0>) with |+>
     """
     if not (0.0 < p_valid < 1.0):
@@ -543,7 +557,7 @@ def experiment_geometric_obstruction(
     A_invalid_inv.name = "A_invalid_dagger"
 
     # Common reflection I - 2|0><0| on ancilla.
-    R_qc = QuantumCircuit(anc, data, name="R0/Rbad")
+    R_qc = QuantumCircuit(anc, data, name="R0/R_H_Bad")
     R_qc.x(anc[0])
     R_qc.z(anc[0])
     R_qc.x(anc[0])
@@ -590,8 +604,8 @@ def experiment_geometric_obstruction(
     print(f"Invalid setting p(|0>)={p_invalid_zero:.3f}, p(|1>)={p_invalid_one:.3f}")
     print(f"Valid fidelity range: [{valid_fid.min():.6f}, {valid_fid.max():.6f}]")
     print(f"Invalid fidelity range: [{invalid_fid.min():.6f}, {invalid_fid.max():.6f}]")
-    print(f"Valid success max: {valid_prob.max():.6f}")
-    print(f"Invalid success max: {invalid_prob.max():.6f}")
+    print(f"Valid max success probability p_k: {valid_prob.max():.6f}")
+    print(f"Invalid max success probability p_k: {invalid_prob.max():.6f}")
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
@@ -619,9 +633,9 @@ def experiment_geometric_obstruction(
         linestyle="--",
         label="Violated setting (invalid)",
     )
-    ax2.set_title("OAA Geometric Obstruction: Success Probability")
+    ax2.set_title("OAA Geometric Obstruction: Success Probability p")
     ax2.set_xlabel("OAA iterations (k)")
-    ax2.set_ylabel("P(clean ancilla = |0>)")
+    ax2.set_ylabel("Success probability p_k (clean ancilla)")
     ax2.grid(alpha=0.25)
     ax2.legend(loc="upper left")
 
@@ -980,3 +994,48 @@ def experiment_identity_block_extractor(
 
 
 # end of module
+
+
+def run_all_one_click(show_plot: bool = False) -> None:
+    """Run all OAA experiments and persist artifacts in the current directory."""
+    stem = Path(__file__).stem
+    experiment_subnormalization_rescue(
+        p=0.005,
+        data_gate="h",
+        overshoot_factor=1.5,
+        show_plot=show_plot,
+        save_path=f"{stem}_module1_subnormalization_rescue.png",
+    )
+    experiment_geometric_obstruction(
+        p_valid=0.05,
+        p_invalid_zero=0.05,
+        p_invalid_one=0.20,
+        max_k=15,
+        show_plot=show_plot,
+        save_path=f"{stem}_module2_geometric_obstruction.png",
+    )
+    experiment_explicit_lcu_block_encoding(
+        c0=0.6,
+        c1=0.4,
+        optimization_level=0,
+        save_csv_path=f"{stem}_module3_explicit_lcu_resources.csv",
+    )
+    experiment_identity_block_extractor(
+        m=2,
+        l=1,
+        p=0.15,
+        seed=42,
+        c0=0.6,
+        c1=0.4,
+        save_csv_path=f"{stem}_module4_identity_block_audit.csv",
+    )
+    print("One-click OAA run complete.")
+
+
+if __name__ == "__main__":
+    start_one_click_session(__file__, figure_prefix="oaa")
+    # Direct "Run" in IDE executes the full OAA pipeline.
+    if len(sys.argv) == 1:
+        run_all_one_click(show_plot=False)
+    else:
+        run_all_one_click(show_plot=False)
