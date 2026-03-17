@@ -7,17 +7,27 @@ This module implements a six-experiment FOQA laboratory:
 4) Asymptotic complexity auditor
 5) Adversarial Quantum Zeno catastrophe
 6) Empty-database boundary stability audit
+
+Standing notation aligned with final.tex:
+- H_Good / H_Bad: target and non-target sectors
+- Pi_Good / Pi_Bad: orthogonal projectors
+- p: success probability parameter
+- sin^2(theta0)=p with Grover-step angle 2*theta0
+- complexity discussed in oracle/query calls
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from one_click_utils import start_one_click_session
 
 
 @dataclass
@@ -75,6 +85,7 @@ class FOQARecurrenceResults:
 class FOQAComplexityResults:
     """Container for FOQA Module 4 asymptotic complexity outputs."""
 
+    # Legacy field name retained for compatibility: stores p-values sweep.
     lambdas: np.ndarray
     empirical_steps: np.ndarray
     theoretical_bound: np.ndarray
@@ -115,7 +126,7 @@ class FOQALaboratory:
     """Six-module FOQA laboratory.
 
     Module status:
-    1) Implemented (Math translation patched)
+    1) Implemented
     2) Implemented
     3) Implemented
     4) Implemented
@@ -136,7 +147,7 @@ class FOQALaboratory:
             H_ancilla (2) ⊗ H_index (2) ⊗ H_content (2)
 
         Initial state:
-            |0>_anc ⊗ [sin(theta)|0>_idx|1>_cont + cos(theta)|1>_idx|0>_cont]
+            |0>_anc ⊗ [sin(theta0)|0>_idx|1>_cont + cos(theta0)|1>_idx|0>_cont]
         """
         if not (0.0 < theta < np.pi / 2.0):
             raise ValueError("theta must be in (0, pi/2).")
@@ -146,24 +157,25 @@ class FOQALaboratory:
         print("-" * 72)
         print("MODULE 1: THE LCU OBLIVIOUS CIRCUIT SYNTHESIZER (PHYSICAL PROOF)")
         print("-" * 72)
-        print(f"Initial overlap theta: {theta:.6f} rad")
+        print(f"Initial overlap theta0: {theta:.6f} rad")
         print(f"Damping angle alpha_n: {alpha_n:.6f} rad")
 
         ket_0 = np.array([1.0, 0.0], dtype=complex)
         ket_1 = np.array([0.0, 1.0], dtype=complex)
 
-        # |0>_anc|0>_idx|1>_cont and |0>_anc|1>_idx|0>_cont branches
-        target_branch = np.kron(ket_0, np.kron(ket_0, ket_1)) * np.sin(theta)
-        nontarget_branch = np.kron(ket_0, np.kron(ket_1, ket_0)) * np.cos(theta)
-        state_initial = target_branch + nontarget_branch
+        # |0>_anc|0>_idx|1>_cont (H_Good branch) and |0>_anc|1>_idx|0>_cont (H_Bad branch)
+        good_branch = np.kron(ket_0, np.kron(ket_0, ket_1)) * np.sin(theta)
+        bad_branch = np.kron(ket_0, np.kron(ket_1, ket_0)) * np.cos(theta)
+        state_initial = good_branch + bad_branch
 
         t_n = np.sin(theta)
 
-        # Wave-division operator acting on ancilla (Math patched to alpha_n)
+        # Wave-division operator acting on ancilla.
+        # Full-angle convention: p_halt = sin^2(alpha_n) * |t_n|^2, matching Modules 2-6.
         v_n = np.array(
             [
                 [np.cos(alpha_n), -np.sin(alpha_n)],
-                [np.sin(alpha_n),  np.cos(alpha_n)],
+                [np.sin(alpha_n), np.cos(alpha_n)],
             ],
             dtype=complex,
         )
@@ -196,7 +208,7 @@ class FOQALaboratory:
 
         prob_halted = float(np.sum(np.abs(state_halted) ** 2))
 
-        # Basis ordering from kron is |anc, idx, cont>; target continue = |0,0,1> -> index 1
+        # Basis ordering from kron is |anc, idx, cont>; H_Good continue = |0,0,1> -> index 1
         amp_continue_target = state_continue[1]
 
         expected_prob_halted = (np.sin(alpha_n) ** 2) * (t_n**2)
@@ -211,7 +223,7 @@ class FOQALaboratory:
             f"[expected {expected_prob_halted:.12f}]"
         )
         print(
-            f"Amp(target|continue): {amp_continue_target.real:.12f} "
+            f"Amp(H_Good|continue): {amp_continue_target.real:.12f} "
             f"[expected {expected_amp_continue:.12f}]"
         )
         if audit_passed:
@@ -255,10 +267,10 @@ class FOQALaboratory:
 
         x = np.arange(4)
         labels = [
-            r"$|0\rangle_{anc}|0\rangle_{idx}|V\varphi\rangle$ (Target, Continue)",
-            r"$|0\rangle_{anc}|1\rangle_{idx}|\phi\rangle$ (Non-Target, Continue)",
-            r"$|1\rangle_{anc}|0\rangle_{idx}|V\varphi\rangle$ (Target, Halted)",
-            r"$|1\rangle_{anc}|1\rangle_{idx}|\phi\rangle$ (Non-Target, Halted)",
+            r"$|0\rangle_{anc}|0\rangle_{idx}|V\varphi\rangle$ ($H_{\mathrm{Good}}$, Continue)",
+            r"$|0\rangle_{anc}|1\rangle_{idx}|\phi\rangle$ ($H_{\mathrm{Bad}}$, Continue)",
+            r"$|1\rangle_{anc}|0\rangle_{idx}|V\varphi\rangle$ ($H_{\mathrm{Good}}$, Halted)",
+            r"$|1\rangle_{anc}|1\rangle_{idx}|\phi\rangle$ ($H_{\mathrm{Bad}}$, Halted)",
         ]
 
         # Index map for basis |anc,idx,cont>: 001, 010, 101, 110
@@ -283,8 +295,6 @@ class FOQALaboratory:
             color="#F58518",
             edgecolor="black",
         )
-        
-        
 
         ax.annotate(
             r"Siphoned $\propto \sin(\alpha_n)$",
@@ -335,8 +345,8 @@ class FOQALaboratory:
 
         Uses the recurrence described in the manuscript:
             p_{n+1} = sin^2(alpha_n) |t_n|^2
-            t_{n+1} = (t_n cos(alpha_n) cos(2theta) + s_n sin(2theta)) / sqrt(1-p_{n+1})
-            s_{n+1} = (-t_n cos(alpha_n) sin(2theta) + s_n cos(2theta)) / sqrt(1-p_{n+1})
+            t_{n+1} = (t_n cos(alpha_n) cos(2theta0) + s_n sin(2theta0)) / sqrt(1-p_{n+1})
+            s_{n+1} = (-t_n cos(alpha_n) sin(2theta0) + s_n cos(2theta0)) / sqrt(1-p_{n+1})
         """
         if not (0.0 < theta < np.pi / 2.0):
             raise ValueError("theta must be in (0, pi/2).")
@@ -346,7 +356,7 @@ class FOQALaboratory:
         print("-" * 72)
         print("MODULE 2: THE DAMPING REGIME SWEEPER (PHYSICS OF alpha_n)")
         print("-" * 72)
-        print(f"theta={theta:.6f}, iterations={iterations}")
+        print(f"theta0={theta:.6f}, iterations={iterations}")
         print(
             f"Schedules: under={alpha_under:.3f}, over={alpha_over:.3f}, "
             f"mizel=({mizel_c:.3f})/sqrt(n+1)"
@@ -459,7 +469,6 @@ class FOQALaboratory:
         save_plot_path: Optional[str],
     ) -> None:
         """Comparative 3-regime evidence plot for Module 2."""
-        
         fig, ax = plt.subplots(figsize=(11, 6))
         steps = np.arange(len(probs_under))
 
@@ -469,7 +478,7 @@ class FOQALaboratory:
             color="#D62728",
             linestyle=":",
             linewidth=2.6,
-            label=rf"Underdamped ($\alpha_n={alpha_under:.2f}$): Soufflé oscillation",
+            label=rf"Underdamped ($\alpha_n={alpha_under:.2f}$): Souffle oscillation",
         )
         ax.plot(
             steps,
@@ -505,8 +514,8 @@ class FOQALaboratory:
         ax.axhline(1.0, color="black", linewidth=1.2)
         ax.set_ylim(0.0, 1.05)
         ax.set_xlabel("Iteration n")
-        ax.set_ylabel("Success Probability")
-        ax.set_title(f"FOQA Damping Regimes (theta={theta:.4f})")
+        ax.set_ylabel("Success probability p")
+        ax.set_title(f"FOQA Damping Regimes (theta0={theta:.4f})")
         ax.grid(alpha=0.30)
         ax.legend(loc="lower right")
         plt.tight_layout()
@@ -539,7 +548,7 @@ class FOQALaboratory:
         print("-" * 72)
         print("MODULE 3: THE NON-LINEAR RECURRENCE AUDITOR (MATH PROOF)")
         print("-" * 72)
-        print(f"theta={theta:.6f}, iterations={iterations}, c={recurrence_c:.6f}")
+        print(f"theta0={theta:.6f}, iterations={iterations}, c={recurrence_c:.6f}")
 
         t_n = np.sin(theta)
         s_n = np.cos(theta)
@@ -617,7 +626,6 @@ class FOQALaboratory:
         save_plot_path: Optional[str],
     ) -> None:
         """Log-scale failure-probability audit plot for Module 3."""
-        
         fig, ax = plt.subplots(figsize=(11, 6))
         steps = np.arange(len(q_n_history))
 
@@ -662,9 +670,9 @@ class FOQALaboratory:
 
     def experiment_module4_asymptotic_complexity_auditor(
         self,
-        num_lambdas: int = 20,
-        lambda_max_exponent: int = -1,
-        lambda_min_exponent: int = -6,
+        num_p_values: int = 20,
+        p_max_exponent: int = -1,
+        p_min_exponent: int = -6,
         target_success: float = 0.99,
         complexity_c: float = 1.5,
         max_iterations: int = 50_000,
@@ -673,9 +681,9 @@ class FOQALaboratory:
         save_plot_path: Optional[str] = None,
         enforce_audit: bool = True,
     ) -> FOQAComplexityResults:
-        """Module 4: asymptotic query-complexity audit under unknown lambda."""
-        if num_lambdas < 5:
-            raise ValueError("num_lambdas must be >= 5.")
+        """Module 4: asymptotic query-complexity audit under unknown p."""
+        if num_p_values < 5:
+            raise ValueError("num_p_values must be >= 5.")
         if not (0.0 < target_success < 1.0):
             raise ValueError("target_success must lie in (0, 1).")
         if complexity_c <= 0.0:
@@ -687,25 +695,25 @@ class FOQALaboratory:
         print("MODULE 4: THE ASYMPTOTIC COMPLEXITY AUDITOR (OPTIMALITY PROOF)")
         print("-" * 72)
 
-        lambdas = np.logspace(
-            lambda_max_exponent,
-            lambda_min_exponent,
-            num_lambdas,
+        p_values = np.logspace(
+            p_max_exponent,
+            p_min_exponent,
+            num_p_values,
             dtype=float,
         )
         empirical_steps: list[int] = []
 
         print(
             "Sweep range: "
-            f"10^{lambda_max_exponent} -> 10^{lambda_min_exponent} "
-            f"over {num_lambdas} lambda values"
+            f"10^{p_max_exponent} -> 10^{p_min_exponent} "
+            f"over {num_p_values} p values"
         )
         print(
             f"Target success >= {target_success:.4f}; max_iterations={max_iterations}"
         )
 
-        for lam in lambdas:
-            theta = float(np.arcsin(np.sqrt(lam)))
+        for p in p_values:
+            theta = float(np.arcsin(np.sqrt(p)))
             t_n = float(np.sin(theta))
             s_n = float(np.cos(theta))
 
@@ -737,19 +745,19 @@ class FOQALaboratory:
 
                 if n > max_iterations:
                     raise RuntimeError(
-                        f"Module 4 convergence failure for lambda={lam:.6e} "
+                        f"Module 4 convergence failure for p={p:.6e} "
                         f"within {max_iterations} iterations."
                     )
 
             empirical_steps.append(n)
 
         empirical_steps_np = np.asarray(empirical_steps, dtype=float)
-        grover_baseline = (np.pi / 4.0) * np.sqrt(1.0 / lambdas)
-        theoretical_bound = complexity_c * np.sqrt(1.0 / lambdas)
+        grover_baseline = (np.pi / 4.0) * np.sqrt(1.0 / p_values)
+        theoretical_bound = complexity_c * np.sqrt(1.0 / p_values)
 
-        log_lambdas = np.log10(lambdas)
+        log_p_values = np.log10(p_values)
         log_steps = np.log10(empirical_steps_np)
-        empirical_slope, _ = np.polyfit(log_lambdas, log_steps, 1)
+        empirical_slope, _ = np.polyfit(log_p_values, log_steps, 1)
         empirical_slope = float(empirical_slope)
 
         audit_passed = bool(np.abs(empirical_slope - (-0.5)) < slope_tolerance)
@@ -768,7 +776,7 @@ class FOQALaboratory:
             raise AssertionError("Module 4 asymptotic complexity audit failed.")
 
         self._plot_module4_asymptotic_complexity(
-            lambdas=lambdas,
+            lambdas=p_values,
             empirical_steps=empirical_steps_np,
             theoretical_bound=theoretical_bound,
             grover_baseline=grover_baseline,
@@ -781,7 +789,7 @@ class FOQALaboratory:
         print("-" * 72)
 
         return FOQAComplexityResults(
-            lambdas=lambdas,
+            lambdas=p_values,
             empirical_steps=empirical_steps_np,
             theoretical_bound=theoretical_bound,
             grover_baseline=grover_baseline,
@@ -802,7 +810,6 @@ class FOQALaboratory:
         save_plot_path: Optional[str],
     ) -> None:
         """Log-log scaling evidence for Module 4."""
-        
         fig, ax = plt.subplots(figsize=(11, 6))
 
         ax.scatter(
@@ -821,7 +828,7 @@ class FOQALaboratory:
             linestyle="-",
             linewidth=2.6,
             zorder=2,
-            label=rf"FOQA bound: ${complexity_c:.2f}\sqrt{{N/M}}$",
+            label=rf"FOQA bound: ${complexity_c:.2f}\sqrt{{1/p}}$",
         )
         ax.plot(
             lambdas,
@@ -830,7 +837,7 @@ class FOQALaboratory:
             linestyle="--",
             linewidth=2.1,
             zorder=1,
-            label=r"Grover baseline: $\frac{\pi}{4}\sqrt{N/M}$",
+            label=r"Grover baseline: $\frac{\pi}{4}\sqrt{1/p}$",
         )
 
         ax.set_xscale("log")
@@ -838,14 +845,14 @@ class FOQALaboratory:
         ax.invert_xaxis()
         ax.grid(True, which="both", alpha=0.30)
         ax.set_title("FOQA Asymptotic Complexity Audit")
-        ax.set_xlabel(r"Target fraction $\lambda=M/N$ (decreasing $\rightarrow$)")
-        ax.set_ylabel("Queries / Iterations to target success")
+        ax.set_xlabel(r"Initial success probability $p$ (decreasing $\rightarrow$)")
+        ax.set_ylabel("Queries / iterations to high success")
         ax.legend(loc="lower left")
 
         anchor_idx = int(len(lambdas) * 0.5)
         anchor_idx = max(0, min(anchor_idx, len(lambdas) - 1))
         ax.annotate(
-            rf"Empirical scaling: $\lambda^{{{empirical_slope:.3f}}}$",
+            rf"Empirical scaling: $p^{{{empirical_slope:.3f}}}$",
             xy=(lambdas[anchor_idx], theoretical_bound[anchor_idx]),
             xytext=(lambdas[max(0, anchor_idx - 3)], theoretical_bound[anchor_idx] * 2.5),
             arrowprops=dict(arrowstyle="->", lw=1.4),
@@ -895,7 +902,7 @@ class FOQALaboratory:
 
         initial_prob = float(np.sin(theta) ** 2)
         print(
-            f"theta={theta:.6f}, iterations={iterations}, "
+            f"theta0={theta:.6f}, iterations={iterations}, "
             f"initial_prob={initial_prob:.8f}"
         )
         print(
@@ -915,9 +922,9 @@ class FOQALaboratory:
         zeno_to_classical_max_diff = float(np.max(np.abs(probs_zeno - probs_classical)))
         zeno_penalty_ratio = float(probs_mizel[-1] / max(probs_zeno[-1], 1e-15))
 
-        print(f"Final Success (Mizel):     {probs_mizel[-1]:.6f}")
-        print(f"Final Success (Zeno):      {probs_zeno[-1]:.6f}")
-        print(f"Final Success (Classical): {probs_classical[-1]:.6f}")
+        print(f"Final success p (Mizel):     {probs_mizel[-1]:.6f}")
+        print(f"Final success p (Zeno):      {probs_zeno[-1]:.6f}")
+        print(f"Final success p (Classical): {probs_classical[-1]:.6f}")
         print(f"Max |Zeno-Classical|:      {zeno_to_classical_max_diff:.6f}")
         print(f"Mizel/Zeno penalty ratio:  {zeno_penalty_ratio:.6f}")
 
@@ -971,7 +978,6 @@ class FOQALaboratory:
         save_plot_path: Optional[str],
     ) -> None:
         """Comparative evidence plot for adversarial Zeno damping."""
-        
         fig, ax = plt.subplots(figsize=(11, 6))
         steps = np.arange(len(probs_zeno))
 
@@ -1010,9 +1016,9 @@ class FOQALaboratory:
             fontsize=11,
         )
 
-        ax.set_title(f"FOQA Adversarial Audit: Quantum Zeno Catastrophe (theta={theta:.3f})")
+        ax.set_title(f"FOQA Adversarial Audit: Quantum Zeno Catastrophe (theta0={theta:.3f})")
         ax.set_xlabel("Iteration n")
-        ax.set_ylabel("Cumulative Success Probability")
+        ax.set_ylabel("Cumulative success probability p")
         ax.set_ylim(0.0, 1.05)
         ax.grid(alpha=0.30)
         ax.legend(loc="upper left")
@@ -1038,7 +1044,7 @@ class FOQALaboratory:
         save_plot_path: Optional[str] = None,
         enforce_audit: bool = True,
     ) -> EmptyDatabaseResults:
-        """Module 6: empty-database boundary audit for theta = 0.
+        """Module 6: empty-database boundary audit for theta0 = 0.
 
         The audit verifies three safety requirements under a null oracle:
         - no NaN/Inf propagation in state or probability traces,
@@ -1058,7 +1064,7 @@ class FOQALaboratory:
         print("MODULE 6: ADVERSARIAL FOQA - THE EMPTY DATABASE PARADOX")
         print("-" * 72)
         print(
-            f"iterations={iterations}, control_theta={control_theta:.6f}, "
+            f"iterations={iterations}, control_theta0={control_theta:.6f}, "
             f"schedule={mizel_c:.3f}/sqrt(n+1)"
         )
 
@@ -1105,9 +1111,9 @@ class FOQALaboratory:
 
             return cumulative_success, False
 
-        print("Executing null-oracle boundary (theta = 0.0) ...")
+        print("Executing null-oracle boundary (theta0 = 0.0) ...")
         probs_empty, crashed_empty = run_foqa_safe(theta=0.0)
-        print(f"Executing control baseline (theta = {control_theta:.3f}) ...")
+        print(f"Executing control baseline (theta0 = {control_theta:.3f}) ...")
         probs_control, crashed_control = run_foqa_safe(theta=control_theta)
 
         finite_empty = bool(np.all(np.isfinite(probs_empty)))
@@ -1156,7 +1162,6 @@ class FOQALaboratory:
         save_plot_path: Optional[str],
     ) -> None:
         """Boundary evidence plot for safe empty-database handling."""
-        
         fig, ax = plt.subplots(figsize=(11, 5.5))
         steps = np.arange(len(probs_empty))
 
@@ -1173,7 +1178,7 @@ class FOQALaboratory:
             probs_empty,
             color="#D62728",
             linewidth=3.0,
-            label=r"Empty database ($\theta=0$): stable flatline",
+            label=r"Empty database ($\theta0=0$): stable flatline",
         )
 
         anchor = max(1, len(steps) // 2)
@@ -1189,7 +1194,7 @@ class FOQALaboratory:
 
         ax.set_title("FOQA Boundary Audit: Empty Database Paradox")
         ax.set_xlabel("Iteration n")
-        ax.set_ylabel("Cumulative Success Probability")
+        ax.set_ylabel("Cumulative success probability p")
         ax.set_ylim(-0.05, 1.05)
         ax.grid(alpha=0.30)
         ax.legend(loc="center right")
@@ -1213,7 +1218,7 @@ def _build_cli() -> argparse.ArgumentParser:
         "--theta",
         type=float,
         default=None,
-        help="Initial overlap theta. Defaults: module1=0.6, module2=0.01",
+        help="Initial overlap theta0. Defaults: module1=0.6, module2=0.01",
     )
     parser.add_argument("--alpha", type=float, default=1.2, help="Damping angle alpha_n.")
     parser.add_argument(
@@ -1253,34 +1258,48 @@ def _build_cli() -> argparse.ArgumentParser:
         help="Constant c in alpha_n = c/sqrt(n+1) for Module 4.",
     )
     parser.add_argument(
-        "--num-lambdas",
+        "--num-p-values",
         type=int,
         default=20,
-        help="Number of lambda points for Module 4 log sweep.",
+        dest="num_lambdas",
+        help="Number of p points for Module 4 log sweep.",
     )
     parser.add_argument(
-        "--lambda-max-exp",
+        "--num-lambdas",
+        type=int,
+        dest="num_lambdas",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--p-max-exp",
         type=int,
         default=-1,
-        help="Largest exponent for lambda sweep in Module 4 (10^exp).",
+        help="Largest exponent for p sweep in Module 4 (10^exp).",
     )
     parser.add_argument(
-        "--lambda-min-exp",
+        "--p-min-exp",
         type=int,
         default=-6,
-        help="Smallest exponent for lambda sweep in Module 4 (10^exp).",
+        help="Smallest exponent for p sweep in Module 4 (10^exp).",
     )
     parser.add_argument(
-        "--target-success",
+        "--target-success-p",
         type=float,
         default=0.99,
-        help="Cumulative success threshold for Module 4 halting.",
+        dest="good_success",
+        help="Cumulative success probability threshold p_target for Module 4 halting.",
+    )
+    parser.add_argument(
+        "--good-success",
+        type=float,
+        dest="good_success",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--max-iterations",
         type=int,
         default=50_000,
-        help="Iteration failsafe per lambda in Module 4.",
+        help="Iteration failsafe per p in Module 4.",
     )
     parser.add_argument(
         "--slope-tolerance",
@@ -1292,7 +1311,7 @@ def _build_cli() -> argparse.ArgumentParser:
         "--zeno-theta",
         type=float,
         default=0.01,
-        help="Initial overlap theta for Module 5 adversarial Zeno audit.",
+        help="Initial overlap theta0 for Module 5 adversarial Zeno audit.",
     )
     parser.add_argument(
         "--zeno-iterations",
@@ -1334,7 +1353,7 @@ def _build_cli() -> argparse.ArgumentParser:
         "--empty-control-theta",
         type=float,
         default=0.1,
-        help="Control-theta baseline for Module 6 empty-database audit.",
+        help="Control-theta0 baseline for Module 6 empty-database audit.",
     )
     parser.add_argument(
         "--empty-mizel-c",
@@ -1388,8 +1407,72 @@ def experiment_adversarial_empty_database(
     )
 
 
-def main() -> None:
-    args = _build_cli().parse_args()
+def run_all_modules_one_click(show_plot: bool = False) -> None:
+    """Run all six FOQA modules and save artifacts with default parameters."""
+    lab = FOQALaboratory()
+    stem = Path(__file__).stem
+
+    lab.experiment_module1_lcu_oblivious_circuit_synthesizer(
+        theta=0.6,
+        alpha_n=1.2,
+        show_plot=show_plot,
+        save_plot_path=f"{stem}_module1_lcu_oblivious.png",
+    )
+    lab.experiment_module2_damping_regime_sweeper(
+        theta=0.01,
+        iterations=120,
+        alpha_under=0.02,
+        alpha_over=1.5,
+        mizel_c=1.4,
+        show_plot=show_plot,
+        save_plot_path=f"{stem}_module2_damping_regimes.png",
+        enforce_audit=True,
+    )
+    lab.experiment_module3_nonlinear_recurrence_auditor(
+        theta=0.15,
+        iterations=6,
+        recurrence_c=0.5,
+        show_plot=show_plot,
+        save_plot_path=f"{stem}_module3_recurrence_audit.png",
+        enforce_audit=True,
+    )
+    lab.experiment_module4_asymptotic_complexity_auditor(
+        num_p_values=20,
+        p_max_exponent=-1,
+        p_min_exponent=-6,
+        target_success=0.99,
+        complexity_c=1.5,
+        max_iterations=50_000,
+        slope_tolerance=0.02,
+        show_plot=show_plot,
+        save_plot_path=f"{stem}_module4_asymptotic_complexity.png",
+        enforce_audit=True,
+    )
+    lab.experiment_module5_adversarial_zeno_catastrophe(
+        theta=0.01,
+        iterations=100,
+        zeno_alpha=1.5,
+        mizel_c=1.5,
+        classical_tolerance=0.05,
+        penalty_threshold=5.0,
+        show_plot=show_plot,
+        save_plot_path=f"{stem}_module5_zeno_catastrophe.png",
+        enforce_audit=True,
+    )
+    lab.experiment_module6_empty_database_paradox(
+        iterations=50,
+        control_theta=0.1,
+        mizel_c=1.5,
+        noise_floor=1e-15,
+        show_plot=show_plot,
+        save_plot_path=f"{stem}_module6_empty_database.png",
+        enforce_audit=True,
+    )
+    print("One-click FOQA run complete.")
+
+
+def main(argv: Optional[list[str]] = None) -> None:
+    args = _build_cli().parse_args(argv)
     lab = FOQALaboratory()
 
     if args.module == 1:
@@ -1440,10 +1523,10 @@ def main() -> None:
         return
     if args.module == 4:
         result = lab.experiment_module4_asymptotic_complexity_auditor(
-            num_lambdas=args.num_lambdas,
-            lambda_max_exponent=args.lambda_max_exp,
-            lambda_min_exponent=args.lambda_min_exp,
-            target_success=args.target_success,
+            num_p_values=args.num_p_values,
+            p_max_exponent=args.p_max_exp,
+            p_min_exponent=args.p_min_exp,
+            target_success=args.good_success,
             complexity_c=args.complexity_c,
             max_iterations=args.max_iterations,
             slope_tolerance=args.slope_tolerance,
@@ -1486,4 +1569,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    start_one_click_session(__file__, figure_prefix="foaa")
+    if len(sys.argv) == 1:
+        run_all_modules_one_click(show_plot=False)
+    else:
+        main()
