@@ -7,11 +7,17 @@ mathematical objects explicit:
   stopping time ``t_i``, branch weight ``w_i``, and conditional success
   probability ``s_i``.
 - The post-``A`` state is
-      |psi> = sum_i sqrt(w_i) (sqrt(s_i)|i,good> + sqrt(1-s_i)|i,bad>)
+      |psi> = sum_i sqrt(w_i) (sqrt(s_i)|i,Good> + sqrt(1-s_i)|i,Bad>)
   so total success probability is p = sum_i w_i s_i.
 - Standard amplitude amplification acts on this state with the exact
   SU(2) formula
-      p_k = sin^2((2k+1) * arcsin(sqrt(p))).
+      p_k = sin^2((2k+1) * theta0), where sin^2(theta0)=p.
+
+Standing notation aligned with final.tex:
+- H_Good / H_Bad: target and non-target sectors
+- Pi_Good / Pi_Bad: orthogonal projectors
+- |All> and p are used as the canonical success-parameter view
+- complexity discussed in oracle/query-call terms
 
 The file provides:
 1) exact branch-level/statistical identities,
@@ -26,11 +32,14 @@ than claiming exact gate counts.
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence, Tuple
+from pathlib import Path
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+from one_click_utils import start_one_click_session
 
 
 @dataclass(frozen=True)
@@ -58,6 +67,7 @@ class VTAAReport:
     """Summary of exact metrics and strategy comparisons."""
 
     p_success: float
+    # Legacy field name retained for compatibility: this is theta0 = arcsin(sqrt(p)).
     theta: float
     grover_k_opt: int
     grover_p_at_k_opt: float
@@ -71,7 +81,7 @@ class VTAAReport:
 
 @dataclass
 class SouffleProblemResults:
-    """Over-rotation benchmark when guessed and actual marked-state counts differ."""
+    """Over-rotation benchmark when guessed and actual H_Good-subspace counts differ."""
 
     n: int
     N: int
@@ -103,7 +113,7 @@ class ExactAAResults:
 
     n: int
     N: int
-    m_targets: int
+    m_good: int
     k_base: int
     k_peak_standard: int
     standard_probs: np.ndarray
@@ -143,7 +153,7 @@ class OpenSystemTrajectoryResults:
     k_max: int
     phase_damp_1q: float
     phase_damp_2q: float
-    target_state: str
+    good_state: str
     ideal_x: np.ndarray
     ideal_z: np.ndarray
     noisy_x: np.ndarray
@@ -180,7 +190,7 @@ class SubspaceAuditResults:
     n: int
     N: int
     k_max: int
-    target_state: str
+    good_state: str
     history_shape: tuple[int, int]
     singular_values: np.ndarray
     rank_threshold: float
@@ -196,13 +206,13 @@ class PhaseStaircaseResults:
     n: int
     N: int
     k_max: int
-    target_state: str
+    good_state: str
     theta_0: float
     empirical_angles: np.ndarray
     theoretical_angles: np.ndarray
     angle_abs_error: np.ndarray
     max_abs_error: float
-    target_fidelity: np.ndarray
+    good_fidelity: np.ndarray
 
 
 class VariableTimeAmplitudeAmplificationLab:
@@ -237,12 +247,13 @@ class VariableTimeAmplitudeAmplificationLab:
         self.weights = weights
         self.success_given_branch = success
 
-        # Branch-level good/bad mass decomposition.
+        # Branch-level H_Good/H_Bad mass decomposition.
         self.good_mass = self.weights * self.success_given_branch
         self.bad_mass = self.weights * (1.0 - self.success_given_branch)
 
         self.p_success = float(np.sum(self.good_mass))
         self.theta = float(np.arcsin(np.sqrt(self.p_success))) if self.p_success > 0 else 0.0
+        self.theta0 = self.theta
 
         self._validate_exact_identities()
 
@@ -251,7 +262,7 @@ class VariableTimeAmplitudeAmplificationLab:
     # ------------------------------------------------------------------
 
     def state_after_A(self) -> np.ndarray:
-        """Return |psi> in basis {|i,good>, |i,bad>} (dimension 2m)."""
+        """Return |psi> in basis {|i,H_Good>, |i,H_Bad>} (dimension 2m)."""
         m = len(self.stop_times)
         psi = np.zeros(2 * m, dtype=complex)
         psi[0::2] = np.sqrt(self.good_mass)
@@ -259,7 +270,7 @@ class VariableTimeAmplitudeAmplificationLab:
         return psi
 
     def success_projector(self) -> np.ndarray:
-        """Projector onto the 'good' subspace spanned by {|i,good>}."""
+        """Projector onto H_Good spanned by {|i,H_Good>}."""
         m = len(self.stop_times)
         p = np.zeros((2 * m, 2 * m), dtype=complex)
         for i in range(m):
@@ -278,7 +289,7 @@ class VariableTimeAmplitudeAmplificationLab:
         return np.cumsum(self.weights)
 
     def success_cdf_by_stage(self) -> np.ndarray:
-        """Cumulative good mass G_j = sum_{i<=j} w_i s_i."""
+        """Cumulative H_Good mass G_j = sum_{i<=j} w_i s_i."""
         return np.cumsum(self.good_mass)
 
     def _validate_exact_identities(self) -> None:
@@ -307,7 +318,7 @@ class VariableTimeAmplitudeAmplificationLab:
         return float(np.sin(angle) ** 2)
 
     def optimal_grover_iterations(self) -> int:
-        """k* = floor(pi/(4*theta) - 1/2) with theta = arcsin(sqrt(p))."""
+        """k* = floor(pi/(4*theta0) - 1/2) with theta0 = arcsin(sqrt(p))."""
         if self.p_success <= 0.0:
             return 0
         theta = self.theta
@@ -319,9 +330,9 @@ class VariableTimeAmplitudeAmplificationLab:
             return
 
         theta = self.theta
-        # Initial coordinates in {|bad>, |good>}.
+        # Initial coordinates in {|Bad>, |Good>}.
         v = np.array([np.sqrt(1.0 - self.p_success), np.sqrt(self.p_success)], dtype=float)
-        # One Grover iterate in invariant plane is rotation by 2*theta.
+        # One Grover iterate in invariant plane is rotation by 2*theta0.
         c = np.cos(2.0 * theta)
         s = np.sin(2.0 * theta)
         rot = np.array([[c, -s], [s, c]], dtype=float)
@@ -447,7 +458,7 @@ def format_report(report: VTAAReport) -> str:
     return "\n".join(
         [
             f"p_success                         : {report.p_success:.10f}",
-            f"theta = arcsin(sqrt(p))           : {report.theta:.10f}",
+            f"theta0 = arcsin(sqrt(p))          : {report.theta:.10f}",
             f"grover k_opt                      : {report.grover_k_opt}",
             f"grover success at k_opt           : {report.grover_p_at_k_opt:.10f}",
             f"E[T]                              : {report.t_mean:.10f}",
@@ -493,7 +504,7 @@ def save_plots(
     g_vals = lab.success_cdf_by_stage()
     fig2, ax2 = plt.subplots(figsize=(8, 4.8))
     ax2.step(stage, f_vals, where="mid", linewidth=1.8, label="F_j = halted mass")
-    ax2.step(stage, g_vals, where="mid", linewidth=1.8, label="G_j = good mass")
+    ax2.step(stage, g_vals, where="mid", linewidth=1.8, label="G_j = H_Good mass")
     ax2.set_title("Stage-Wise Halt and Success CDF")
     ax2.set_xlabel("Stopping stage index j")
     ax2.set_ylabel("Cumulative mass")
@@ -533,23 +544,23 @@ def save_plots(
 def _standard_grover_state_history(
     n: int,
     k_max: int,
-    target_state: str | None = None,
+    good_state: str | None = None,
 ) -> tuple[List[np.ndarray], str, int, int]:
-    """Return full state history |psi_0>..|psi_kmax> for standard AA with one marked state."""
+    """Return full state history |psi_0>..|psi_kmax> for standard AA with one H_Good basis state."""
     if n < 1:
         raise ValueError("n must be >= 1.")
     if k_max < 1:
         raise ValueError("k_max must be >= 1.")
 
     N = 2**n
-    if target_state is None:
-        target_state = "1" * n
-    if len(target_state) != n or any(ch not in "01" for ch in target_state):
-        raise ValueError("target_state must be an n-bit binary string.")
+    if good_state is None:
+        good_state = "1" * n
+    if len(good_state) != n or any(ch not in "01" for ch in good_state):
+        raise ValueError("good_state must be an n-bit binary string.")
 
-    target_idx = int(target_state, 2)
+    good_idx = int(good_state, 2)
     oracle_sign = np.ones(N, dtype=float)
-    oracle_sign[target_idx] = -1.0
+    oracle_sign[good_idx] = -1.0
 
     psi = np.ones(N, dtype=complex) / np.sqrt(N)
     history: List[np.ndarray] = [psi.copy()]
@@ -558,20 +569,20 @@ def _standard_grover_state_history(
         mean_amp = np.mean(psi)
         psi = (2.0 * mean_amp) - psi
         history.append(psi.copy())
-    return history, target_state, target_idx, N
+    return history, good_state, good_idx, N
 
 
 def experiment_2d_subspace_extractor(
     n: int = 10,
     k_max: int = 25,
-    target_state: str | None = None,
+    good_state: str | None = None,
     rank_threshold: float = 1e-12,
 ) -> SubspaceAuditResults:
     """Construct history matrix H and SVD-audit its empirical rank."""
     if rank_threshold <= 0.0:
         raise ValueError("rank_threshold must be > 0.")
 
-    history, target_state, _, N = _standard_grover_state_history(n=n, k_max=k_max, target_state=target_state)
+    history, good_state, _, N = _standard_grover_state_history(n=n, k_max=k_max, good_state=good_state)
     history_matrix = np.column_stack(history)
     singular_values = np.linalg.svd(history_matrix, compute_uv=False)
     empirical_rank = int(np.count_nonzero(singular_values > rank_threshold))
@@ -587,7 +598,7 @@ def experiment_2d_subspace_extractor(
         n=n,
         N=N,
         k_max=k_max,
-        target_state=target_state,
+        good_state=good_state,
         history_shape=(int(history_matrix.shape[0]), int(history_matrix.shape[1])),
         singular_values=singular_values,
         rank_threshold=rank_threshold,
@@ -638,14 +649,14 @@ def save_subspace_audit_plot(result: SubspaceAuditResults, output_prefix: str = 
 def experiment_geometric_phase_staircase(
     n: int = 8,
     k_max: int = 25,
-    target_state: str | None = None,
+    good_state: str | None = None,
 ) -> PhaseStaircaseResults:
-    """Extract theta_k and verify linear staircase theta_k=(2k+1)theta_0."""
-    history, target_state, target_idx, N = _standard_grover_state_history(n=n, k_max=k_max, target_state=target_state)
+    """Extract theta_k and verify linear staircase theta_k=(2k+1)theta0."""
+    history, good_state, good_idx, N = _standard_grover_state_history(n=n, k_max=k_max, good_state=good_state)
     theta_0 = float(np.arcsin(np.sqrt(1.0 / N)))
 
     ket_g = np.zeros(N, dtype=complex)
-    ket_g[target_idx] = 1.0
+    ket_g[good_idx] = 1.0
     ket_s = np.ones(N, dtype=complex) / np.sqrt(N)
     ket_b = ket_s - np.vdot(ket_g, ket_s) * ket_g
     ket_b = ket_b / np.linalg.norm(ket_b)
@@ -669,13 +680,13 @@ def experiment_geometric_phase_staircase(
         n=n,
         N=N,
         k_max=k_max,
-        target_state=target_state,
+        good_state=good_state,
         theta_0=theta_0,
         empirical_angles=empirical_arr,
         theoretical_angles=theoretical_arr,
         angle_abs_error=abs_err,
         max_abs_error=float(np.max(abs_err)),
-        target_fidelity=np.array(fidelity, dtype=float),
+        good_fidelity=np.array(fidelity, dtype=float),
     )
 
 
@@ -688,14 +699,14 @@ def save_phase_staircase_plot(result: PhaseStaircaseResults, output_prefix: str 
         result.theoretical_angles,
         color="0.30",
         linewidth=2.4,
-        label=r"Theory: $\theta_k=(2k+1)\theta_0$",
+        label=r"Theory: $\theta_k=(2k+1)\theta0$",
     )
     ax.scatter(
         k_vals,
         result.empirical_angles,
         color="tab:red",
         s=32,
-        label=r"Empirical: $\theta_k=\mathrm{atan2}(\Re\langle G|\psi_k\rangle,\Re\langle B|\psi_k\rangle)$",
+        label=r"Empirical: $\theta_k=\mathrm{atan2}(\Re\langle H_{Good}|\psi_k\rangle,\Re\langle H_{Bad}|\psi_k\rangle)$",
         zorder=4,
     )
     ax.set_title(
@@ -719,7 +730,7 @@ def experiment_souffle_catastrophe(
     actual_m: int = 5,
     k_scan_factor: float = 1.5,
 ) -> SouffleProblemResults:
-    """Numerically demonstrate over-rotation from an incorrect M estimate."""
+    """Numerically demonstrate over-rotation from an incorrect H_Good count M estimate."""
     if n < 1:
         raise ValueError("n must be >= 1.")
     if guessed_m < 1 or actual_m < 1:
@@ -736,21 +747,21 @@ def experiment_souffle_catastrophe(
     k_max = max(k_opt_guess + 1, int(np.ceil(k_scan_factor * max(1, k_opt_guess))))
     k_values = np.arange(k_max + 1, dtype=int)
 
-    # Mark the first actual_m basis states as good states.
-    target_indices = np.arange(actual_m, dtype=int)
+    # Mark the first actual_m basis states as H_Good states.
+    good_indices = np.arange(actual_m, dtype=int)
     oracle_sign = np.ones(N, dtype=float)
-    oracle_sign[target_indices] = -1.0
+    oracle_sign[good_indices] = -1.0
 
     # Uniform start state |s>.
     psi = np.ones(N, dtype=complex) / np.sqrt(N)
 
     actual_probs: List[float] = []
     for k in k_values:
-        p_good = float(np.sum(np.abs(psi[target_indices]) ** 2))
+        p_good = float(np.sum(np.abs(psi[good_indices]) ** 2))
         actual_probs.append(p_good)
 
         if k < k_max:
-            # Oracle phase flip on actual good states.
+            # Oracle phase flip on actual H_Good states.
             psi = oracle_sign * psi
             # Diffusion about |s>: D = 2|s><s| - I.
             mean_amp = np.mean(psi)
@@ -808,7 +819,7 @@ def save_souffle_plot(result: SouffleProblemResults, output_prefix: str = "vtaa"
     )
     ax.set_title("Souffle Problem: Over-Rotation Catastrophe")
     ax.set_xlabel("Grover iterations k")
-    ax.set_ylabel("Success probability")
+    ax.set_ylabel("Success probability p")
     ax.set_ylim(0.0, 1.02)
     ax.grid(alpha=0.3)
     ax.legend()
@@ -872,9 +883,9 @@ def experiment_ftqc_diffusion_scaling(
             num_qubits = n + ancillas
             qc = QuantumCircuit(num_qubits)
             ctrl_idx = list(range(controls))
-            target_idx = controls
+            good_idx = controls
             anc_idx = list(range(controls + 1, num_qubits))
-            qc.mcx(ctrl_idx, target_idx, anc_idx, mode="v-chain")
+            qc.mcx(ctrl_idx, good_idx, anc_idx, mode="v-chain")
 
             t_qc = transpile(
                 qc,
@@ -969,14 +980,14 @@ def save_ftqc_scaling_plot(result: FTQCScalingResults, output_prefix: str = "vta
 
 def experiment_exact_amplitude_amplification(
     n: int = 8,
-    m_targets: int = 3,
+    m_good: int = 3,
     coarse_grid: int = 48,
 ) -> ExactAAResults:
     """Run standard AA and optimize a fractional final step for exact-AA landing."""
     if n < 1:
         raise ValueError("n must be >= 1.")
-    if m_targets < 1:
-        raise ValueError("m_targets must be >= 1.")
+    if m_good < 1:
+        raise ValueError("m_good must be >= 1.")
     if coarse_grid < 8:
         raise ValueError("coarse_grid must be >= 8.")
 
@@ -986,16 +997,16 @@ def experiment_exact_amplitude_amplification(
         raise RuntimeError("scipy is required for exact-AA phase optimization.") from exc
 
     N = 2**n
-    if m_targets > N:
-        raise ValueError("m_targets must be <= 2**n.")
+    if m_good > N:
+        raise ValueError("m_good must be <= 2**n.")
 
-    target_indices = np.arange(m_targets, dtype=int)
-    theta_0 = float(np.arcsin(np.sqrt(m_targets / N)))
+    good_indices = np.arange(m_good, dtype=int)
+    theta_0 = float(np.arcsin(np.sqrt(m_good / N)))
     k_base = max(0, int(np.floor(np.pi / (4.0 * theta_0) - 0.5)))
 
     # Build operators in full space for explicit statevector-level evidence.
     proj_good = np.zeros((N, N), dtype=complex)
-    proj_good[target_indices, target_indices] = 1.0
+    proj_good[good_indices, good_indices] = 1.0
     ket_s = np.ones(N, dtype=complex) / np.sqrt(N)
     proj_s = np.outer(ket_s, ket_s.conjugate())
     oracle_pi = np.eye(N, dtype=complex) - 2.0 * proj_good
@@ -1008,7 +1019,7 @@ def experiment_exact_amplitude_amplification(
     k_max = k_base + 2
     for k in range(k_max + 1):
         states.append(psi.copy())
-        standard_probs.append(float(np.sum(np.abs(psi[target_indices]) ** 2)))
+        standard_probs.append(float(np.sum(np.abs(psi[good_indices]) ** 2)))
         if k < k_max:
             psi = diffusion_pi @ (oracle_pi @ psi)
 
@@ -1020,7 +1031,7 @@ def experiment_exact_amplitude_amplification(
         oracle_alpha = np.eye(N, dtype=complex) + (np.exp(1j * alpha) - 1.0) * proj_good
         diffusion_beta = np.eye(N, dtype=complex) + (np.exp(1j * beta) - 1.0) * proj_s
         psi_final = diffusion_beta @ (oracle_alpha @ psi_base)
-        return float(np.sum(np.abs(psi_final[target_indices]) ** 2))
+        return float(np.sum(np.abs(psi_final[good_indices]) ** 2))
 
     # Coarse search to avoid local minima in local optimizer.
     alpha_grid = np.linspace(0.0, 2.0 * np.pi, coarse_grid, endpoint=False)
@@ -1033,7 +1044,7 @@ def experiment_exact_amplitude_amplification(
         oracle_applied = oracle_alpha @ psi_base
         for beta in beta_grid:
             diffusion_beta = np.eye(N, dtype=complex) + (np.exp(1j * beta) - 1.0) * proj_s
-            p = float(np.sum(np.abs((diffusion_beta @ oracle_applied)[target_indices]) ** 2))
+            p = float(np.sum(np.abs((diffusion_beta @ oracle_applied)[good_indices]) ** 2))
             if p > best_prob:
                 best_prob = p
                 best_alpha = float(alpha)
@@ -1056,7 +1067,7 @@ def experiment_exact_amplitude_amplification(
     return ExactAAResults(
         n=n,
         N=N,
-        m_targets=m_targets,
+        m_good=m_good,
         k_base=k_base,
         k_peak_standard=k_peak_standard,
         standard_probs=standard_probs_arr,
@@ -1106,7 +1117,7 @@ def save_exact_aa_peak_plot(result: ExactAAResults, output_prefix: str = "vtaa")
     ax.axhline(1.0, color="black", linestyle=":", linewidth=1.2, label="Unity target")
     ax.set_title("Exact Amplitude Amplification: Discretization Fix")
     ax.set_xlabel("Iteration k")
-    ax.set_ylabel("Success probability")
+    ax.set_ylabel("Success probability p")
     ax.set_ylim(max(0.0, float(np.min(std_zoom)) * 0.97), 1.01)
     ax.grid(alpha=0.3)
     ax.legend(loc="lower right")
@@ -1142,11 +1153,11 @@ def experiment_phase_mismatch_leakage(
         raise ValueError("rank_threshold must be > 0.")
 
     N = 2**n
-    target_idx = N - 1
+    good_idx = N - 1
     spur_idx = N - 2 if N >= 2 else 0
 
     ket_t = np.zeros(N, dtype=complex)
-    ket_t[target_idx] = 1.0
+    ket_t[good_idx] = 1.0
     proj_t = np.outer(ket_t, ket_t.conjugate())
 
     ket_spur = np.zeros(N, dtype=complex)
@@ -1277,7 +1288,7 @@ def experiment_open_system_trajectory(
     k_max: int = 12,
     phase_damp_1q: float = 0.02,
     phase_damp_2q: float = 0.08,
-    target_state: str | None = None,
+    good_state: str | None = None,
 ) -> OpenSystemTrajectoryResults:
     """Simulate AA as an open system and track purity/plane-distance decay."""
     if n < 2:
@@ -1295,15 +1306,15 @@ def experiment_open_system_trajectory(
         raise RuntimeError("qiskit + qiskit-aer are required for open-system trajectory module.") from exc
 
     N = 2**n
-    if target_state is None:
-        target_state = "1" * n
-    if len(target_state) != n or any(ch not in "01" for ch in target_state):
-        raise ValueError("target_state must be an n-bit binary string.")
-    target_idx = int(target_state, 2)
+    if good_state is None:
+        good_state = "1" * n
+    if len(good_state) != n or any(ch not in "01" for ch in good_state):
+        raise ValueError("good_state must be an n-bit binary string.")
+    good_idx = int(good_state, 2)
 
     # Build the |B>,|G> basis used for 2D projection observables.
     vec_g = np.zeros(N, dtype=complex)
-    vec_g[target_idx] = 1.0
+    vec_g[good_idx] = 1.0
     vec_s = np.ones(N, dtype=complex) / np.sqrt(N)
     vec_b = vec_s - np.vdot(vec_g, vec_s) * vec_g
     vec_b = vec_b / np.linalg.norm(vec_b)
@@ -1329,7 +1340,7 @@ def experiment_open_system_trajectory(
     sim_noisy = AerSimulator(method="density_matrix", noise_model=noise_model)
 
     def _append_oracle(qc: "QuantumCircuit", phase: float) -> None:
-        rev_bits = target_state[::-1]
+        rev_bits = good_state[::-1]
         for q, bit in enumerate(rev_bits):
             if bit == "0":
                 qc.x(q)
@@ -1390,7 +1401,7 @@ def experiment_open_system_trajectory(
         k_max=k_max,
         phase_damp_1q=phase_damp_1q,
         phase_damp_2q=phase_damp_2q,
-        target_state=target_state,
+        good_state=good_state,
         ideal_x=np.array(ideal_x, dtype=float),
         ideal_z=np.array(ideal_z, dtype=float),
         noisy_x=np.array(noisy_x, dtype=float),
@@ -1597,7 +1608,7 @@ def save_vtaa_cost_sweep_plot(result: VTAA_CostSweepResults, output_prefix: str 
     return path
 
 
-def main() -> None:
+def main(argv: Optional[Sequence[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Variable-Time Amplitude Amplification lab")
     parser.add_argument("--times", type=str, default="1,2,4,8,16", help="comma-separated stop times")
     parser.add_argument("--weights", type=str, default="0.36,0.28,0.18,0.12,0.06", help="comma-separated branch weights")
@@ -1611,16 +1622,16 @@ def main() -> None:
     parser.add_argument("--run-subspace-audit", action="store_true", help="run 2D invariant subspace SVD audit")
     parser.add_argument("--subspace-n", type=int, default=10, help="qubit count for subspace audit")
     parser.add_argument("--subspace-k-max", type=int, default=25, help="iterations for subspace audit")
-    parser.add_argument("--subspace-target-state", type=str, default=None, help="optional marked n-bit state for subspace audit")
+    parser.add_argument("--subspace-good-state", type=str, default=None, help="optional H_Good n-bit state for subspace audit")
     parser.add_argument("--subspace-rank-threshold", type=float, default=1e-12, help="rank threshold for subspace SVD")
     parser.add_argument("--run-phase-staircase", action="store_true", help="run geometric phase staircase audit")
     parser.add_argument("--staircase-n", type=int, default=8, help="qubit count for staircase audit")
     parser.add_argument("--staircase-k-max", type=int, default=25, help="iterations for staircase audit")
-    parser.add_argument("--staircase-target-state", type=str, default=None, help="optional marked n-bit state for staircase audit")
+    parser.add_argument("--staircase-good-state", type=str, default=None, help="optional H_Good n-bit state for staircase audit")
     parser.add_argument("--run-souffle-catastrophe", action="store_true", help="run over-rotation catastrophe experiment")
     parser.add_argument("--souffle-n", type=int, default=8, help="qubits for souffle experiment")
-    parser.add_argument("--souffle-guessed-m", type=int, default=1, help="guessed number of marked states")
-    parser.add_argument("--souffle-actual-m", type=int, default=5, help="actual number of marked states")
+    parser.add_argument("--souffle-guessed-m", type=int, default=1, help="guessed number of H_Good states")
+    parser.add_argument("--souffle-actual-m", type=int, default=5, help="actual number of H_Good states")
     parser.add_argument("--souffle-k-factor", type=float, default=1.5, help="k scan factor past guessed k*")
     parser.add_argument("--run-ftqc-scaling", action="store_true", help="run FTQC ancilla/T-gate diffusion scaling")
     parser.add_argument("--ftqc-n-min", type=int, default=5, help="minimum n for FTQC scaling sweep")
@@ -1634,7 +1645,7 @@ def main() -> None:
     parser.add_argument("--ftqc-opt-level", type=int, default=1, help="qiskit transpiler optimization level")
     parser.add_argument("--run-exact-aa", action="store_true", help="run exact amplitude amplification benchmark")
     parser.add_argument("--exact-aa-n", type=int, default=8, help="qubit count for exact-AA benchmark")
-    parser.add_argument("--exact-aa-m", type=int, default=3, help="marked-state count for exact-AA benchmark")
+    parser.add_argument("--exact-aa-m", type=int, default=3, help="H_Good-subspace count for exact-AA benchmark")
     parser.add_argument(
         "--exact-aa-grid",
         type=int,
@@ -1650,7 +1661,7 @@ def main() -> None:
         "--leakage-crosstalk-deg",
         type=float,
         default=0.6,
-        help="spurious oracle crosstalk phase on a non-target basis state (degrees)",
+        help="spurious oracle crosstalk phase on an H_Bad basis state (degrees)",
     )
     parser.add_argument(
         "--leakage-local-z-deg",
@@ -1680,10 +1691,10 @@ def main() -> None:
         help="two-qubit phase-damping probability per entangling gate",
     )
     parser.add_argument(
-        "--open-system-target-state",
+        "--open-system-good-state",
         type=str,
         default=None,
-        help="optional marked n-bit target for open-system trajectory",
+        help="optional H_Good n-bit state for open-system trajectory",
     )
     parser.add_argument("--run-vtaa-synthesis", action="store_true", help="run VTAA staged state synthesis (Eq. 47-style)")
     parser.add_argument("--run-vtaa-sweep", action="store_true", help="run VTAA cost-functional sweep")
@@ -1691,7 +1702,7 @@ def main() -> None:
     parser.add_argument("--vtaa-t1", type=float, default=100.0, help="stage-1 cost for VTAA sweep")
     parser.add_argument("--vtaa-t2", type=float, default=1000.0, help="stage-2 cost for VTAA sweep")
     parser.add_argument("--vtaa-t3", type=float, default=10000.0, help="stage-3 cost for VTAA sweep")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     times = _parse_csv_floats(args.times)
     weights = _parse_csv_floats(args.weights)
@@ -1711,7 +1722,7 @@ def main() -> None:
         subspace_result = experiment_2d_subspace_extractor(
             n=args.subspace_n,
             k_max=args.subspace_k_max,
-            target_state=args.subspace_target_state,
+            good_state=args.subspace_good_state,
             rank_threshold=args.subspace_rank_threshold,
         )
         print("\n2D Subspace SVD Audit:")
@@ -1730,13 +1741,13 @@ def main() -> None:
         staircase_result = experiment_geometric_phase_staircase(
             n=args.staircase_n,
             k_max=args.staircase_k_max,
-            target_state=args.staircase_target_state,
+            good_state=args.staircase_good_state,
         )
         print("\nGeometric Phase Staircase:")
         print(f"  N                                 : {staircase_result.N}")
-        print(f"  theta_0                           : {staircase_result.theta_0:.10f}")
+        print(f"  theta0                            : {staircase_result.theta_0:.10f}")
         print(f"  max |theta_emp-theory|            : {staircase_result.max_abs_error:.3e}")
-        print(f"  fidelity at k_max                 : {staircase_result.target_fidelity[-1]:.10f}")
+        print(f"  H_Good fidelity at k_max          : {staircase_result.good_fidelity[-1]:.10f}")
 
     souffle_result: SouffleProblemResults | None = None
     if args.run_souffle_catastrophe:
@@ -1789,12 +1800,12 @@ def main() -> None:
     if args.run_exact_aa:
         exact_result = experiment_exact_amplitude_amplification(
             n=args.exact_aa_n,
-            m_targets=args.exact_aa_m,
+            m_good=args.exact_aa_m,
             coarse_grid=args.exact_aa_grid,
         )
         print("\nExact Amplitude Amplification:")
         print(f"  N                                 : {exact_result.N}")
-        print(f"  M                                 : {exact_result.m_targets}")
+        print(f"  M                                 : {exact_result.m_good}")
         print(f"  k_base                            : {exact_result.k_base}")
         print(f"  standard p(k_base)                : {exact_result.standard_probs[exact_result.k_base]:.10f}")
         print(
@@ -1842,10 +1853,10 @@ def main() -> None:
             k_max=args.open_system_k_max,
             phase_damp_1q=args.open_system_phase_damp_1q,
             phase_damp_2q=args.open_system_phase_damp_2q,
-            target_state=args.open_system_target_state,
+            good_state=args.open_system_good_state,
         )
         print("\nOpen-System Trajectory:")
-        print(f"  target state                     : {open_result.target_state}")
+        print(f"  H_Good state                   : {open_result.good_state}")
         print(f"  phase damping p1q/p2q            : {open_result.phase_damp_1q:.4f} / {open_result.phase_damp_2q:.4f}")
         print(f"  noisy purity (k=0 -> k_max)      : {open_result.noisy_purity[0]:.6f} -> {open_result.noisy_purity[-1]:.6f}")
         print(
@@ -1906,4 +1917,23 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    start_one_click_session(__file__, figure_prefix="vtaa")
+    if len(sys.argv) == 1:
+        stem = Path(__file__).stem
+        main(
+            [
+                "--plot-prefix",
+                stem,
+                "--run-subspace-audit",
+                "--run-phase-staircase",
+                "--run-souffle-catastrophe",
+                "--run-ftqc-scaling",
+                "--run-exact-aa",
+                "--run-phase-leakage",
+                "--run-open-system-trajectory",
+                "--run-vtaa-synthesis",
+                "--run-vtaa-sweep",
+            ]
+        )
+    else:
+        main()

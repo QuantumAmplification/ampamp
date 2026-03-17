@@ -3,6 +3,19 @@
 This file implements a complete, phase-structured QSVT laboratory from core
 SU(2) polynomial synthesis to asymptotic limits and hardware fragility.
 
+Canonical notation bridge (aligned with `final.tex`):
+- `H_Good`, `H_Bad`: target/non-target subspaces.
+- `Pi_Good`, `Pi_Bad`: orthogonal projectors onto those subspaces.
+- `|All> = A|0>^n`: prepared input state before amplification.
+- `p = ||Pi_Good |All>||^2`: initial success probability.
+- `N = 2^n`, `M`: search-space size and marked count.
+- `sin^2(theta0) = p`: shared angle parameter.
+- Oracle complexity is measured in query calls.
+
+QSVT modules keep their native singular-value notation. Where this file compares
+against amplitude amplification (notably Module 6), `x0` is interpreted as
+`sqrt(p)` and `theta0 = arcsin(sqrt(p))`.
+
 Phase I: Core algebra and structural validation
 1. Generalized sequence evaluator (Eq. 78)
 2. Polynomial extractor (Eq. 80)
@@ -37,19 +50,12 @@ Phase V: Adversarial QSVT edge cases
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-
-
-def _show_figure() -> None:
-    """Show figures on interactive backends and close silently on headless Agg."""
-    if matplotlib.get_backend().lower() == "agg":
-        plt.close(plt.gcf())
-        return
-    plt.show()
+from one_click_utils import start_one_click_session
 
 
 @dataclass
@@ -134,7 +140,12 @@ class MatrixInversionResults:
 
 @dataclass
 class FixedPointSearchResults:
-    """Results for fixed-point search transfer and convergence diagnostics."""
+    """Results for fixed-point search transfer and convergence diagnostics.
+
+    Compatibility note:
+    - `test_x0` is the legacy overlap symbol and corresponds to `sqrt(p)`.
+    - Probability arrays store success probabilities in the canonical `p` sense.
+    """
 
     delta: float
     target_degree: int
@@ -450,7 +461,7 @@ def run_qsp_engine_diagnostics(plot: bool = True) -> Dict[str, QSPForwardResults
 
     plt.suptitle("QSVT Forward Engine: Polynomial Extraction & Bounds Auditing")
     plt.tight_layout()
-    _show_figure()
+    plt.show()
 
     return results
 
@@ -621,7 +632,7 @@ def experiment_lcu_block_encoding(plot: bool = True) -> LCUBlockEncodingResults:
 
         plt.suptitle(f"LCU Block-Encoding Audit: Subnormalization $\\alpha={alpha:.2f}$")
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return LCUBlockEncodingResults(
         target_matrix_A=a_target,
@@ -756,7 +767,7 @@ def experiment_qsvt_invariant_subspace(
 
         plt.suptitle("Theorem 17 Validation: Dynamical SVD Plane Factorization")
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return InvariantSubspaceResults(
         matrix_dim=dim_a,
@@ -950,7 +961,7 @@ def experiment_qsvt_hamiltonian_simulation(
 
         plt.suptitle("Phase II Module 4: Hamiltonian Simulation via Jacobi-Anger")
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return HamiltonianSimResults(
         t=float(t),
@@ -1103,7 +1114,7 @@ def experiment_qsvt_matrix_inversion(
 
         plt.suptitle("Phase II Module 5: QSVT Matrix Inversion vs QPE")
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return MatrixInversionResults(
         kappa=float(kappa),
@@ -1128,7 +1139,11 @@ def experiment_qsvt_fixed_point_search(
     num_points: int = 2001,
     plot: bool = True,
 ) -> FixedPointSearchResults:
-    """MODULE 6: Fixed-point search via sign-function polynomial thresholding."""
+    """MODULE 6: Fixed-point search via sign-function polynomial thresholding.
+
+    Notation bridge: this module maps `x0 = sqrt(p)` and uses
+    `theta0 = arcsin(sqrt(p))` for AA baseline comparisons.
+    """
     from numpy.polynomial.chebyshev import chebfit, chebval
     from scipy.special import erf
 
@@ -1149,7 +1164,7 @@ def experiment_qsvt_fixed_point_search(
 
     print(f"Target Spectral Gap (delta): {delta:.3f}")
     print(f"QSVT Polynomial Degree: {target_degree}")
-    print(f"Test overlap x0: {test_x0:.3f}")
+    print(f"Test overlap x0 (= sqrt(p)): {test_x0:.3f}")
 
     x_eval = np.linspace(-1.0, 1.0, num_points)
 
@@ -1173,9 +1188,10 @@ def experiment_qsvt_fixed_point_search(
     odd_parity_error = float(np.max(np.abs(y_approx + y_approx[::-1])))
 
     degrees_eval = np.arange(1, target_degree + 20, 2, dtype=int)
-    theta_0 = float(np.arcsin(np.clip(test_x0, -1.0, 1.0)))
+    p0 = float(np.clip(test_x0, 0.0, 1.0) ** 2)
+    theta0 = float(np.arcsin(np.sqrt(p0)))
 
-    standard_aa_probs = np.sin(degrees_eval * theta_0) ** 2
+    standard_aa_probs = np.sin(degrees_eval * theta0) ** 2
 
     qsvt_raw = np.zeros_like(degrees_eval, dtype=float)
     for i, d in enumerate(degrees_eval):
@@ -1191,9 +1207,10 @@ def experiment_qsvt_fixed_point_search(
 
     print(f"Max Polynomial Amplitude: {max_amplitude:.6f} (<= 1 bound)")
     print(f"Odd Parity Audit Error: {odd_parity_error:.4e}")
-    print(f"Standard AA Final Probability: {standard_aa_probs[-1]:.4f}")
-    print(f"QSVT Raw Final Probability:    {qsvt_raw[-1]:.4f}")
-    print(f"QSVT Fixed-Point Final Prob.:  {qsvt_mono[-1]:.4f}")
+    print(f"AA notation baseline: p = {p0:.6f}, theta0 = {theta0:.6f} rad")
+    print(f"Standard AA final success probability p_k: {standard_aa_probs[-1]:.4f}")
+    print(f"QSVT raw final success probability p_k:    {qsvt_raw[-1]:.4f}")
+    print(f"QSVT fixed-point final success p_k:        {qsvt_mono[-1]:.4f}")
     print(f"Raw monotonicity violations:   {raw_viol}")
     print(f"Envelope monotonicity violations: {mono_viol}")
     print("-" * 65)
@@ -1255,16 +1272,16 @@ def experiment_qsvt_fixed_point_search(
         )
         ax2.axvline(target_degree, color="gray", linestyle=":", label=f"Design degree d={target_degree}")
         ax2.axhline(1.0, color="black", linestyle="-")
-        ax2.set_title(f"Convergence Audit (x0={test_x0:.2f})", fontsize=13)
+        ax2.set_title(f"Convergence Audit (sqrt(p)={test_x0:.2f})", fontsize=13)
         ax2.set_xlabel("Oracle Queries / QSVT Degree d")
-        ax2.set_ylabel("Success Probability")
+        ax2.set_ylabel("Success Probability p")
         ax2.set_ylim(0.0, 1.05)
         ax2.grid(True, which="both", alpha=0.3)
         ax2.legend(loc="lower right")
 
         plt.suptitle("Phase II Module 6: Fixed-Point Search Without Overshoot")
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return FixedPointSearchResults(
         delta=float(delta),
@@ -1389,7 +1406,7 @@ def experiment_lcu_operator_algebra(
 
         plt.suptitle("Phase III Module 7: LCU Operator Algebra and Alpha Growth")
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return OperatorAlgebraResults(
         A=A,
@@ -1547,7 +1564,7 @@ def experiment_qsvt_uniform_amplification(
 
         plt.suptitle("Phase III Module 8: Uniform Singular Value Amplification")
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return UniformAmplificationResults(
         amplification_factor=float(c_amp),
@@ -1707,7 +1724,7 @@ def experiment_markov_brothers_boundary(
 
         plt.suptitle("Phase IV Module 9: Information Limits from Markov/Bernstein Theory")
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return MarkovBoundaryResults(
         d_visual=d_visual,
@@ -1852,9 +1869,8 @@ def experiment_physical_phase_fragility(
         inset.grid(True, alpha=0.3)
 
         plt.suptitle("Phase IV Module 10: QSVT Hardware Fragility")
-        # `tight_layout` is incompatible with the manually positioned inset axis.
-        fig.subplots_adjust(left=0.06, right=0.98, bottom=0.12, top=0.86, wspace=0.25)
-        _show_figure()
+        plt.tight_layout()
+        plt.show()
 
     return PhaseFragilityResults(
         degree=degree,
@@ -1972,7 +1988,7 @@ def experiment_adversarial_gibbs_catastrophe(
         ax.grid(True, alpha=0.3)
         ax.legend(loc="lower right")
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return GibbsCatastropheResults(
         degree=degree,
@@ -2064,7 +2080,7 @@ def experiment_adversarial_parity_scramble(
 
         plt.suptitle("Adversarial QSVT: Parity Scramble on Non-Hermitian Input", fontsize=13)
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return ParityScrambleResults(
         A_raw=A,
@@ -2239,7 +2255,7 @@ def experiment_adversarial_ill_conditioned_abyss(
 
         plt.suptitle("Adversarial QSVT: Ill-Conditioned Abyss Under Fixed Depth", fontsize=15)
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return IllConditionedAbyssResults(
         degree=int(degree),
@@ -2325,7 +2341,7 @@ def experiment_adversarial_non_normal_trap(plot: bool = True) -> NonNormalTrapRe
         fig.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
         plt.suptitle("Adversarial QSVT: The Non-Normal Eigenvalue Trap", fontsize=14)
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return NonNormalTrapResults(
         A=A,
@@ -2496,7 +2512,7 @@ def experiment_adversarial_phase_quantization(
 
         plt.suptitle("Adversarial QSVT: The Physical Control-Electronics Bottleneck", fontsize=14)
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return PhaseQuantizationResults(
         degree=int(degree),
@@ -2621,7 +2637,7 @@ def experiment_adversarial_subnormalization_hubris(
 
         plt.suptitle("Adversarial QSVT: Mathematical Impossibility of Cheating Alpha", fontsize=14)
         plt.tight_layout()
-        _show_figure()
+        plt.show()
 
     return SubnormalizationHubrisResults(
         A=A,
@@ -2635,6 +2651,7 @@ def experiment_adversarial_subnormalization_hubris(
 
 
 if __name__ == "__main__":
+    start_one_click_session(__file__, figure_prefix=Path(__file__).stem)
     run_qsp_engine_diagnostics(plot=True)
     experiment_lcu_block_encoding(plot=True)
     experiment_qsvt_invariant_subspace(degree=20, seed=42, plot=True)
