@@ -82,5 +82,5 @@ nav:
       - Distributed: api/distributed.md
       - Variable Time: api/variable_time.md
       - Oblivious: api/oblivious.md
-      - FPOA: api/fpoa.md
+      - FPOA: api/foqa.md
       - Diagnostics: api/diagnostics.md

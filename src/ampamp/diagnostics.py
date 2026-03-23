@@ -13,7 +13,7 @@ from qiskit.quantum_info import partial_trace, DensityMatrix
 from .foundations import GroverEngine
 from .fixed_point import FixedPointEngine
 from .oblivious import ObliviousEngine
-from .fpoa import FOQAEngine
+from .foqa import FOQAEngine
 from .distributed import DQAAEngine
 from .variable_time import VTAAEngine
 from .qsvt import SU2QSPEngine

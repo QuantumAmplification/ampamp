@@ -57,7 +57,7 @@ Amplitude Amplification (`ampamp`) provides a robust, production-grade API for r
     ---
     Fixed-Point Oblivious Amplitude Amplification defining discrete $SU(2)$ non-linear recurrence paths to mitigate over-rotation faults in Hamiltonian simulations.
     
-    [API Reference](api/fpoa.md)
+    [API Reference](api/foqa.md)
 
 -   **Algorithm Diagnostics**
 
