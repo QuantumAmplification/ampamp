@@ -14,7 +14,6 @@ from .fpoa import FOQAEngine
 from .distributed import DQAAEngine, OracleSynthesizer
 from .variable_time import VTAAEngine, VariableTimeBranch
 from .qsvt import SU2QSPEngine, QSVTSynthesizer  
-
 from .diagnostics import (
     GroverAuditor, 
     FPAAAuditor, 
