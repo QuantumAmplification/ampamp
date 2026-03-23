@@ -91,13 +91,14 @@ class GroverAuditor:
         diff = self.engine.get_diffusion()
 
         for k in range(max_k + 1):
-            # 1. State before copy
+            # State before copy
             qc_orig = self.engine.construct_circuit(k)
             qc_orig.save_statevector()
             state_orig = self.backend.run(transpile(qc_orig, self.backend)).result().get_statevector()
-            purity_original.append(np.real(np.trace(np.dot(state_orig.data, state_orig.data))))
-
-            # 2. State after naive CNOT copy
+            rho_orig = DensityMatrix(state_orig)
+            purity_original.append(np.real(np.trace(np.dot(rho_orig.data, rho_orig.data))))
+            
+            # State after naive CNOT copy
             qc_copy = QuantumCircuit(self.engine.n * 2)
             qc_copy.h(range(self.engine.n))
             for _ in range(k):

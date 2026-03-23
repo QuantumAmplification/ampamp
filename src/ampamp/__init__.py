@@ -10,7 +10,7 @@ Distributed Quantum Amplitude Amplification, Variable-Time, and QSVT.
 from .foundations import GroverEngine
 from .fixed_point import FixedPointEngine
 from .oblivious import ObliviousEngine
-from .foqa import FOQAEngine
+from .fpoa import FOQAEngine
 from .distributed import DQAAEngine, OracleSynthesizer
 from .variable_time import VTAAEngine, VariableTimeBranch
 from .qsvt import SU2QSPEngine, QSVTSynthesizer  
