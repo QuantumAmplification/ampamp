@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from qiskit import transpile, QuantumCircuit
 from qiskit_aer import AerSimulator
-from qiskit.quantum_info import partial_trace
+from qiskit.quantum_info import partial_trace, DensityMatrix
 
 from .foundations import GroverEngine
 from .fixed_point import FixedPointEngine
