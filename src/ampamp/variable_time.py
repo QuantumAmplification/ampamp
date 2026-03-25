@@ -38,10 +38,16 @@ class VTAAEngine:
         self.stop_times = np.array([float(b.stop_time) for b in ordered], dtype=float)
         
         weights = np.array([float(b.weight) for b in ordered], dtype=float)
+        if np.any(weights < 0):
+            raise ValueError("Branch weights cannot be negative.")
         total_w = float(np.sum(weights))
+        if total_w <= 0.0:
+            raise ValueError("Total branch weight must be definitively positive.")
         self.weights = weights / total_w
         
         self.success_given_branch = np.array([float(b.success_given_branch) for b in ordered], dtype=float)
+        if np.any((self.success_given_branch < 0.0) | (self.success_given_branch > 1.0)):
+            raise ValueError("success_given_branch probabilities must be in [0, 1].")
         
         self.good_mass = self.weights * self.success_given_branch
         self.bad_mass = self.weights * (1.0 - self.success_given_branch)
@@ -92,6 +98,9 @@ class VTAAEngine:
         Returns:
             QuantumCircuit: The synthesized variable-time quantum state circuit.
         """
+        if not (0.0 <= p_s1 <= 1.0) or not (0.0 <= p_fail_cond <= 1.0):
+            raise ValueError("Probabilities must safely reside within bounds [0, 1].")
+            
         stage_reg = QuantumRegister(1, "stage_j")
         flag_reg = QuantumRegister(2, "flag")
         data_reg = QuantumRegister(1, "data")

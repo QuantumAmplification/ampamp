@@ -114,8 +114,12 @@ class QSVTSynthesizer:
         Raises:
             ValueError: If the input degree is not logically odd.
         """
+        if degree < 1:
+            raise ValueError("Degree must be >= 1.")
         if degree % 2 == 0:
             raise ValueError("Degree must be odd for matrix inversion.")
+        if kappa <= 1.0:
+            raise ValueError("kappa must be strictly > 1.0.")
             
         gap = 1.0 / kappa
         x_eval = np.linspace(-1.0, 1.0, 2001)

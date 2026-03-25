@@ -20,6 +20,13 @@ class ObliviousEngine:
             l_ancilla_qubits (int): The number of ancilla qubits. Defaults to 1.
             p (float): The success probability of the block encoding. Defaults to 0.5.
         """
+        if m_data_qubits < 1:
+            raise ValueError("m_data_qubits must be >= 1")
+        if l_ancilla_qubits < 1:
+            raise ValueError("l_ancilla_qubits must be >= 1")
+        if not (0.0 <= p <= 1.0):
+            raise ValueError("Success probability p must be in [0, 1]")
+            
         self.m = m_data_qubits
         self.l = l_ancilla_qubits
         self.p = p # Success probability of the block encoding
@@ -46,6 +53,10 @@ class ObliviousEngine:
         Returns:
             QuantumCircuit: The constructed quantum circuit implementing the block encoding.
         """
+        expected_shape = (2**self.m, 2**self.m)
+        if unitary_matrix.shape != expected_shape:
+            raise ValueError(f"unitary_matrix must have shape {expected_shape}")
+            
         anc = QuantumRegister(self.l, "anc")
         data = QuantumRegister(self.m, "data")
         qc = QuantumCircuit(anc, data)

@@ -83,6 +83,8 @@ class OracleSynthesizer:
             j (int): The number of prefix bits used for partitioning.
             formula_text (str): The global boolean formula to be synthesized.
         """
+        if not (0 < j < global_n):
+            raise ValueError("Prefix count j must be strictly between 0 and global_n.")
         self.global_n = global_n
         self.j = j
         self.local_n = global_n - j
@@ -115,7 +117,10 @@ class OracleSynthesizer:
                 qc.global_phase += np.pi
             return qc
             
-        oracle_gate = PhaseOracleGate(str(simplified), var_order=self.suffix_vars)
+        active_symbols = sorted([str(s) for s in simplified.free_symbols])
+        oracle_gate = PhaseOracleGate(str(simplified))
+        
+        qargs = [self.suffix_vars.index(v) for v in active_symbols]
         qc = QuantumCircuit(self.local_n)
-        qc.append(oracle_gate, range(self.local_n))
+        qc.append(oracle_gate, qargs)
         return qc
