@@ -22,8 +22,12 @@ class FixedPointEngine:
         Raises:
             ValueError: If L is not an odd integer.
         """
+        if L < 1:
+            raise ValueError("L must be an odd positive integer (L >= 1).")
         if L % 2 == 0:
             raise ValueError("L must be an odd integer for FPAA.")
+        if not (0.0 < delta <= 1.0):
+            raise ValueError("delta must be in the range (0, 1].")
         self.L = L
         self.delta = delta
         self.alphas, self.betas = self._generate_phases()
@@ -63,6 +67,9 @@ class FixedPointEngine:
         Returns:
             QuantumCircuit: The constructed fixed-point search quantum circuit.
         """
+        if num_qubits < 1:
+            raise ValueError("num_qubits must be >= 1")
+            
         qc = QuantumCircuit(num_qubits)
         qc.h(range(num_qubits)) # Initial superposition
 
