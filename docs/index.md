@@ -15,7 +15,7 @@ Amplitude Amplification (`ampamp`) provides a robust, production-grade API for r
     ---
     Standard Grover's Search algorithms. Contains precise analytical definitions of the Soufflé Problem, diffusion operators, and exact success probability tracking.
     
-    [API Reference](api/foundations.md)
+    [API Reference](api/grover.md)
 
 -   **Fixed-Point Search (FPAA)**
 

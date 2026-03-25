@@ -10,7 +10,7 @@ from qiskit import transpile, QuantumCircuit
 from qiskit_aer import AerSimulator
 from qiskit.quantum_info import partial_trace, DensityMatrix
 
-from .foundations import GroverEngine
+from .grover import GroverEngine
 from .fixed_point import FixedPointEngine
 from .oblivious import ObliviousEngine
 from .foqa import FOQAEngine
@@ -27,7 +27,7 @@ class GroverAuditor:
         """Initializes the GroverAuditor.
 
         Args:
-            engine: An instance of the foundations.GroverEngine.
+            engine: An instance of the grover.GroverEngine.
         """
         self.engine = engine
         self.backend = AerSimulator()

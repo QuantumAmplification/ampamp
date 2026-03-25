@@ -22,10 +22,21 @@ class GroverEngine:
             marked_indices (list[int]): List indicating the integers representing 
                 the marked states in the problem subspace.
         """
+        if n_qubits < 1:
+            raise ValueError("n_qubits must be >= 1")
+            
         self.n = n_qubits
         self.N = 2**n_qubits
-        self.marked = marked_indices
-        self.M = len(marked_indices)
+        
+        # Remove duplicates
+        unique_marked = list(set(marked_indices))
+        if any(m < 0 or m >= self.N for m in unique_marked):
+            raise ValueError(f"Marked indices must be between 0 and {self.N - 1}")
+        if len(unique_marked) == 0:
+            raise ValueError("Must provide at least one marked state.")
+            
+        self.marked = unique_marked
+        self.M = len(self.marked)
         
         # Fundamental Geometric properties
         self.solution_density = self.M / self.N
@@ -69,10 +80,12 @@ class GroverEngine:
             target_bin = format(index, f'0{self.n}b')[::-1]
             for i, bit in enumerate(target_bin):
                 if bit == '0': qc.x(i)
-            
-            qc.h(self.n - 1)
-            qc.mcx(list(range(self.n - 1)), self.n - 1)
-            qc.h(self.n - 1)
+            if self.n == 1:
+                qc.z(0)
+            else:
+                qc.h(self.n - 1)
+                qc.mcx(list(range(self.n - 1)), self.n - 1)
+                qc.h(self.n - 1)
             
             for i, bit in enumerate(target_bin):
                 if bit == '0': qc.x(i)
@@ -88,11 +101,15 @@ class GroverEngine:
         qc = QuantumCircuit(self.n)
         qc.h(range(self.n))
         qc.x(range(self.n))
-        qc.h(self.n - 1)
-        qc.mcx(list(range(self.n - 1)), self.n - 1)
-        qc.h(self.n - 1)
+        if self.n == 1:
+            qc.z(0)
+        else:
+            qc.h(self.n - 1)
+            qc.mcx(list(range(self.n - 1)), self.n - 1)
+            qc.h(self.n - 1)
         qc.x(range(self.n))
         qc.h(range(self.n))
+        qc.global_phase = np.pi
         return qc
 
     def construct_circuit(self, iterations: int) -> QuantumCircuit:

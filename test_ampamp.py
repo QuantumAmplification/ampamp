@@ -3,7 +3,7 @@ from qiskit import transpile
 from qiskit_aer import AerSimulator
 
 # Core Engines
-from ampamp.foundations import GroverEngine
+from ampamp.grover import GroverEngine
 from ampamp.fixed_point import FixedPointEngine
 from ampamp.oblivious import ObliviousEngine
 from ampamp.foqa import FOQAEngine

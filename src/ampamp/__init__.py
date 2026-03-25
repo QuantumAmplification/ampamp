@@ -7,7 +7,7 @@ Distributed Quantum Amplitude Amplification, Variable-Time, and QSVT.
 """
 
 # src/ampamp/__init__.py
-from .foundations import GroverEngine
+from .grover import GroverEngine
 from .fixed_point import FixedPointEngine
 from .oblivious import ObliviousEngine
 from .foqa import FOQAEngine
