@@ -35,6 +35,8 @@ class FOQAEngine:
         Returns:
             np.ndarray: The computed phase sequence schedule array.
         """
+        if iterations < 1:
+            raise ValueError("iterations must be >= 1")
         return c / np.sqrt(np.arange(1, iterations + 1, dtype=float))
 
     @staticmethod
@@ -48,6 +50,8 @@ class FOQAEngine:
         Returns:
             np.ndarray: A constant phase sequence schedule array.
         """
+        if iterations < 1:
+            raise ValueError("iterations must be >= 1")
         return np.full(iterations, alpha, dtype=float)
 
     def build_lcu_split_operator(self, alpha_n: float) -> np.ndarray:
@@ -70,9 +74,9 @@ class FOQAEngine:
         proj_idx_1 = np.outer(ket_1, ket_1.conj())
         i_2 = np.eye(2, dtype=complex)
 
-        # Controlled on index == |0>: V_n ⊗ |0><0| ⊗ I + I ⊗ |1><1| ⊗ I
-        return np.kron(v_n, np.kron(proj_idx_0, i_2)) + \
-               np.kron(i_2, np.kron(proj_idx_1, i_2))
+        # Controlled on index == |1> (Marked state): V_n ⊗ |1><1| ⊗ I + I ⊗ |0><0| ⊗ I
+        return np.kron(v_n, np.kron(proj_idx_1, i_2)) + \
+               np.kron(i_2, np.kron(proj_idx_0, i_2))
 
     def simulate_recurrence(self, alpha_schedule: np.ndarray) -> np.ndarray:
         """Executes the non-linear FOQA recurrence relations.
@@ -92,8 +96,6 @@ class FOQAEngine:
         cumulative_success = np.zeros(len(alpha_schedule), dtype=float)
 
         for idx, alpha in enumerate(alpha_schedule):
-            cumulative_success[idx] = prob_already_halted + prob_continue * (t_n**2)
-
             p_step = (np.sin(alpha) ** 2) * (t_n**2)
             p_step = float(np.clip(p_step, 0.0, 1.0 - 1e-15))
 
@@ -105,5 +107,6 @@ class FOQAEngine:
             s_new = (-t_n * np.cos(alpha) * np.sin(2.0 * self.theta) + s_n * np.cos(2.0 * self.theta)) / norm
             
             t_n, s_n = float(t_new), float(s_new)
+            cumulative_success[idx] = prob_already_halted + prob_continue * (t_n**2)
 
         return cumulative_success
