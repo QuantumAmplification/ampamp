@@ -27,7 +27,52 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
-from one_click_utils import start_one_click_session
+try:
+    from one_click_utils import start_one_click_session
+except Exception:
+    def start_one_click_session(script_file, *, figure_prefix=None, log_name="terminal_output.log"):
+        import atexit
+        import io
+        import os
+        script_path = Path(script_file).resolve()
+        result_dir = script_path.parent / f"[RESULT]{script_path.stem}"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        old_stdout, old_stderr, old_cwd = sys.stdout, sys.stderr, Path.cwd()
+        log_handle = open(result_dir / log_name, "w", encoding="utf-8")
+        class _Tee(io.TextIOBase):
+            def __init__(self, *streams): self._streams = streams
+            def write(self, data): [s.write(data) or s.flush() for s in self._streams]; return len(data)
+            def flush(self): [s.flush() for s in self._streams]
+        sys.stdout = _Tee(old_stdout, log_handle)
+        sys.stderr = _Tee(old_stderr, log_handle)
+        os.chdir(result_dir)
+        try:
+            import matplotlib.pyplot as plt
+            old_show = plt.show
+            prefix = figure_prefix or script_path.stem
+            counter = {"n": 0}
+            def _save_show(*args, **kwargs):
+                del args, kwargs
+                for fig_id in list(plt.get_fignums()):
+                    counter["n"] += 1
+                    plt.figure(fig_id).savefig(result_dir / f"{prefix}_figure_{counter['n']:03d}.png", dpi=220, bbox_inches="tight")
+                plt.close("all")
+            plt.show = _save_show
+        except Exception:
+            old_show = None
+        def _cleanup():
+            try:
+                if old_show is not None:
+                    import matplotlib.pyplot as plt
+                    plt.show = old_show
+            except Exception:
+                pass
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            os.chdir(old_cwd)
+            log_handle.close()
+        atexit.register(_cleanup)
+        return result_dir
 
 try:
     from qiskit import QuantumCircuit, transpile
@@ -53,9 +98,42 @@ def chebyshev_t(order: float, x: float) -> float:
     raise ValueError("Unsupported region for this helper.")
 
 
+def fpaa_generalized_iterates(L: int) -> int:
+    """Return l=(L-1)/2 for the odd FPAA parameter L=2l+1."""
+    L_int = int(L)
+    if L_int < 1 or L_int % 2 == 0:
+        raise ValueError("L must be a positive odd integer.")
+    return (L_int - 1) // 2
+
+
+def fpaa_query_complexity(L: int) -> int:
+    """FPAA query complexity is L-1=2l for odd L=2l+1."""
+    return 2 * fpaa_generalized_iterates(L)
+
+
+def _fpaa_gamma_inverse(L: int, delta: float) -> float:
+    """gamma^{-1}=T_{1/L}(1/delta) for the Yoder-Low-Chuang schedule."""
+    if not (0.0 < delta < 1.0):
+        raise ValueError("delta must be in (0, 1).")
+    return chebyshev_t(1.0 / L, 1.0 / delta)
+
+
+def fpaa_inner_delta(L_outer: int, delta: float) -> float:
+    """Retuned inner error bound for nesting, delta_1=T_{1/L_outer}(1/delta)^(-1)."""
+    return 1.0 / _fpaa_gamma_inverse(L_outer, delta)
+
+
+def fpaa_success_probability(L: int, delta: float, lam: float) -> float:
+    """Closed-form FPAA success probability from Yoder-Low-Chuang Eq. (1)."""
+    p = float(np.clip(lam, 0.0, 1.0))
+    gamma_inv = _fpaa_gamma_inverse(L, delta)
+    arg = gamma_inv * math.sqrt(max(0.0, 1.0 - p))
+    return float(1.0 - delta * delta * chebyshev_t(float(L), arg) ** 2)
+
+
 def passband_edge(L: int, delta: float) -> float:
     """w = 1 - T_{1/L}(1/delta)^(-2)."""
-    gamma_inv = chebyshev_t(1.0 / L, 1.0 / delta)
+    gamma_inv = _fpaa_gamma_inverse(L, delta)
     return 1.0 - gamma_inv ** (-2)
 
 
@@ -97,23 +175,23 @@ def generate_fpaa_phases(L: int, delta: float, epsilon: float = 0.0) -> Tuple[np
     Uses:
       gamma_inv = cosh((1/L) * arccosh(1/delta))
       alpha_j = 2 arccot(tan(2*pi*j/L) * sqrt(1-gamma^2))
-      beta_j  = -alpha_{L-j+1}
+      beta_{l-j+1} = -alpha_j
+
+    The returned arrays therefore contain l=(L-1)/2 generalized Grover iterates,
+    exactly as in Eq. (11) of Yoder-Low-Chuang.
 
     epsilon models systematic over-rotation: angle -> angle*(1+epsilon).
     """
-    if L < 1 or L % 2 == 0:
-        raise ValueError("L must be a positive odd integer.")
-    if not (0.0 < delta < 1.0):
-        raise ValueError("delta must be in (0, 1).")
+    l = fpaa_generalized_iterates(L)
 
-    gamma_inv = float(np.cosh((1.0 / L) * np.arccosh(1.0 / delta)))
+    gamma_inv = float(_fpaa_gamma_inverse(L, delta))
     gamma = 1.0 / gamma_inv
     sq_term = float(np.sqrt(max(0.0, 1.0 - gamma * gamma)))
 
     # Handle singular points robustly (tan near 0 or undefined).
     tol = 1e-12
-    alpha = np.zeros(L, dtype=float)
-    for j in range(1, L + 1):
+    alpha = np.zeros(l, dtype=float)
+    for j in range(1, l + 1):
         theta_j = (2.0 * np.pi * j) / L
         tan_val = 0.0 if np.isclose(np.sin(theta_j), 0.0, atol=tol) else float(np.tan(theta_j))
         denom = tan_val * sq_term
@@ -130,25 +208,35 @@ def generate_fpaa_phases(L: int, delta: float, epsilon: float = 0.0) -> Tuple[np
 
 
 def test_table_i_exact_match(delta: float = 0.1, atol: float = 1e-8) -> None:
-    """Rigorous L=3 analytical cross-check (Table-I style equations)."""
+    """Rigorous L=3 analytical cross-check for the single FPAA phase pair."""
     L = 3
     alpha_dyn, beta_dyn = generate_fpaa_phases(L=L, delta=delta)
 
-    gamma_inv = float(np.cosh((1.0 / L) * np.arccosh(1.0 / delta)))
+    gamma_inv = float(_fpaa_gamma_inverse(L, delta))
     gamma = 1.0 / gamma_inv
     sq_term = float(np.sqrt(max(0.0, 1.0 - gamma * gamma)))
 
     a1 = 2.0 * float(np.arctan2(1.0, np.tan(2.0 * np.pi / 3.0) * sq_term))
-    a2 = 2.0 * float(np.arctan2(1.0, np.tan(4.0 * np.pi / 3.0) * sq_term))
-    a3 = float(np.pi)
-
-    alpha_ref = np.array([a1, a2, a3], dtype=float)
-    beta_ref = np.array([-a3, -a2, -a1], dtype=float)
+    alpha_ref = np.array([a1], dtype=float)
+    beta_ref = np.array([-a1], dtype=float)
 
     if not np.allclose(alpha_dyn, alpha_ref, atol=atol):
         raise AssertionError(f"Alpha mismatch.\nExpected: {alpha_ref}\nGot: {alpha_dyn}")
     if not np.allclose(beta_dyn, beta_ref, atol=atol):
         raise AssertionError(f"Beta mismatch.\nExpected: {beta_ref}\nGot: {beta_dyn}")
+
+
+def test_fpaa_closed_form_match(L: int = 3, delta: float = 0.1, atol: float = 1e-10) -> None:
+    """Verify the synthesized phase schedule reproduces the exact Chebyshev map."""
+    alphas, betas = generate_fpaa_phases(L=L, delta=delta)
+    p_samples = np.linspace(max(passband_edge(L, delta), 0.05), 0.95, 11)
+    for p in p_samples:
+        simulated = simulate_2d_fpaa_sequence(float(p), alphas, betas)
+        theoretical = fpaa_success_probability(L, delta, float(p))
+        if not np.isclose(simulated, theoretical, atol=atol):
+            raise AssertionError(
+                f"Closed-form mismatch at p={p:.6f}: theory={theoretical:.12f}, sim={simulated:.12f}"
+            )
 
 
 # -----------------------------------------------------------------------------
@@ -180,16 +268,16 @@ def generalized_oracle(num_qubits: int, good_indices: Sequence[int], beta: float
 
 
 def generalized_diffusion(num_qubits: int, alpha: float) -> "QuantumCircuit":
-    """S_s(alpha): H^n X^n mcp(alpha) X^n H^n."""
+    """S_s(alpha): H^n X^n mcp(-alpha) X^n H^n."""
     _require_qiskit()
     qc = QuantumCircuit(num_qubits, name=f"S_s({alpha:.3f})")
 
     qc.h(range(num_qubits))
     qc.x(range(num_qubits))
     if num_qubits == 1:
-        qc.p(alpha, 0)
+        qc.p(-alpha, 0)
     else:
-        qc.mcp(alpha, list(range(num_qubits - 1)), num_qubits - 1)
+        qc.mcp(-alpha, list(range(num_qubits - 1)), num_qubits - 1)
     qc.x(range(num_qubits))
     qc.h(range(num_qubits))
     return qc
@@ -202,13 +290,13 @@ def build_fpaa_circuit_from_phases(
     betas: np.ndarray,
     initialize_superposition: bool = True,
 ) -> "QuantumCircuit":
-    """Build U_L = G(alpha_L,beta_L)...G(alpha_1,beta_1), where G=-S_s(alpha)S_t(beta)."""
+    """Build A followed by the l generalized Grover iterates of the FPAA schedule."""
     _require_qiskit()
     if len(alphas) != len(betas):
         raise ValueError("alphas and betas must have the same length.")
     good = _validate_good_indices(num_qubits, good_indices)
 
-    qc = QuantumCircuit(num_qubits, name=f"FPAA_L{len(alphas)}")
+    qc = QuantumCircuit(num_qubits, name=f"FPAA_l{len(alphas)}")
     if initialize_superposition:
         qc.h(range(num_qubits))
 
@@ -322,9 +410,10 @@ def sweep_passband(
     """Sweep continuous p and compare FPAA vs standard Grover."""
     p_values = np.linspace(p_min, p_max, num_points)
     alphas, betas = generate_fpaa_phases(L=L, delta=delta, epsilon=epsilon)
+    grover_iterations = fpaa_generalized_iterates(L)
 
     fpaa = np.array([simulate_2d_fpaa_sequence(p, alphas, betas) for p in p_values], dtype=float)
-    grover = np.array([_grover_closed_form_success(p, L) for p in p_values], dtype=float)
+    grover = np.array([_grover_closed_form_success(p, grover_iterations) for p in p_values], dtype=float)
 
     w = passband_edge(L, delta)
     floor = 1.0 - delta * delta
@@ -402,9 +491,9 @@ def _s0_reflection_gate(num_qubits: int, alpha: float) -> "Gate":
     qc = QuantumCircuit(num_qubits, name=f"S0({alpha:.3f})")
     qc.x(range(num_qubits))
     if num_qubits == 1:
-        qc.p(alpha, 0)
+        qc.p(-alpha, 0)
     else:
-        qc.mcp(alpha, list(range(num_qubits - 1)), num_qubits - 1)
+        qc.mcp(-alpha, list(range(num_qubits - 1)), num_qubits - 1)
     qc.x(range(num_qubits))
     return qc.to_gate()
 
@@ -422,9 +511,10 @@ def build_nested_fpaa_circuit(
     if good_indices is None:
         good_indices = _good_state_to_indices(num_qubits, good_state)
     good = _validate_good_indices(num_qubits, good_indices)
+    delta1 = fpaa_inner_delta(L2, delta)
 
     # Inner unitary U_L1 (as gate) and inverse.
-    a1, b1 = generate_fpaa_phases(L1, delta)
+    a1, b1 = generate_fpaa_phases(L1, delta1)
     u1 = build_fpaa_circuit_from_phases(num_qubits, good, a1, b1, initialize_superposition=True).to_gate(
         label=f"U_L{L1}"
     )
@@ -452,12 +542,14 @@ def recursive_nesting_curves(
     num_points: int = 1000,
 ) -> Dict[str, np.ndarray]:
     """Compare base L1, nested L1xL2, and native L1*L2 in SU(2) simulation."""
-    a1, b1 = generate_fpaa_phases(L1, delta)
+    delta1 = fpaa_inner_delta(L2, delta)
+    a1, b1 = generate_fpaa_phases(L1, delta1)
+    a2, b2 = generate_fpaa_phases(L2, delta)
     ac, bc = generate_fpaa_phases(L1 * L2, delta)
     p_values = np.linspace(p_min, p_max, num_points)
 
     base = np.array([simulate_2d_fpaa_sequence(x, a1, b1) for x in p_values], dtype=float)
-    nested = np.array([simulate_2d_fpaa_sequence(p, a1, b1) for p in base], dtype=float)
+    nested = np.array([simulate_2d_fpaa_sequence(p, a2, b2) for p in base], dtype=float)
     native = np.array([simulate_2d_fpaa_sequence(x, ac, bc) for x in p_values], dtype=float)
 
     diff = np.abs(nested - native)
@@ -468,7 +560,8 @@ def recursive_nesting_curves(
         "native": native,
         "abs_diff": diff,
         "max_abs_diff": np.array([float(np.max(diff))]),
-        "w_l1": np.array([passband_edge(L1, delta)]),
+        "delta_l1": np.array([delta1]),
+        "w_l1": np.array([passband_edge(L1, delta1)]),
         "w_comp": np.array([passband_edge(L1 * L2, delta)]),
     }
 
@@ -685,8 +778,10 @@ def benchmark_t_gate_blowup(
         good_indices = _good_state_to_indices(num_qubits, good_state)
     good = _validate_good_indices(num_qubits, good_indices)
 
-    # Equal algorithmic depth benchmark (same L).
-    grover = build_standard_grover_circuit(num_qubits, L, good_indices=good)
+    grover_iterations = fpaa_generalized_iterates(L)
+
+    # Match FPAA against the Grover baseline with the same number of generalized iterates.
+    grover = build_standard_grover_circuit(num_qubits, grover_iterations, good_indices=good)
     fpaa = build_fpaa_circuit(num_qubits, L, delta, good_indices=good)
 
     def direct_t_count(qc: "QuantumCircuit") -> Optional[int]:
@@ -715,7 +810,7 @@ def benchmark_t_gate_blowup(
     return [
         CompilationResult(
             algorithm="Standard Grover",
-            iterations=L,
+            iterations=grover_iterations,
             base_unitaries="D(pi)O(pi)",
             continuous_angles="No",
             theoretical_depth="O(n)",
@@ -725,7 +820,7 @@ def benchmark_t_gate_blowup(
         ),
         CompilationResult(
             algorithm=f"FPAA (L={L})",
-            iterations=L,
+            iterations=grover_iterations,
             base_unitaries="G(alpha_j,beta_j)",
             continuous_angles="Yes",
             theoretical_depth="O(n)",
@@ -767,6 +862,7 @@ def _save_resource_table(rows: List[CompilationResult], output_csv: str) -> None
             )
 
 
+
 # -----------------------------------------------------------------------------
 # CLI orchestration
 # -----------------------------------------------------------------------------
@@ -790,6 +886,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     # Core rigor checks for Modules 1 and 2.
     test_table_i_exact_match(delta=0.1)
     print("Phase schedule test (L=3 analytical Table-I check): PASSED")
+    test_fpaa_closed_form_match(L=args.L, delta=args.delta)
+    print("Closed-form Chebyshev map test: PASSED")
 
     try:
         test_grover_fallback_rigor(num_qubits=4, good_indices=(5,), L=3)

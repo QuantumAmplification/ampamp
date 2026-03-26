@@ -3,8 +3,55 @@ import matplotlib.pyplot as plt
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 from qiskit.quantum_info import partial_trace, state_fidelity
+import sys
 
-from one_click_utils import start_one_click_session
+try:
+    from one_click_utils import start_one_click_session
+except Exception:
+    def start_one_click_session(script_file, *, figure_prefix=None, log_name="terminal_output.log"):
+        import atexit
+        import io
+        import os
+        from pathlib import Path
+        script_path = Path(script_file).resolve()
+        result_dir = script_path.parent / f"[RESULT]{script_path.stem}"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        old_stdout, old_stderr, old_cwd = sys.stdout, sys.stderr, Path.cwd()
+        log_handle = open(result_dir / log_name, "w", encoding="utf-8")
+        class _Tee(io.TextIOBase):
+            def __init__(self, *streams): self._streams = streams
+            def write(self, data): [s.write(data) or s.flush() for s in self._streams]; return len(data)
+            def flush(self): [s.flush() for s in self._streams]
+        sys.stdout = _Tee(old_stdout, log_handle)
+        sys.stderr = _Tee(old_stderr, log_handle)
+        os.chdir(result_dir)
+        try:
+            import matplotlib.pyplot as plt
+            old_show = plt.show
+            prefix = figure_prefix or script_path.stem
+            counter = {"n": 0}
+            def _save_show(*args, **kwargs):
+                del args, kwargs
+                for fig_id in list(plt.get_fignums()):
+                    counter["n"] += 1
+                    plt.figure(fig_id).savefig(result_dir / f"{prefix}_figure_{counter['n']:03d}.png", dpi=220, bbox_inches="tight")
+                plt.close("all")
+            plt.show = _save_show
+        except Exception:
+            old_show = None
+        def _cleanup():
+            try:
+                if old_show is not None:
+                    import matplotlib.pyplot as plt
+                    plt.show = old_show
+            except Exception:
+                pass
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            os.chdir(old_cwd)
+            log_handle.close()
+        atexit.register(_cleanup)
+        return result_dir
 
 class GroverGeometricLab:
     """
@@ -41,9 +88,13 @@ class GroverGeometricLab:
         self.theta0 = np.arcsin(np.sqrt(self.p))
         self.theta = 2 * self.theta0
         
-        # Optimal k* ≈ floor(pi/(4*arcsin(sqrt(p))) - 1/2) as provided in test cases
-        # This represents the theoretical optimum number of Grover iterations to maximize success probability
-        self.k_optimal = int(np.floor(np.pi / (2 * self.theta) - 0.5))
+        # Handle edge cases p in {0, 1} explicitly to avoid dividing by zero at p=0.
+        # For these endpoints, no Grover iterate is needed to maximize success.
+        if self.p == 0 or self.p == 1:
+            self.k_optimal = 0
+        else:
+            # Optimal k* ≈ floor(pi/(4*arcsin(sqrt(p))) - 1/2)
+            self.k_optimal = int(np.floor(np.pi / (2 * self.theta) - 0.5))
         
         # Initialize the statevector simulator backend from Qiskit Aer
         self.backend = AerSimulator()
@@ -323,8 +374,9 @@ class GroverGeometricLab:
         diff_depth = transpile(diff, basis_gates=['u3', 'cx']).depth()
         
         # Standard Grover Depth for roughly equivalent success
-        # Equivalent total iterations for same boost k_eq ~ k1 * k2 (roughly)
-        k_equiv = (2*k1 + 1) * k2
+        # Exact equivalent single-layer iteration count from angle matching:
+        # 2*k_eq + 1 = (2*k1 + 1)(2*k2 + 1)
+        k_equiv = 2 * k1 * k2 + k1 + k2
         std_depth = k_equiv * (oracle_depth + diff_depth)
         
         # Nested Grover Depth

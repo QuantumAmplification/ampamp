@@ -39,12 +39,12 @@ Phase IV: Fundamental limits and realism
 14. Physical phase-fragility and hardware sensitivity
 
 Phase V: Adversarial QSVT edge cases
-15. Gibbs catastrophe for discontinuous targets
+15. Gibbs failure mode for discontinuous targets
 16. Parity scramble for mixed-parity transforms
-17. Ill-conditioned abyss under fixed hardware depth
-18. Non-normal eigenvalue trap (eigenvalues vs singular values)
+17. Ill-conditioned high-condition-number regime under fixed hardware depth
+18. Non-normal eigenvalue limitation (eigenvalues vs singular values)
 19. Phase quantization limit from finite DAC bit-depth
-20. Subnormalization hubris (cheating alpha penalty)
+20. Subnormalization over-normalization (cheating alpha penalty)
 """
 
 from __future__ import annotations
@@ -55,7 +55,52 @@ from typing import Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
-from one_click_utils import start_one_click_session
+try:
+    from one_click_utils import start_one_click_session
+except Exception:
+    def start_one_click_session(script_file, *, figure_prefix=None, log_name="terminal_output.log"):
+        import atexit
+        import io
+        import os
+        script_path = Path(script_file).resolve()
+        result_dir = script_path.parent / f"[RESULT]{script_path.stem}"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        old_stdout, old_stderr, old_cwd = sys.stdout, sys.stderr, Path.cwd()
+        log_handle = open(result_dir / log_name, "w", encoding="utf-8")
+        class _Tee(io.TextIOBase):
+            def __init__(self, *streams): self._streams = streams
+            def write(self, data): [s.write(data) or s.flush() for s in self._streams]; return len(data)
+            def flush(self): [s.flush() for s in self._streams]
+        sys.stdout = _Tee(old_stdout, log_handle)
+        sys.stderr = _Tee(old_stderr, log_handle)
+        os.chdir(result_dir)
+        try:
+            import matplotlib.pyplot as plt
+            old_show = plt.show
+            prefix = figure_prefix or script_path.stem
+            counter = {"n": 0}
+            def _save_show(*args, **kwargs):
+                del args, kwargs
+                for fig_id in list(plt.get_fignums()):
+                    counter["n"] += 1
+                    plt.figure(fig_id).savefig(result_dir / f"{prefix}_figure_{counter['n']:03d}.png", dpi=220, bbox_inches="tight")
+                plt.close("all")
+            plt.show = _save_show
+        except Exception:
+            old_show = None
+        def _cleanup():
+            try:
+                if old_show is not None:
+                    import matplotlib.pyplot as plt
+                    plt.show = old_show
+            except Exception:
+                pass
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            os.chdir(old_cwd)
+            log_handle.close()
+        atexit.register(_cleanup)
+        return result_dir
 
 
 @dataclass
@@ -810,12 +855,12 @@ def phase_4_roadmap() -> Dict[str, str]:
 def phase_5_roadmap() -> Dict[str, str]:
     """Return the Phase V module roadmap."""
     return {
-        "Module 11": "Gibbs catastrophe: discontinuous target fitting and unitarity failure.",
+        "Module 11": "Gibbs failure mode: discontinuous target fitting and unitarity failure.",
         "Module 12": "Parity scramble: invariant-plane breakdown under parity violation.",
-        "Module 13": "Ill-conditioned abyss: fixed-depth inversion breakdown under high kappa.",
-        "Module 14": "Non-normal eigenvalue trap: QSVT applies singular-value, not eigenvalue, transforms.",
+        "Module 13": "Ill-conditioned high-condition-number regime: fixed-depth inversion breakdown under high kappa.",
+        "Module 14": "Non-normal eigenvalue limitation: QSVT applies singular-value, not eigenvalue, transforms.",
         "Module 15": "Phase quantization limit: finite DAC bit-depth destroys phase precision.",
-        "Module 16": "Subnormalization hubris: cheating alpha breaks PSD defect matrices and dilation.",
+        "Module 16": "Subnormalization over-normalization: cheating alpha breaks PSD defect matrices and dilation.",
     }
 
 
@@ -1891,7 +1936,7 @@ def experiment_adversarial_gibbs_catastrophe(
     degree: int = 41, num_points: int = 5000, plot: bool = True
 ) -> GibbsCatastropheResults:
     """
-    MODULE 11: Adversarial QSVT - Gibbs Catastrophe.
+    MODULE 11: Adversarial QSVT - Gibbs Failure Mode.
 
     Fits a discontinuous raw sign target with an odd Chebyshev polynomial and
     audits the resulting boundedness violation caused by Gibbs ringing.
@@ -1899,7 +1944,7 @@ def experiment_adversarial_gibbs_catastrophe(
     from numpy.polynomial.chebyshev import chebfit, chebval
 
     print("-" * 65)
-    print("MODULE 11: ADVERSARIAL QSVT - THE GIBBS CATASTROPHE")
+    print("MODULE 11: ADVERSARIAL QSVT - THE GIBBS OVERSHOOT REGIME")
     print("-" * 65)
 
     if degree < 3 or degree % 2 == 0:
@@ -1981,7 +2026,7 @@ def experiment_adversarial_gibbs_catastrophe(
             fontsize=11,
         )
 
-        ax.set_title("Adversarial QSVT: The Gibbs Catastrophe", fontsize=14)
+        ax.set_title("Adversarial QSVT: The Gibbs Failure Mode", fontsize=14)
         ax.set_xlabel("Singular Value x", fontsize=12)
         ax.set_ylabel("Synthesized Amplitude P(x)", fontsize=12)
         ax.set_ylim(-1.3, 1.3)
@@ -2059,7 +2104,7 @@ def experiment_adversarial_parity_scramble(
     scramble_error = float(np.linalg.norm(M_naive - M_physical))
     print(f"||M_expected - M_physical||: {scramble_error:.4e}")
     if scramble_error > 1e-10:
-        print("FATAL: Output is parity-scrambled across incompatible singular bases.")
+        print("CRITICAL: Output is parity-scrambled across incompatible singular bases.")
     print("-" * 65)
 
     if plot:
@@ -2104,7 +2149,7 @@ def experiment_adversarial_ill_conditioned_abyss(
     plot: bool = True,
 ) -> IllConditionedAbyssResults:
     """
-    MODULE 13: Adversarial QSVT - The Ill-Conditioned Abyss.
+    MODULE 13: Adversarial QSVT - The Ill-Conditioned High-Condition-Number Regime.
 
     Fixes hardware depth (degree) and sweeps increasing condition numbers to
     expose the resolution limit of inversion synthesis near tiny spectral gaps.
@@ -2253,7 +2298,7 @@ def experiment_adversarial_ill_conditioned_abyss(
         ax2.grid(True, alpha=0.3)
         ax2.legend(loc="upper left")
 
-        plt.suptitle("Adversarial QSVT: Ill-Conditioned Abyss Under Fixed Depth", fontsize=15)
+        plt.suptitle("Adversarial QSVT: Ill-Conditioned High-Condition-Number Regime Under Fixed Depth", fontsize=15)
         plt.tight_layout()
         plt.show()
 
@@ -2271,13 +2316,13 @@ def experiment_adversarial_ill_conditioned_abyss(
 
 def experiment_adversarial_non_normal_trap(plot: bool = True) -> NonNormalTrapResults:
     """
-    MODULE 14: Adversarial QSVT - The Non-Normal Eigenvalue Trap.
+    MODULE 14: Adversarial QSVT - The Non-Normal Eigenvalue Limitation.
 
     Shows that QSVT-style odd transforms act on singular values (SVD channel),
     not on eigenvalues (matrix-function channel), for non-normal matrices.
     """
     print("-" * 65)
-    print("MODULE 14: ADVERSARIAL QSVT - THE NON-NORMAL EIGENVALUE TRAP")
+    print("MODULE 14: ADVERSARIAL QSVT - THE NON-NORMAL EIGENVALUE LIMITATION")
     print("-" * 65)
 
     # Non-normal (Jordan-like) matrix with spectral norm strictly < 1.
@@ -2301,7 +2346,7 @@ def experiment_adversarial_non_normal_trap(plot: bool = True) -> NonNormalTrapRe
     divergence_error = float(np.linalg.norm(matrix_eigen_expected - matrix_svd_physical))
     print(f"|| f(A) - f^(SV)(A) ||_F: {divergence_error:.4e}")
     if divergence_error > 1e-10:
-        print("FATAL: Eigenvalue-based expectation and QSVT singular-value output diverge.")
+        print("CRITICAL: Eigenvalue-based expectation and QSVT singular-value output diverge.")
     print("-" * 65)
 
     if plot:
@@ -2339,7 +2384,7 @@ def experiment_adversarial_non_normal_trap(plot: bool = True) -> NonNormalTrapRe
             ax.set_yticks([0, 1])
 
         fig.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
-        plt.suptitle("Adversarial QSVT: The Non-Normal Eigenvalue Trap", fontsize=14)
+        plt.suptitle("Adversarial QSVT: The Non-Normal Eigenvalue Limitation", fontsize=14)
         plt.tight_layout()
         plt.show()
 
@@ -2535,19 +2580,19 @@ def experiment_adversarial_subnormalization_hubris(
     plot: bool = True,
 ) -> SubnormalizationHubrisResults:
     """
-    MODULE 16: Adversarial QSVT - The Subnormalization Hubris.
+    MODULE 16: Adversarial QSVT - The Subnormalization Over-normalization.
 
     Demonstrates that forcing alpha=1 for over-norm operators makes the defect
     matrix non-PSD and breaks block-encoding dilation at the linear-algebra step.
     """
     print("-" * 65)
-    print("MODULE 16: ADVERSARIAL QSVT - THE SUBNORMALIZATION HUBRIS")
+    print("MODULE 16: ADVERSARIAL QSVT - THE SUBNORMALIZATION OVER-NORMALIZATION")
     print("-" * 65)
 
     if dim < 2:
         raise ValueError("dim must be >= 2")
     if target_sigma_max <= 1.0:
-        raise ValueError("target_sigma_max must be > 1 to trigger the hubris trap")
+        raise ValueError("target_sigma_max must be > 1 to trigger the over-normalization limitation")
     if valid_margin <= 0.0:
         raise ValueError("valid_margin must be > 0")
 
@@ -2583,7 +2628,7 @@ def experiment_adversarial_subnormalization_hubris(
         catastrophe_message = "Unexpectedly succeeded (numerically marginal case)."
     except np.linalg.LinAlgError as exc:
         catastrophe_message = str(exc)
-        print("FATAL: unitary dilation fails for cheated alpha path.")
+        print("CRITICAL: unitary dilation fails for cheated alpha path.")
         print(f"  LinAlgError: {catastrophe_message}")
         print("  Physical meaning: I - A A^dagger is not PSD, so sqrt-defect is invalid.")
 

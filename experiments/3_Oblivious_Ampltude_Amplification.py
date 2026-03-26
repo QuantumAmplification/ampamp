@@ -8,8 +8,9 @@ checks. Intended for use from a script or notebook.
 Standing notation aligned with final.tex:
 - H_Good / H_Bad: target and non-target sectors
 - Pi_Good / Pi_Bad: corresponding projectors
-- p = ||Pi_Good |All>||^2 is the success parameter
+- p = ||Pi_Good A |0^l>|phi>||^2, independent of |phi> in the purified setting
 - sin^2(theta0)=p for the canonical two-dimensional geometry
+- P_clean = |0^l><0^l| \\otimes I_data
 - complexity is discussed in oracle/query calls to the OAA iterate Q
 """
 
@@ -26,7 +27,52 @@ import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister, transpile
 from qiskit.quantum_info import Operator, Statevector, random_unitary
 
-from one_click_utils import start_one_click_session
+try:
+    from one_click_utils import start_one_click_session
+except Exception:
+    def start_one_click_session(script_file, *, figure_prefix=None, log_name="terminal_output.log"):
+        import atexit
+        import io
+        import os
+        script_path = Path(script_file).resolve()
+        result_dir = script_path.parent / f"[RESULT]{script_path.stem}"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        old_stdout, old_stderr, old_cwd = sys.stdout, sys.stderr, Path.cwd()
+        log_handle = open(result_dir / log_name, "w", encoding="utf-8")
+        class _Tee(io.TextIOBase):
+            def __init__(self, *streams): self._streams = streams
+            def write(self, data): [s.write(data) or s.flush() for s in self._streams]; return len(data)
+            def flush(self): [s.flush() for s in self._streams]
+        sys.stdout = _Tee(old_stdout, log_handle)
+        sys.stderr = _Tee(old_stderr, log_handle)
+        os.chdir(result_dir)
+        try:
+            import matplotlib.pyplot as plt
+            old_show = plt.show
+            prefix = figure_prefix or script_path.stem
+            counter = {"n": 0}
+            def _save_show(*args, **kwargs):
+                del args, kwargs
+                for fig_id in list(plt.get_fignums()):
+                    counter["n"] += 1
+                    plt.figure(fig_id).savefig(result_dir / f"{prefix}_figure_{counter['n']:03d}.png", dpi=220, bbox_inches="tight")
+                plt.close("all")
+            plt.show = _save_show
+        except Exception:
+            old_show = None
+        def _cleanup():
+            try:
+                if old_show is not None:
+                    import matplotlib.pyplot as plt
+                    plt.show = old_show
+            except Exception:
+                pass
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            os.chdir(old_cwd)
+            log_handle.close()
+        atexit.register(_cleanup)
+        return result_dir
 
 # configure logger for informative output
 logger = logging.getLogger(__name__)
@@ -109,13 +155,17 @@ class ObliviousAmplificationLab:
         p    : success probability parameter (a float in (0,1])
         B    : \\sqrt{p} U (the operator we wish to block encode)
         A    : unitary acting on m + l qubits with
-               P_1 A P_1 = B (= top-left block) where
-               P_1 = |0^l><0^l|_anc is the clean-ancilla projector.
-        R_0  : reflection about the clean ancilla subspace
-        R_b  : phase flip on the non-target ancilla sector (orthogonal to |0^l>)
+               (<0^l| \\otimes I) A (|0^l> \\otimes I) = B, equivalently
+               P_clean A P_clean = |0^l><0^l| \\otimes B. For
+               QuantumCircuit(anc, data), this clean block is not a
+               contiguous top-left matrix block in statevector ordering.
+        R_0  : reflection about the clean ancilla subspace, taken here as
+               2 P_clean - I
+        R_b  : phase flip on the non-target ancilla sector (orthogonal to |0^l>),
+               also written here as 2 P_clean - I = -(I - 2 P_clean)
         Q    : full iteration operator A R_0 A^{-1} R_b
 
-    The public methods mirror these definitions.  In the comments below we
+        The public methods mirror these definitions.  In the comments below we
     refer repeatedly to Theorem 1 (``Geometric Core'') and the Equivalence
     Theorem; sections of the paper are marked with ``[G]'' or ``[E]''.
     """
@@ -180,9 +230,11 @@ class ObliviousAmplificationLab:
         Returns
         -------
         A : ndarray
-            A unitary matrix of size 2^{m+l} whose top-left block is
-            sqrt(p) U.  The matrix is obtained by building a quantum
-            circuit and extracting its operator representation.
+            A unitary matrix of size 2^{m+l} whose clean-ancilla principal
+            block satisfies
+            ``(<0^l| \\otimes I) A (|0^l> \\otimes I) = sqrt(p) U``.
+            The matrix is obtained by building a quantum circuit and
+            extracting its operator representation.
         """
         # build the circuit: ancilla register followed by data register ensures
         # the conventional Qiskit tensor-product ordering.
@@ -211,21 +263,50 @@ class ObliviousAmplificationLab:
         self.A = A
         return A
 
+    def _clean_ancilla_indices(self) -> np.ndarray:
+        """Indices with ancilla register fixed to |0^l>.
+
+        For ``QuantumCircuit(anc, data)``, the ancillas occupy the least-
+        significant subsystem in Qiskit's statevector ordering, so the clean
+        ancilla sector is reached by stepping through the vector in strides of
+        ``2^l``.
+        """
+        return np.arange(self.dim_data, dtype=int) * self.dim_anc
+
+    def _clean_ancilla_projector(self) -> np.ndarray:
+        """Projector onto the clean-ancilla sector in Qiskit ordering."""
+        projector = np.zeros((self.dim_total, self.dim_total), dtype=complex)
+        clean_idx = self._clean_ancilla_indices()
+        projector[np.ix_(clean_idx, clean_idx)] = np.eye(self.dim_data, dtype=complex)
+        return projector
+
+    def _embed_clean_ancilla(self, data_state: np.ndarray) -> np.ndarray:
+        """Embed a data-register state into the clean-ancilla sector."""
+        vec = np.zeros(self.dim_total, dtype=complex)
+        vec[self._clean_ancilla_indices()] = np.asarray(data_state, dtype=complex)
+        return vec
+
+    def _extract_clean_ancilla_data(self, state: np.ndarray) -> np.ndarray:
+        """Return the amplitudes supported on the clean-ancilla sector."""
+        return np.asarray(state, dtype=complex)[self._clean_ancilla_indices()]
+
     # ------------------------------------------------------------------
     # Reflection operators (Equivalence theorem mapping)
     # ------------------------------------------------------------------
 
     def R_zero(self) -> np.ndarray:
-        """Reflection about the all-zero ancilla state.        """
-        P0 = np.zeros((self.dim_anc, self.dim_anc))
-        P0[0, 0] = 1
-        return 2 * np.kron(P0, np.eye(self.dim_data)) - np.eye(self.dim_total)
+        """Reflection about the clean-ancilla subspace, ``2 P_clean - I``."""
+        return 2 * self._clean_ancilla_projector() - np.eye(self.dim_total)
 
     def R_bad(self) -> np.ndarray:
-        """Phase flip on non-zero ancilla states (effective H_Bad sector)."""
-        P0 = np.zeros((self.dim_anc, self.dim_anc))
-        P0[0, 0] = 1
-        return np.kron(2 * P0 - np.eye(self.dim_anc), np.eye(self.dim_data))
+        """Phase flip on non-zero ancilla states.
+
+        In this implementation we use ``2 P_clean - I``, which gives ``+1`` on
+        the clean sector and ``-1`` on its orthogonal complement. Relative to
+        the paper's ``I - 2 P_clean`` convention, this differs only by a global
+        sign and therefore leaves success probabilities unchanged.
+        """
+        return 2 * self._clean_ancilla_projector() - np.eye(self.dim_total)
 
     def build_Q(self) -> np.ndarray:
         """Compute the iteration operator Q = A R_zero A^{-1} R_bad.
@@ -268,27 +349,25 @@ class ObliviousAmplificationLab:
         msd_accum = 0.0  # mean square deviation accumulator
         fidelity_curve = np.zeros((num_states, max_k + 1))
 
-        # precompute somewhat optimal iteration count for amplitude
-        # amplification; this is the integer closest to pi/(4 arcsin(sqrt(p))).
+        # Smallest near-optimal iterate count for the first amplification peak:
+        # k* = floor(pi / (4 arcsin(sqrt(p)))).
         k_opt = int(np.floor(np.pi / (4 * np.arcsin(np.sqrt(self.p)))))
         logger.info("estimated optimal k = %d", k_opt)
 
-        # projector onto |0>_ancilla \otimes I_data.  we will use it often
-        P0 = np.zeros((self.dim_anc, self.dim_anc), dtype=complex)
-        P0[0, 0] = 1
-        P0_full = np.kron(P0, np.eye(self.dim_data))
+        # projector onto the clean-ancilla sector in Qiskit's subsystem order
+        P0_full = self._clean_ancilla_projector()
 
         for i in range(num_states):
             phi = self._random_state()
 
             # --- test 1: input independence of probability p
-            init = np.kron(np.array([1] + [0] * (self.dim_anc - 1)), phi)
+            init = self._embed_clean_ancilla(phi)
             psi = self.A @ init
             probs[i] = np.real(psi.conj().T @ P0_full @ psi)
 
             # prepare vectors G and B spanning the invariant subspace for this phi
-            # |G> = |0>_anc ⊗ U|phi>
-            G = np.kron(np.array([1] + [0] * (self.dim_anc - 1)), self.U @ phi)
+            # with G the clean-ancilla embedding of U|phi>.
+            G = self._embed_clean_ancilla(self.U @ phi)
             G /= np.linalg.norm(G)
             # compute |B> by orthogonalising psi against G
             comp = psi - np.vdot(G, psi) * G
@@ -307,9 +386,13 @@ class ObliviousAmplificationLab:
                 # extract data part by tracing out ancilla (for pure state with 1
                 # ancilla this is equivalent to selecting the appropriate
                 # subvector since our ancilla is always |0> or |1>).
-                data_state = v[: self.dim_data]  # amplitudes when ancilla=0
-                data_state /= np.linalg.norm(data_state)
-                fidelity_curve[i, k] = abs(np.vdot(self.U @ phi, data_state)) ** 2
+                data_state = self._extract_clean_ancilla_data(v)
+                data_norm = np.linalg.norm(data_state)
+                if data_norm > 1e-12:
+                    data_state = data_state / data_norm
+                    fidelity_curve[i, k] = abs(np.vdot(self.U @ phi, data_state)) ** 2
+                else:
+                    fidelity_curve[i, k] = 0.0
                 # iterate if not at end
                 if k < max_k:
                     v = self.Q @ v
@@ -413,8 +496,10 @@ def experiment_subnormalization_rescue(
     A_inv = A_qc.inverse()
     A_inv.name = "A_dagger"
 
-    # Reflection on |0> ancilla: I - 2|0><0| = XZX (up to global phase
-    # conventions this works as the required oracle/diffusion reflection here).
+    # XZX = I - 2|0><0| on the ancilla. Reusing this same circuit in both
+    # reflection slots changes one reflector by a global sign relative to the
+    # ``2|0><0| - I`` convention used in final.tex, but the resulting iterate
+    # has the same observable success probabilities.
     R_qc = QuantumCircuit(anc, data, name="R0/R_H_Bad")
     R_qc.x(anc[0])
     R_qc.z(anc[0])
@@ -556,7 +641,8 @@ def experiment_geometric_obstruction(
     A_invalid_inv = A_invalid.inverse()
     A_invalid_inv.name = "A_invalid_dagger"
 
-    # Common reflection I - 2|0><0| on ancilla.
+    # Common ancilla reflection XZX = I - 2|0><0|. Using the same circuit in
+    # both slots differs from the paper convention by a global sign only.
     R_qc = QuantumCircuit(anc, data, name="R0/R_H_Bad")
     R_qc.x(anc[0])
     R_qc.z(anc[0])
@@ -666,8 +752,8 @@ def experiment_explicit_lcu_block_encoding(
     """Construct explicit LCU block encoding for H = c0 X_0 + c1 Z_1.
 
     Builds PREP, SELECT, PREP^\\dagger as explicit circuits, constructs
-    A = PREP^\\dagger * SELECT * PREP, verifies the top-left block
-    M_TL = H / alpha, and reports native and Clifford+T proxy costs.
+    A = PREP^\\dagger * SELECT * PREP, verifies the clean-ancilla block
+    A_TL = H / alpha, and reports native and Clifford+T proxy costs.
     """
     if c0 == 0.0 and c1 == 0.0:
         raise ValueError("At least one coefficient must be non-zero.")
@@ -707,7 +793,7 @@ def experiment_explicit_lcu_block_encoding(
     A_qc.compose(select, inplace=True)
     A_qc.compose(prep_dag, inplace=True)
 
-    # Numerical verification M_TL = H/alpha.
+    # Numerical verification A_TL = H/alpha.
     x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=complex)
     z = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=complex)
     i2 = np.eye(2, dtype=complex)
@@ -726,7 +812,7 @@ def experiment_explicit_lcu_block_encoding(
     print("-" * 62)
     print(f"Hamiltonian: H = {c0:.3f} X_0 + {c1:.3f} Z_1")
     print(f"alpha = |c0| + |c1| = {alpha:.6f}")
-    print(f"||M_TL - H/alpha||_F = {distance:.3e}")
+    print(f"||A_TL - H/alpha||_F = {distance:.3e}")
     print("Verification:", "PASS" if distance < 1e-10 else "CHECK NUMERICS")
 
     native_gate_counts = {

@@ -39,7 +39,52 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-from one_click_utils import start_one_click_session
+try:
+    from one_click_utils import start_one_click_session
+except Exception:
+    def start_one_click_session(script_file, *, figure_prefix=None, log_name="terminal_output.log"):
+        import atexit
+        import io
+        import os
+        script_path = Path(script_file).resolve()
+        result_dir = script_path.parent / f"[RESULT]{script_path.stem}"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        old_stdout, old_stderr, old_cwd = sys.stdout, sys.stderr, Path.cwd()
+        log_handle = open(result_dir / log_name, "w", encoding="utf-8")
+        class _Tee(io.TextIOBase):
+            def __init__(self, *streams): self._streams = streams
+            def write(self, data): [s.write(data) or s.flush() for s in self._streams]; return len(data)
+            def flush(self): [s.flush() for s in self._streams]
+        sys.stdout = _Tee(old_stdout, log_handle)
+        sys.stderr = _Tee(old_stderr, log_handle)
+        os.chdir(result_dir)
+        try:
+            import matplotlib.pyplot as plt
+            old_show = plt.show
+            prefix = figure_prefix or script_path.stem
+            counter = {"n": 0}
+            def _save_show(*args, **kwargs):
+                del args, kwargs
+                for fig_id in list(plt.get_fignums()):
+                    counter["n"] += 1
+                    plt.figure(fig_id).savefig(result_dir / f"{prefix}_figure_{counter['n']:03d}.png", dpi=220, bbox_inches="tight")
+                plt.close("all")
+            plt.show = _save_show
+        except Exception:
+            old_show = None
+        def _cleanup():
+            try:
+                if old_show is not None:
+                    import matplotlib.pyplot as plt
+                    plt.show = old_show
+            except Exception:
+                pass
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            os.chdir(old_cwd)
+            log_handle.close()
+        atexit.register(_cleanup)
+        return result_dir
 
 
 @dataclass(frozen=True)
@@ -817,7 +862,7 @@ def save_souffle_plot(result: SouffleProblemResults, output_prefix: str = "vtaa"
         color="black",
         label=f"Halt at guessed k*={result.k_opt_guess}",
     )
-    ax.set_title("Souffle Problem: Over-Rotation Catastrophe")
+    ax.set_title("Souffle Problem: Over-Rotation Failure Mode")
     ax.set_xlabel("Grover iterations k")
     ax.set_ylabel("Success probability p")
     ax.set_ylim(0.0, 1.02)
@@ -1628,7 +1673,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--staircase-n", type=int, default=8, help="qubit count for staircase audit")
     parser.add_argument("--staircase-k-max", type=int, default=25, help="iterations for staircase audit")
     parser.add_argument("--staircase-good-state", type=str, default=None, help="optional H_Good n-bit state for staircase audit")
-    parser.add_argument("--run-souffle-catastrophe", action="store_true", help="run over-rotation catastrophe experiment")
+    parser.add_argument("--run-souffle-failure mode", action="store_true", help="run over-rotation failure mode experiment")
     parser.add_argument("--souffle-n", type=int, default=8, help="qubits for souffle experiment")
     parser.add_argument("--souffle-guessed-m", type=int, default=1, help="guessed number of H_Good states")
     parser.add_argument("--souffle-actual-m", type=int, default=5, help="actual number of H_Good states")
@@ -1757,7 +1802,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             actual_m=args.souffle_actual_m,
             k_scan_factor=args.souffle_k_factor,
         )
-        print("\nSouffle Catastrophe:")
+        print("\nSouffle Failure Mode:")
         print(f"  guessed M                         : {souffle_result.guessed_m}")
         print(f"  actual M                          : {souffle_result.actual_m}")
         print(f"  guessed optimal k*                : {souffle_result.k_opt_guess}")
@@ -1926,7 +1971,7 @@ if __name__ == "__main__":
                 stem,
                 "--run-subspace-audit",
                 "--run-phase-staircase",
-                "--run-souffle-catastrophe",
+                "--run-souffle-failure mode",
                 "--run-ftqc-scaling",
                 "--run-exact-aa",
                 "--run-phase-leakage",

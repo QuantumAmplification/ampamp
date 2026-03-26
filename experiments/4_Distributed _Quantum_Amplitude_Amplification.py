@@ -1,4 +1,4 @@
-"""Distributed lucky-node verification for Theorem 3.
+"""Distributed advantaged-node verification for Theorem 3.
 
 This module numerically validates the convexity guarantee used by distributed
 quantum amplitude amplification:
@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 import time
@@ -30,9 +31,59 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_RESULT_DIR = os.path.join(_HERE, f"[RESULT]{os.path.splitext(os.path.basename(__file__))[0]}")
+os.makedirs(_RESULT_DIR, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(_RESULT_DIR, ".mplconfig"))
+
 import numpy as np
 import sympy as sp
-from one_click_utils import start_one_click_session
+try:
+    from one_click_utils import start_one_click_session
+except Exception:
+    def start_one_click_session(script_file, *, figure_prefix=None, log_name="terminal_output.log"):
+        import atexit
+        import io
+        import os
+        script_path = Path(script_file).resolve()
+        result_dir = script_path.parent / f"[RESULT]{script_path.stem}"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        old_stdout, old_stderr, old_cwd = sys.stdout, sys.stderr, Path.cwd()
+        log_handle = open(result_dir / log_name, "w", encoding="utf-8")
+        class _Tee(io.TextIOBase):
+            def __init__(self, *streams): self._streams = streams
+            def write(self, data): [s.write(data) or s.flush() for s in self._streams]; return len(data)
+            def flush(self): [s.flush() for s in self._streams]
+        sys.stdout = _Tee(old_stdout, log_handle)
+        sys.stderr = _Tee(old_stderr, log_handle)
+        os.chdir(result_dir)
+        try:
+            import matplotlib.pyplot as plt
+            old_show = plt.show
+            prefix = figure_prefix or script_path.stem
+            counter = {"n": 0}
+            def _save_show(*args, **kwargs):
+                del args, kwargs
+                for fig_id in list(plt.get_fignums()):
+                    counter["n"] += 1
+                    plt.figure(fig_id).savefig(result_dir / f"{prefix}_figure_{counter['n']:03d}.png", dpi=220, bbox_inches="tight")
+                plt.close("all")
+            plt.show = _save_show
+        except Exception:
+            old_show = None
+        def _cleanup():
+            try:
+                if old_show is not None:
+                    import matplotlib.pyplot as plt
+                    plt.show = old_show
+            except Exception:
+                pass
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            os.chdir(old_cwd)
+            log_handle.close()
+        atexit.register(_cleanup)
+        return result_dir
 
 try:
     from qiskit import QuantumCircuit
@@ -267,6 +318,109 @@ class NetworkStatisticsResults:
     classical_queries_made: int
 
 
+@dataclass
+class DEQAAAResourceResults:
+    """Resource comparison between 2025 DQAA and 2026 DEQAAA."""
+
+    global_n: int
+    dqaa_j: int
+    dqaa_nodes: int
+    dqaa_local_qubits: int
+    dqaa_total_qubits: int
+    deqaaa_node_qubits: list[int]
+    deqaaa_nodes: int
+    deqaaa_max_local_qubits: int
+    deqaaa_total_qubits: int
+    node_count_ratio_dqaa_over_deqaaa: float
+    total_qubit_ratio_dqaa_over_deqaaa: float
+    max_local_qubit_ratio_dqaa_over_deqaaa: float
+
+
+@dataclass
+class DEQAAABookkeepingResults:
+    """Exact 2026 DEQAAA local bookkeeping for an arbitrary amplitude distribution."""
+
+    global_n: int
+    node_qubits: list[int]
+    target_indices: list[int]
+    target_bitstrings: list[str]
+    global_success_probability: float
+    exact_distribution: np.ndarray
+    node_targets: dict[str, list[str]]
+    local_success_probabilities: np.ndarray
+    local_target_counts: np.ndarray
+    local_iterations: np.ndarray
+    local_phases: np.ndarray
+
+
+@dataclass
+class DEQAAAShotPrecisionResults:
+    """Shot-based approximation study for the 2026 DEQAAA probability inputs."""
+
+    global_n: int
+    node_qubits: list[int]
+    target_indices: list[int]
+    shot_counts: np.ndarray
+    exact_distribution: np.ndarray
+    exact_local_success_probabilities: np.ndarray
+    kl_divergences: np.ndarray
+    estimated_local_success_probabilities: np.ndarray
+    max_local_probability_error: np.ndarray
+    mean_local_probability_error: np.ndarray
+    estimated_local_iterations: np.ndarray
+
+
+@dataclass
+class DEQAAAPartitionSweepResults:
+    """Partition-strategy sweep for the 2026 DEQAAA continuation."""
+
+    global_n: int
+    target_indices: list[int]
+    rows: list[dict[str, Any]]
+
+
+@dataclass
+class DEQAAATargetSetSweepResults:
+    """Target-configuration sweep for the 2026 DEQAAA continuation."""
+
+    global_n: int
+    node_qubits: list[int]
+    rows: list[dict[str, Any]]
+
+
+@dataclass
+class DEQAAADistributionRobustnessResults:
+    """Sensitivity of DEQAAA bookkeeping across multiple arbitrary distributions."""
+
+    global_n: int
+    node_qubits: list[int]
+    target_indices: list[int]
+    distribution_seeds: list[int]
+    rows: list[dict[str, Any]]
+    local_success_probability_span: list[float]
+    local_iteration_span: list[int]
+    local_phase_span: list[float]
+
+
+@dataclass
+class DEQAAAPhaseMismatchResults:
+    """Shot-noise sensitivity of exact local phase and iteration prescriptions."""
+
+    global_n: int
+    node_qubits: list[int]
+    target_indices: list[int]
+    shot_counts: np.ndarray
+    exact_local_success_probabilities: np.ndarray
+    exact_local_iterations: np.ndarray
+    exact_local_phases: np.ndarray
+    estimated_local_success_probabilities: np.ndarray
+    estimated_local_iterations: np.ndarray
+    estimated_local_phases: np.ndarray
+    iteration_mismatch_counts: np.ndarray
+    max_phase_error: np.ndarray
+    mean_phase_error: np.ndarray
+
+
 def _require_qiskit() -> None:
     if QuantumCircuit is None or Statevector is None:
         raise RuntimeError("Qiskit is required for distributed FPAA execution.")
@@ -316,6 +470,92 @@ def _compute_local_good_counts(good_states: np.ndarray, n: int, j: int) -> np.nd
         node = int(state) >> suffix_bits
         counts[node] += 1
     return counts
+
+
+def _deqaaa_validate_node_qubits(global_n: int, node_qubits: tuple[int, ...]) -> list[int]:
+    sizes = [int(x) for x in node_qubits]
+    if not sizes or any(x <= 0 for x in sizes):
+        raise ValueError("node_qubits must contain positive integers.")
+    if sum(sizes) != global_n:
+        raise ValueError("node_qubits must sum to global_n.")
+    return sizes
+
+
+def _deqaaa_target_bitstrings(global_n: int, target_indices: tuple[int, ...]) -> list[str]:
+    targets = [int(x) for x in target_indices]
+    if not targets:
+        raise ValueError("target_indices must not be empty.")
+    if any(x < 0 or x >= 2**global_n for x in targets):
+        raise ValueError(f"target_indices must lie in [0, {2**global_n - 1}].")
+    return [format(x, f"0{global_n}b") for x in targets]
+
+
+def _deqaaa_arbitrary_distribution(global_n: int, target_indices: tuple[int, ...], seed: int = 21) -> np.ndarray:
+    """Synthetic arbitrary amplitude distribution used for DEQAAA continuation experiments."""
+    rng = np.random.default_rng(seed)
+    raw = rng.random(2**global_n) + 0.05
+    for rank, idx in enumerate(target_indices):
+        raw[int(idx)] += 2.5 - 0.25 * rank
+    return raw / np.sum(raw)
+
+
+def _deqaaa_node_slices(node_qubits: list[int]) -> list[tuple[int, int]]:
+    offsets: list[tuple[int, int]] = []
+    start = 0
+    for width in node_qubits:
+        offsets.append((start, width))
+        start += width
+    return offsets
+
+
+def _deqaaa_partition_targets(target_bitstrings: list[str], node_qubits: list[int]) -> dict[str, list[str]]:
+    node_targets: dict[str, list[str]] = {}
+    for node_idx, (start, width) in enumerate(_deqaaa_node_slices(node_qubits)):
+        substrings = sorted({bits[start : start + width] for bits in target_bitstrings})
+        node_targets[f"node_{node_idx}"] = substrings
+    return node_targets
+
+
+def _deqaaa_local_success_probabilities(
+    exact_distribution: np.ndarray,
+    global_n: int,
+    node_qubits: list[int],
+    node_targets: dict[str, list[str]],
+) -> np.ndarray:
+    local_probs = np.zeros(len(node_qubits), dtype=float)
+    slices = _deqaaa_node_slices(node_qubits)
+
+    for node_idx, (start, width) in enumerate(slices):
+        target_set = set(node_targets[f"node_{node_idx}"])
+        total = 0.0
+        for basis_index, probability in enumerate(exact_distribution):
+            bitstring = format(basis_index, f"0{global_n}b")
+            if bitstring[start : start + width] in target_set:
+                total += float(probability)
+        local_probs[node_idx] = total
+    return local_probs
+
+
+def _eqaaa_iterations_and_phase(success_probability: float) -> tuple[int, float]:
+    if success_probability <= 0.0:
+        return 0, 0.0
+    if success_probability >= 1.0 - 1e-15:
+        return 0, 0.0
+    theta = np.arcsin(np.sqrt(success_probability))
+    j_value = int(np.floor(np.pi / (4.0 * theta) - 0.5))
+    j_value = max(j_value, 0)
+    phase = float(2.0 * np.arcsin(np.sin(np.pi / (4 * j_value + 6)) / np.sqrt(success_probability)))
+    return j_value, phase
+
+
+def _integer_compositions(total: int, parts: int) -> list[tuple[int, ...]]:
+    if parts == 1:
+        return [(total,)]
+    out: list[tuple[int, ...]] = []
+    for first in range(1, total - parts + 2):
+        for rest in _integer_compositions(total - first, parts - 1):
+            out.append((first,) + rest)
+    return out
 
 
 def _generate_fpaa_phases(L: int, delta: float) -> tuple[np.ndarray, np.ndarray]:
@@ -1206,6 +1446,329 @@ def experiment_classical_network_statistics(
     )
 
 
+def experiment_deqaaa_resource_continuation(
+    global_n: int = 6,
+    dqaa_j: int = 2,
+    deqaaa_node_qubits: tuple[int, ...] = (2, 2, 2),
+) -> DEQAAAResourceResults:
+    """2026 continuation: resource comparison between DQAA and DEQAAA."""
+    if global_n < 2:
+        raise ValueError("global_n must be >= 2.")
+    if dqaa_j <= 0 or dqaa_j >= global_n:
+        raise ValueError("dqaa_j must satisfy 1 <= dqaa_j < global_n.")
+
+    node_qubits = _deqaaa_validate_node_qubits(global_n, deqaaa_node_qubits)
+    dqaa_nodes = 2 ** dqaa_j
+    dqaa_local_qubits = global_n - dqaa_j
+    dqaa_total_qubits = dqaa_nodes * dqaa_local_qubits
+
+    deqaaa_nodes = len(node_qubits)
+    deqaaa_max_local_qubits = max(node_qubits)
+    deqaaa_total_qubits = sum(node_qubits)
+
+    return DEQAAAResourceResults(
+        global_n=global_n,
+        dqaa_j=dqaa_j,
+        dqaa_nodes=dqaa_nodes,
+        dqaa_local_qubits=dqaa_local_qubits,
+        dqaa_total_qubits=dqaa_total_qubits,
+        deqaaa_node_qubits=node_qubits,
+        deqaaa_nodes=deqaaa_nodes,
+        deqaaa_max_local_qubits=deqaaa_max_local_qubits,
+        deqaaa_total_qubits=deqaaa_total_qubits,
+        node_count_ratio_dqaa_over_deqaaa=float(dqaa_nodes / deqaaa_nodes),
+        total_qubit_ratio_dqaa_over_deqaaa=float(dqaa_total_qubits / deqaaa_total_qubits),
+        max_local_qubit_ratio_dqaa_over_deqaaa=float(dqaa_local_qubits / deqaaa_max_local_qubits),
+    )
+
+
+def experiment_deqaaa_phase_bookkeeping(
+    global_n: int = 6,
+    node_qubits: tuple[int, ...] = (2, 2, 2),
+    target_indices: tuple[int, ...] = (8, 14),
+    distribution_seed: int = 21,
+) -> DEQAAABookkeepingResults:
+    """2026 continuation: exact local probabilities, iterations, and phases for DEQAAA."""
+    if global_n < 2:
+        raise ValueError("global_n must be >= 2.")
+
+    node_sizes = _deqaaa_validate_node_qubits(global_n, node_qubits)
+    target_bitstrings = _deqaaa_target_bitstrings(global_n, target_indices)
+    exact_distribution = _deqaaa_arbitrary_distribution(global_n, target_indices, seed=distribution_seed)
+    global_success_probability = float(np.sum(exact_distribution[list(target_indices)]))
+
+    node_targets = _deqaaa_partition_targets(target_bitstrings, node_sizes)
+    local_probs = _deqaaa_local_success_probabilities(exact_distribution, global_n, node_sizes, node_targets)
+    local_counts = np.asarray([len(node_targets[f"node_{i}"]) for i in range(len(node_sizes))], dtype=int)
+
+    iterations = np.zeros(len(node_sizes), dtype=int)
+    phases = np.zeros(len(node_sizes), dtype=float)
+    for idx, probability in enumerate(local_probs):
+        iterations[idx], phases[idx] = _eqaaa_iterations_and_phase(float(probability))
+
+    return DEQAAABookkeepingResults(
+        global_n=global_n,
+        node_qubits=node_sizes,
+        target_indices=[int(x) for x in target_indices],
+        target_bitstrings=target_bitstrings,
+        global_success_probability=global_success_probability,
+        exact_distribution=exact_distribution,
+        node_targets=node_targets,
+        local_success_probabilities=local_probs,
+        local_target_counts=local_counts,
+        local_iterations=iterations,
+        local_phases=phases,
+    )
+
+
+def experiment_deqaaa_shot_precision(
+    global_n: int = 6,
+    node_qubits: tuple[int, ...] = (2, 2, 2),
+    target_indices: tuple[int, ...] = (8, 14),
+    shot_counts: tuple[int, ...] = (10_000, 100_000),
+    distribution_seed: int = 21,
+    measurement_seed: int = 21,
+) -> DEQAAAShotPrecisionResults:
+    """2026 continuation: KL-divergence and local-p_j sensitivity under shot-based estimation."""
+    bookkeeping = experiment_deqaaa_phase_bookkeeping(
+        global_n=global_n,
+        node_qubits=node_qubits,
+        target_indices=target_indices,
+        distribution_seed=distribution_seed,
+    )
+
+    rng = np.random.default_rng(measurement_seed)
+    shot_array = np.asarray([int(s) for s in shot_counts], dtype=int)
+    if np.any(shot_array <= 0):
+        raise ValueError("shot_counts must contain positive integers.")
+
+    estimated_local = np.zeros((len(shot_array), len(bookkeeping.node_qubits)), dtype=float)
+    estimated_iters = np.zeros((len(shot_array), len(bookkeeping.node_qubits)), dtype=int)
+    kl_values = np.zeros(len(shot_array), dtype=float)
+    max_err = np.zeros(len(shot_array), dtype=float)
+    mean_err = np.zeros(len(shot_array), dtype=float)
+
+    for row, shots in enumerate(shot_array):
+        counts = rng.multinomial(int(shots), bookkeeping.exact_distribution)
+        approx_distribution = counts / float(shots)
+
+        mask = approx_distribution > 0
+        kl_values[row] = float(
+            np.sum(approx_distribution[mask] * np.log(approx_distribution[mask] / bookkeeping.exact_distribution[mask]))
+        )
+
+        local_probs = _deqaaa_local_success_probabilities(
+            approx_distribution,
+            bookkeeping.global_n,
+            bookkeeping.node_qubits,
+            bookkeeping.node_targets,
+        )
+        estimated_local[row, :] = local_probs
+        errors = np.abs(local_probs - bookkeeping.local_success_probabilities)
+        max_err[row] = float(np.max(errors))
+        mean_err[row] = float(np.mean(errors))
+        for col, probability in enumerate(local_probs):
+            estimated_iters[row, col], _ = _eqaaa_iterations_and_phase(float(probability))
+
+    return DEQAAAShotPrecisionResults(
+        global_n=bookkeeping.global_n,
+        node_qubits=bookkeeping.node_qubits,
+        target_indices=bookkeeping.target_indices,
+        shot_counts=shot_array,
+        exact_distribution=bookkeeping.exact_distribution,
+        exact_local_success_probabilities=bookkeeping.local_success_probabilities,
+        kl_divergences=kl_values,
+        estimated_local_success_probabilities=estimated_local,
+        max_local_probability_error=max_err,
+        mean_local_probability_error=mean_err,
+        estimated_local_iterations=estimated_iters,
+    )
+
+
+def experiment_deqaaa_partition_sweep(
+    global_n: int = 6,
+    target_indices: tuple[int, ...] = (8, 14),
+    distribution_seed: int = 21,
+    max_nodes: Optional[int] = None,
+) -> DEQAAAPartitionSweepResults:
+    """Sweep admissible DEQAAA node partitions and record local bookkeeping statistics."""
+    if max_nodes is None:
+        max_nodes = global_n
+    rows: list[dict[str, Any]] = []
+
+    for nodes in range(2, min(max_nodes, global_n) + 1):
+        for node_qubits in _integer_compositions(global_n, nodes):
+            bookkeeping = experiment_deqaaa_phase_bookkeeping(
+                global_n=global_n,
+                node_qubits=node_qubits,
+                target_indices=target_indices,
+                distribution_seed=distribution_seed,
+            )
+            rows.append(
+                {
+                    "node_qubits": list(node_qubits),
+                    "nodes": nodes,
+                    "max_local_qubits": max(node_qubits),
+                    "global_success_probability": bookkeeping.global_success_probability,
+                    "min_local_success_probability": float(np.min(bookkeeping.local_success_probabilities)),
+                    "max_local_success_probability": float(np.max(bookkeeping.local_success_probabilities)),
+                    "mean_local_success_probability": float(np.mean(bookkeeping.local_success_probabilities)),
+                    "max_local_target_count": int(np.max(bookkeeping.local_target_counts)),
+                    "local_iterations": bookkeeping.local_iterations.astype(int).tolist(),
+                }
+            )
+
+    rows.sort(key=lambda row: (row["max_local_qubits"], row["max_local_success_probability"], row["nodes"], row["node_qubits"]))
+    return DEQAAAPartitionSweepResults(
+        global_n=global_n,
+        target_indices=[int(x) for x in target_indices],
+        rows=rows,
+    )
+
+
+def experiment_deqaaa_target_set_sweep(
+    global_n: int = 6,
+    node_qubits: tuple[int, ...] = (2, 2, 2),
+    target_sets: tuple[tuple[int, ...], ...] = ((8, 14), (8, 9), (14, 15), (8, 14, 30)),
+    distribution_seed: int = 21,
+) -> DEQAAATargetSetSweepResults:
+    """Compare concentrated, dispersed, and multi-target cases under DEQAAA bookkeeping."""
+    rows: list[dict[str, Any]] = []
+    for targets in target_sets:
+        bookkeeping = experiment_deqaaa_phase_bookkeeping(
+            global_n=global_n,
+            node_qubits=node_qubits,
+            target_indices=targets,
+            distribution_seed=distribution_seed + len(rows),
+        )
+        rows.append(
+            {
+                "target_indices": [int(x) for x in targets],
+                "global_success_probability": bookkeeping.global_success_probability,
+                "max_local_success_probability": float(np.max(bookkeeping.local_success_probabilities)),
+                "min_local_success_probability": float(np.min(bookkeeping.local_success_probabilities)),
+                "local_target_counts": bookkeeping.local_target_counts.astype(int).tolist(),
+                "local_iterations": bookkeeping.local_iterations.astype(int).tolist(),
+                "local_phases": bookkeeping.local_phases.astype(float).tolist(),
+            }
+        )
+    return DEQAAATargetSetSweepResults(
+        global_n=global_n,
+        node_qubits=list(node_qubits),
+        rows=rows,
+    )
+
+
+def experiment_deqaaa_distribution_robustness(
+    global_n: int = 6,
+    node_qubits: tuple[int, ...] = (2, 2, 2),
+    target_indices: tuple[int, ...] = (8, 14),
+    distribution_seeds: tuple[int, ...] = (7, 21, 84, 126),
+) -> DEQAAADistributionRobustnessResults:
+    """Sweep several arbitrary distributions to test DEQAAA bookkeeping robustness."""
+    if not distribution_seeds:
+        raise ValueError("distribution_seeds must contain at least one seed.")
+
+    rows: list[dict[str, Any]] = []
+    local_prob_rows: list[np.ndarray] = []
+    local_iter_rows: list[np.ndarray] = []
+    local_phase_rows: list[np.ndarray] = []
+
+    for seed in distribution_seeds:
+        bookkeeping = experiment_deqaaa_phase_bookkeeping(
+            global_n=global_n,
+            node_qubits=node_qubits,
+            target_indices=target_indices,
+            distribution_seed=int(seed),
+        )
+        local_prob_rows.append(bookkeeping.local_success_probabilities.astype(float))
+        local_iter_rows.append(bookkeeping.local_iterations.astype(int))
+        local_phase_rows.append(bookkeeping.local_phases.astype(float))
+        rows.append(
+            {
+                "distribution_seed": int(seed),
+                "global_success_probability": bookkeeping.global_success_probability,
+                "local_success_probabilities": bookkeeping.local_success_probabilities.astype(float).tolist(),
+                "local_iterations": bookkeeping.local_iterations.astype(int).tolist(),
+                "local_phases": bookkeeping.local_phases.astype(float).tolist(),
+                "local_target_counts": bookkeeping.local_target_counts.astype(int).tolist(),
+            }
+        )
+
+    prob_stack = np.vstack(local_prob_rows)
+    iter_stack = np.vstack(local_iter_rows)
+    phase_stack = np.vstack(local_phase_rows)
+
+    return DEQAAADistributionRobustnessResults(
+        global_n=global_n,
+        node_qubits=list(node_qubits),
+        target_indices=[int(x) for x in target_indices],
+        distribution_seeds=[int(s) for s in distribution_seeds],
+        rows=rows,
+        local_success_probability_span=(np.max(prob_stack, axis=0) - np.min(prob_stack, axis=0)).astype(float).tolist(),
+        local_iteration_span=(np.max(iter_stack, axis=0) - np.min(iter_stack, axis=0)).astype(int).tolist(),
+        local_phase_span=(np.max(phase_stack, axis=0) - np.min(phase_stack, axis=0)).astype(float).tolist(),
+    )
+
+
+def experiment_deqaaa_phase_mismatch_sweep(
+    global_n: int = 6,
+    node_qubits: tuple[int, ...] = (2, 2, 2),
+    target_indices: tuple[int, ...] = (8, 14),
+    shot_counts: tuple[int, ...] = (100, 1000, 10000, 100000),
+    distribution_seed: int = 21,
+    measurement_seed: int = 21,
+) -> DEQAAAPhaseMismatchResults:
+    """Track how shot-estimated probabilities perturb exact local phases and iterations."""
+    bookkeeping = experiment_deqaaa_phase_bookkeeping(
+        global_n=global_n,
+        node_qubits=node_qubits,
+        target_indices=target_indices,
+        distribution_seed=distribution_seed,
+    )
+    shot_precision = experiment_deqaaa_shot_precision(
+        global_n=global_n,
+        node_qubits=node_qubits,
+        target_indices=target_indices,
+        shot_counts=shot_counts,
+        distribution_seed=distribution_seed,
+        measurement_seed=measurement_seed,
+    )
+
+    estimated_phases = np.zeros_like(shot_precision.estimated_local_success_probabilities, dtype=float)
+    mismatch_counts = np.zeros(len(shot_precision.shot_counts), dtype=int)
+    max_phase_error = np.zeros(len(shot_precision.shot_counts), dtype=float)
+    mean_phase_error = np.zeros(len(shot_precision.shot_counts), dtype=float)
+
+    for row_idx in range(len(shot_precision.shot_counts)):
+        for col_idx, probability in enumerate(shot_precision.estimated_local_success_probabilities[row_idx]):
+            _, phase = _eqaaa_iterations_and_phase(float(probability))
+            estimated_phases[row_idx, col_idx] = phase
+
+        mismatch_counts[row_idx] = int(
+            np.sum(shot_precision.estimated_local_iterations[row_idx] != bookkeeping.local_iterations)
+        )
+        phase_errors = np.abs(estimated_phases[row_idx] - bookkeeping.local_phases)
+        max_phase_error[row_idx] = float(np.max(phase_errors))
+        mean_phase_error[row_idx] = float(np.mean(phase_errors))
+
+    return DEQAAAPhaseMismatchResults(
+        global_n=bookkeeping.global_n,
+        node_qubits=bookkeeping.node_qubits,
+        target_indices=bookkeeping.target_indices,
+        shot_counts=shot_precision.shot_counts,
+        exact_local_success_probabilities=bookkeeping.local_success_probabilities,
+        exact_local_iterations=bookkeeping.local_iterations,
+        exact_local_phases=bookkeeping.local_phases,
+        estimated_local_success_probabilities=shot_precision.estimated_local_success_probabilities,
+        estimated_local_iterations=shot_precision.estimated_local_iterations,
+        estimated_local_phases=estimated_phases,
+        iteration_mismatch_counts=mismatch_counts,
+        max_phase_error=max_phase_error,
+        mean_phase_error=mean_phase_error,
+    )
+
+
 class DQAA_Oracle_Synthesizer:
     """AST-level oracle partitioning compiler for distributed DQAA."""
 
@@ -1653,7 +2216,7 @@ def plot_distributed_fpaa_histograms(
         color = "tab:green" if is_lucky else "0.60"
         bars = ax.bar(x, probs, color=color, edgecolor="black", linewidth=0.7, alpha=0.88)
 
-        # Highlight known H_Good suffixes on lucky nodes.
+        # Highlight known H_Good suffixes on advantaged nodes.
         for suffix in result.node_targets[prefix]:
             bars[int(suffix, 2)].set_color("tab:orange")
 
@@ -1661,7 +2224,7 @@ def plot_distributed_fpaa_histograms(
         ax.axhline(uniform_baseline, color="black", linestyle=":", linewidth=1.2, alpha=0.8)
 
         node_id = int(prefix, 2)
-        status = "Lucky" if is_lucky else "Unlucky"
+        status = "Advantaged" if is_lucky else "Disadvantaged"
         ax.set_title(
             f"Node {node_id} (prefix={prefix}) [{status}]\n"
             f"p_k (H_Good set)={result.node_good_success[prefix]:.4f}, "
@@ -1902,6 +2465,49 @@ def plot_classical_network_statistics(
         plt.close(fig)
 
 
+def plot_deqaaa_shot_precision(
+    result: DEQAAAShotPrecisionResults,
+    save_path: Optional[str] = None,
+    show_plot: bool = False,
+) -> None:
+    """Plot KL-divergence and local probability error for DEQAAA shot estimation."""
+    try:
+        import matplotlib.pyplot as plt
+    except Exception as exc:  # pragma: no cover
+        raise RuntimeError("matplotlib is required for plot_deqaaa_shot_precision.") from exc
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.2))
+
+    ax1.plot(result.shot_counts, result.kl_divergences, marker="o", linewidth=2.2, color="tab:blue")
+    ax1.set_xscale("log")
+    ax1.set_title("DEQAAA Probability Estimation Accuracy")
+    ax1.set_xlabel("Measurement shots")
+    ax1.set_ylabel(r"$D_{KL}(\tilde P \,\|\, P)$")
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(result.shot_counts, result.max_local_probability_error, marker="s", linewidth=2.2, color="tab:red", label="max |p_j - p~_j|")
+    ax2.plot(result.shot_counts, result.mean_local_probability_error, marker="^", linewidth=2.2, color="tab:green", label="mean |p_j - p~_j|")
+    ax2.set_xscale("log")
+    ax2.set_title("Local Success-Probability Error")
+    ax2.set_xlabel("Measurement shots")
+    ax2.set_ylabel("Absolute error")
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(loc="upper right")
+
+    fig.suptitle(
+        f"DEQAAA Shot-Precision Continuation (n={result.global_n}, node_qubits={tuple(result.node_qubits)})",
+        fontsize=14,
+    )
+    fig.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=220, bbox_inches="tight")
+    if show_plot:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
 def plot_lucky_node_barchart(
     result: LuckyNodeInstanceResult,
     save_path: Optional[str] = None,
@@ -1938,7 +2544,7 @@ def plot_lucky_node_barchart(
     plt.grid(axis="y", linestyle=":", alpha=0.5)
     legend_elements = [
         plt.Line2D([0], [0], color="tab:red", linestyle="--", linewidth=2.2, label="Global p"),
-        Patch(facecolor="tab:green", edgecolor="black", label="Lucky node (p_k >= p)"),
+        Patch(facecolor="tab:green", edgecolor="black", label="Advantaged node (p_k >= p)"),
         Patch(facecolor="0.60", edgecolor="black", label="p_k < p"),
     ]
     plt.legend(handles=legend_elements, loc="upper right")
@@ -1981,7 +2587,7 @@ def plot_lucky_node_monte_carlo_evidence(
         int(np.max(mc.lucky_count_samples)) + 2,
     ) - 0.5
     ax2.hist(mc.lucky_count_samples, bins=bins, color="tab:green", edgecolor="black", alpha=0.85)
-    ax2.set_xlabel("Number of lucky nodes in a trial")
+    ax2.set_xlabel("Number of advantaged nodes in a trial")
     ax2.set_ylabel("Trial count")
     ax2.grid(axis="y", linestyle=":", alpha=0.4)
 
@@ -2149,6 +2755,100 @@ def summarize_network_statistics(result: NetworkStatisticsResults) -> dict[str, 
     }
 
 
+def summarize_deqaaa_resource_continuation(result: DEQAAAResourceResults) -> dict[str, Any]:
+    return {
+        "global_n": result.global_n,
+        "dqaa_j": result.dqaa_j,
+        "dqaa_nodes": result.dqaa_nodes,
+        "dqaa_local_qubits": result.dqaa_local_qubits,
+        "dqaa_total_qubits": result.dqaa_total_qubits,
+        "deqaaa_node_qubits": result.deqaaa_node_qubits,
+        "deqaaa_nodes": result.deqaaa_nodes,
+        "deqaaa_max_local_qubits": result.deqaaa_max_local_qubits,
+        "deqaaa_total_qubits": result.deqaaa_total_qubits,
+        "node_count_ratio_dqaa_over_deqaaa": result.node_count_ratio_dqaa_over_deqaaa,
+        "total_qubit_ratio_dqaa_over_deqaaa": result.total_qubit_ratio_dqaa_over_deqaaa,
+        "max_local_qubit_ratio_dqaa_over_deqaaa": result.max_local_qubit_ratio_dqaa_over_deqaaa,
+    }
+
+
+def summarize_deqaaa_phase_bookkeeping(result: DEQAAABookkeepingResults) -> dict[str, Any]:
+    return {
+        "global_n": result.global_n,
+        "node_qubits": result.node_qubits,
+        "target_indices": result.target_indices,
+        "target_bitstrings": result.target_bitstrings,
+        "global_success_probability": result.global_success_probability,
+        "node_targets": result.node_targets,
+        "local_success_probabilities": result.local_success_probabilities.astype(float).tolist(),
+        "local_target_counts": result.local_target_counts.astype(int).tolist(),
+        "local_iterations": result.local_iterations.astype(int).tolist(),
+        "local_phases": result.local_phases.astype(float).tolist(),
+    }
+
+
+def summarize_deqaaa_shot_precision(result: DEQAAAShotPrecisionResults) -> dict[str, Any]:
+    return {
+        "global_n": result.global_n,
+        "node_qubits": result.node_qubits,
+        "target_indices": result.target_indices,
+        "shot_counts": result.shot_counts.astype(int).tolist(),
+        "exact_local_success_probabilities": result.exact_local_success_probabilities.astype(float).tolist(),
+        "kl_divergences": result.kl_divergences.astype(float).tolist(),
+        "estimated_local_success_probabilities": result.estimated_local_success_probabilities.astype(float).tolist(),
+        "max_local_probability_error": result.max_local_probability_error.astype(float).tolist(),
+        "mean_local_probability_error": result.mean_local_probability_error.astype(float).tolist(),
+        "estimated_local_iterations": result.estimated_local_iterations.astype(int).tolist(),
+    }
+
+
+def summarize_deqaaa_partition_sweep(result: DEQAAAPartitionSweepResults) -> dict[str, Any]:
+    return {
+        "global_n": result.global_n,
+        "target_indices": result.target_indices,
+        "rows": result.rows,
+    }
+
+
+def summarize_deqaaa_target_set_sweep(result: DEQAAATargetSetSweepResults) -> dict[str, Any]:
+    return {
+        "global_n": result.global_n,
+        "node_qubits": result.node_qubits,
+        "rows": result.rows,
+    }
+
+
+def summarize_deqaaa_distribution_robustness(result: DEQAAADistributionRobustnessResults) -> dict[str, Any]:
+    return {
+        "global_n": result.global_n,
+        "node_qubits": result.node_qubits,
+        "target_indices": result.target_indices,
+        "distribution_seeds": result.distribution_seeds,
+        "rows": result.rows,
+        "local_success_probability_span": result.local_success_probability_span,
+        "local_iteration_span": result.local_iteration_span,
+        "local_phase_span": result.local_phase_span,
+    }
+
+
+def summarize_deqaaa_phase_mismatch(result: DEQAAAPhaseMismatchResults) -> dict[str, Any]:
+    return {
+        "global_n": result.global_n,
+        "node_qubits": result.node_qubits,
+        "target_indices": result.target_indices,
+        "shot_counts": result.shot_counts.astype(int).tolist(),
+        "exact_local_success_probabilities": result.exact_local_success_probabilities.astype(float).tolist(),
+        "exact_local_iterations": result.exact_local_iterations.astype(int).tolist(),
+        "exact_local_phases": result.exact_local_phases.astype(float).tolist(),
+        "estimated_local_success_probabilities": result.estimated_local_success_probabilities.astype(float).tolist(),
+        "estimated_local_iterations": result.estimated_local_iterations.astype(int).tolist(),
+        "estimated_local_phases": result.estimated_local_phases.astype(float).tolist(),
+        "iteration_mismatch_counts": result.iteration_mismatch_counts.astype(int).tolist(),
+        "max_phase_error": result.max_phase_error.astype(float).tolist(),
+        "mean_phase_error": result.mean_phase_error.astype(float).tolist(),
+    }
+
+
 def summarize_oracle_partitioning(result: CompilerResourceResults) -> dict[str, Any]:
     """JSON-safe summary for automated oracle partitioning compiler benchmark."""
     node_rows: list[dict[str, Any]] = []
@@ -2313,7 +3013,7 @@ def summarize_monte_carlo(mc: LuckyNodeMonteCarloResult) -> dict[str, Any]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Lucky Node numerical proof for distributed FPAA Theorem 3.")
+    parser = argparse.ArgumentParser(description="Advantaged Node numerical proof for distributed FPAA Theorem 3.")
     parser.add_argument("--n", type=int, default=8, help="Global search qubit count.")
     parser.add_argument("--j", type=int, default=3, help="Prefix qubits for partitioning.")
     parser.add_argument("--num-good", type=int, default=12, help="Number of H_Good states globally (M).")
@@ -2457,12 +3157,111 @@ def _build_parser() -> argparse.ArgumentParser:
         default=42,
         help="Simulator seed for network statistics module.",
     )
+    parser.add_argument(
+        "--run-deqaaa-resource-continuation",
+        action="store_true",
+        help="Run the 2026 DEQAAA resource comparison continuation against 2025 DQAA.",
+    )
+    parser.add_argument(
+        "--run-deqaaa-shot-precision",
+        action="store_true",
+        help="Run the 2026 DEQAAA shot/KL precision continuation for arbitrary amplitudes.",
+    )
+    parser.add_argument(
+        "--deqaaa-global-n",
+        type=int,
+        default=6,
+        help="Global qubit count for the 2026 DEQAAA continuation modules.",
+    )
+    parser.add_argument(
+        "--deqaaa-dqaa-j",
+        type=int,
+        default=2,
+        help="Reference 2025 DQAA partition parameter j for the 2026 resource comparison.",
+    )
+    parser.add_argument(
+        "--deqaaa-node-qubits",
+        type=str,
+        default="2,2,2",
+        help="Comma-separated node-qubit partition for DEQAAA, e.g. '2,2,2'.",
+    )
+    parser.add_argument(
+        "--deqaaa-target-indices",
+        type=str,
+        default="8,14",
+        help="Comma-separated target basis indices for the DEQAAA continuation, e.g. '8,14'.",
+    )
+    parser.add_argument(
+        "--deqaaa-distribution-seed",
+        type=int,
+        default=21,
+        help="Seed for the synthetic arbitrary amplitude distribution used in DEQAAA continuation.",
+    )
+    parser.add_argument(
+        "--deqaaa-shot-counts",
+        type=str,
+        default="10000,100000",
+        help="Comma-separated shot counts for DEQAAA shot-precision continuation.",
+    )
+    parser.add_argument(
+        "--deqaaa-measurement-seed",
+        type=int,
+        default=21,
+        help="Measurement seed for DEQAAA shot-precision multinomial sampling.",
+    )
+    parser.add_argument(
+        "--run-deqaaa-partition-sweep",
+        action="store_true",
+        help="Run a DEQAAA partition sweep over admissible node allocations.",
+    )
+    parser.add_argument(
+        "--run-deqaaa-target-sweep",
+        action="store_true",
+        help="Run a DEQAAA sweep over multiple target configurations.",
+    )
+    parser.add_argument(
+        "--run-deqaaa-distribution-robustness",
+        action="store_true",
+        help="Run a DEQAAA sweep over multiple arbitrary distributions.",
+    )
+    parser.add_argument(
+        "--run-deqaaa-phase-mismatch",
+        action="store_true",
+        help="Run a DEQAAA phase/iteration mismatch study under shot-estimated probabilities.",
+    )
+    parser.add_argument(
+        "--deqaaa-max-nodes",
+        type=int,
+        default=None,
+        help="Maximum number of DEQAAA nodes included in the partition sweep.",
+    )
+    parser.add_argument(
+        "--deqaaa-target-set-sweep",
+        type=str,
+        default="8,14;8,9;14,15;8,14,30",
+        help="Semicolon-separated target sets for DEQAAA target sweep, e.g. '8,14;8,9;14,15'.",
+    )
+    parser.add_argument(
+        "--deqaaa-distribution-seeds",
+        type=str,
+        default="7,21,84,126",
+        help="Comma-separated seeds for DEQAAA distribution-robustness sweep.",
+    )
     return parser
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    deqaaa_node_qubits = tuple(int(x.strip()) for x in args.deqaaa_node_qubits.split(",") if x.strip())
+    deqaaa_target_indices = tuple(int(x.strip()) for x in args.deqaaa_target_indices.split(",") if x.strip())
+    deqaaa_shot_counts = tuple(int(x.strip()) for x in args.deqaaa_shot_counts.split(",") if x.strip())
+    deqaaa_distribution_seeds = tuple(int(x.strip()) for x in args.deqaaa_distribution_seeds.split(",") if x.strip())
+    deqaaa_target_set_sweep = tuple(
+        tuple(int(x.strip()) for x in block.split(",") if x.strip())
+        for block in args.deqaaa_target_set_sweep.split(";")
+        if block.strip()
+    )
 
     if (
         not args.run_all
@@ -2472,6 +3271,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         and not args.run_noise_benchmark
         and not args.run_oracle_compiler
         and not args.run_network_statistics
+        and not args.run_deqaaa_resource_continuation
+        and not args.run_deqaaa_shot_precision
+        and not args.run_deqaaa_partition_sweep
+        and not args.run_deqaaa_target_sweep
+        and not args.run_deqaaa_distribution_robustness
+        and not args.run_deqaaa_phase_mismatch
     ):
         result = experiment_lucky_node_verification(
             n=args.n,
@@ -2622,6 +3427,73 @@ def main(argv: Optional[list[str]] = None) -> int:
         summary["network_statistics"] = summarize_network_statistics(network)
         summary["network_statistics_artifact"] = {"network_plot": network_plot}
 
+    if args.run_deqaaa_resource_continuation:
+        resource = experiment_deqaaa_resource_continuation(
+            global_n=int(args.deqaaa_global_n),
+            dqaa_j=int(args.deqaaa_dqaa_j),
+            deqaaa_node_qubits=deqaaa_node_qubits,
+        )
+        bookkeeping = experiment_deqaaa_phase_bookkeeping(
+            global_n=int(args.deqaaa_global_n),
+            node_qubits=deqaaa_node_qubits,
+            target_indices=deqaaa_target_indices,
+            distribution_seed=int(args.deqaaa_distribution_seed),
+        )
+        summary["deqaaa_resource_continuation"] = summarize_deqaaa_resource_continuation(resource)
+        summary["deqaaa_phase_bookkeeping"] = summarize_deqaaa_phase_bookkeeping(bookkeeping)
+
+    if args.run_deqaaa_shot_precision:
+        shot_res = experiment_deqaaa_shot_precision(
+            global_n=int(args.deqaaa_global_n),
+            node_qubits=deqaaa_node_qubits,
+            target_indices=deqaaa_target_indices,
+            shot_counts=deqaaa_shot_counts,
+            distribution_seed=int(args.deqaaa_distribution_seed),
+            measurement_seed=int(args.deqaaa_measurement_seed),
+        )
+        shot_plot = f"{args.out_prefix}_deqaaa_shot_precision.png"
+        plot_deqaaa_shot_precision(shot_res, save_path=shot_plot, show_plot=bool(args.show_plots))
+        summary["deqaaa_shot_precision"] = summarize_deqaaa_shot_precision(shot_res)
+        summary["deqaaa_shot_precision_artifact"] = {"shot_precision_plot": shot_plot}
+
+    if args.run_deqaaa_partition_sweep:
+        partition_res = experiment_deqaaa_partition_sweep(
+            global_n=int(args.deqaaa_global_n),
+            target_indices=deqaaa_target_indices,
+            distribution_seed=int(args.deqaaa_distribution_seed),
+            max_nodes=args.deqaaa_max_nodes,
+        )
+        summary["deqaaa_partition_sweep"] = summarize_deqaaa_partition_sweep(partition_res)
+
+    if args.run_deqaaa_target_sweep:
+        target_res = experiment_deqaaa_target_set_sweep(
+            global_n=int(args.deqaaa_global_n),
+            node_qubits=deqaaa_node_qubits,
+            target_sets=deqaaa_target_set_sweep,
+            distribution_seed=int(args.deqaaa_distribution_seed),
+        )
+        summary["deqaaa_target_set_sweep"] = summarize_deqaaa_target_set_sweep(target_res)
+
+    if args.run_deqaaa_distribution_robustness:
+        robustness_res = experiment_deqaaa_distribution_robustness(
+            global_n=int(args.deqaaa_global_n),
+            node_qubits=deqaaa_node_qubits,
+            target_indices=deqaaa_target_indices,
+            distribution_seeds=deqaaa_distribution_seeds,
+        )
+        summary["deqaaa_distribution_robustness"] = summarize_deqaaa_distribution_robustness(robustness_res)
+
+    if args.run_deqaaa_phase_mismatch:
+        mismatch_res = experiment_deqaaa_phase_mismatch_sweep(
+            global_n=int(args.deqaaa_global_n),
+            node_qubits=deqaaa_node_qubits,
+            target_indices=deqaaa_target_indices,
+            shot_counts=deqaaa_shot_counts,
+            distribution_seed=int(args.deqaaa_distribution_seed),
+            measurement_seed=int(args.deqaaa_measurement_seed),
+        )
+        summary["deqaaa_phase_mismatch"] = summarize_deqaaa_phase_mismatch(mismatch_res)
+
     if args.save_json is not None:
         out = Path(args.save_json)
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -2646,6 +3518,12 @@ if __name__ == "__main__":
                     "--run-noise-benchmark",
                     "--run-oracle-compiler",
                     "--run-network-statistics",
+                    "--run-deqaaa-resource-continuation",
+                    "--run-deqaaa-shot-precision",
+                    "--run-deqaaa-partition-sweep",
+                    "--run-deqaaa-target-sweep",
+                    "--run-deqaaa-distribution-robustness",
+                    "--run-deqaaa-phase-mismatch",
                     "--out-prefix",
                     stem,
                     "--save-json",
