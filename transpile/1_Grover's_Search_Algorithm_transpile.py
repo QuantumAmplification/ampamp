@@ -91,11 +91,11 @@ def run_interactive_scenario_repl(scenarios, *, sep):
     scenario_pairs = list(scenarios)
     scenario_map = {label.upper(): fn for label, fn in scenario_pairs}
     print(f"\n{sep}")
-    print("INTERACTIVE SCENARIO RE-RUN MODE")
+    print("INTERACTIVE RE-RUN MODE")
     print(sep)
-    print("You can now rerun any scenario with custom inputs.")
+    print("Select a scenario for rerun with custom parameters.")
     print(f"Available labels: {', '.join(label for label, _ in scenario_pairs)}")
-    print("Enter a label like A or P, or press Enter to finish.")
+    print("Enter a scenario label such as A or P, or press Enter to exit.")
     while True:
         try:
             choice = input("\nScenario label to rerun: ").strip().upper()
@@ -103,13 +103,13 @@ def run_interactive_scenario_repl(scenarios, *, sep):
             print("\nInteractive mode closed.")
             return
         if not choice:
-            print("Interactive mode finished.")
+            print("Interactive rerun mode finished.")
             return
         if choice not in scenario_map:
             print(f"Unknown scenario '{choice}'. Available: {', '.join(scenario_map)}")
             continue
         fn = scenario_map[choice]
-        print(f"Selected {choice}: {fn.__name__}")
+        print(f"Selected scenario {choice}: {fn.__name__}")
         print(f"Parameters: {_format_signature_help(fn)}")
         print("Enter overrides as comma-separated key=value pairs.")
         print("Example: n_qubits=32")
@@ -117,10 +117,10 @@ def run_interactive_scenario_repl(scenarios, *, sep):
         try:
             raw_kwargs = input("Custom parameters: ")
             kwargs = _parse_kwargs_text(raw_kwargs)
-            print(f"\nRe-running {choice} with parameters: {kwargs if kwargs else 'defaults'}")
+            print(f"\nExecuting scenario {choice} with parameters: {kwargs if kwargs else 'defaults'}")
             fn(**kwargs)
         except Exception as exc:
-            print(f"\nScenario {choice} failed with custom parameters.")
+            print(f"\nScenario {choice} failed during custom execution.")
             print(f"Error: {exc}")
             traceback.print_exc()
 
@@ -239,13 +239,13 @@ def transpile_for_hardware(qc, coupling_map=None, basis_gates=None, optimization
 
 def run_scenario_a(n_qubits=6, good_indices=[10, 25]):
     """
-    Scenario A: The Unrolling Baseline (The "Exception" Case)
-    
-    Proof that scaling standard Grover search on monolithic hardware is 
-    infeasible by the sheer weight of multi-controlled gate unrolling.
+    Scenario A: Unrolling Baseline
+
+    Evaluates the gate-expansion overhead incurred when a logical Grover
+    iterate is decomposed into a native hardware gate set.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO A: THE UNROLLING BASELINE")
+    print("SCENARIO A: UNROLLING BASELINE")
     print("=" * 70)
     
     # Step 1: Construct the Ideal Logical Circuit for k=1 (one Grover step)
@@ -293,10 +293,10 @@ def run_scenario_a(n_qubits=6, good_indices=[10, 25]):
 
 def run_scenario_b(n_qubits=6, good_indices=[10, 25]):
     """
-    Scenario B: The Topological Mid-Low (Connectivity Constraints)
-    
-    Proof that routing multi-controlled gates across restricted physical
-    topologies causes a massive explosion in depth due to SWAP operations.
+    Scenario B: Topological Routing Constraints
+
+    Quantifies the additional routing overhead induced by restricted device
+    connectivity during transpilation.
     """
     print("\n" + "=" * 70)
     print("SCENARIO B: RESTRICTED TOPOLOGICAL ROUTING")
@@ -367,13 +367,13 @@ def run_scenario_b(n_qubits=6, good_indices=[10, 25]):
 
 def run_scenario_c(n_qubits=5, k=2):
     """
-    Scenario C: Compiler Optimization Comparative Evaluation (The Mitigation Test)
-    
-    Demonstrates the limit of classical compiler heuristics (optimization_level 0 vs 3) 
-    in reducing the massive logical-to-physical depth blowup on a restricted topology.
+    Scenario C: Compiler Optimization Comparison
+
+    Compares low- and high-optimization transpilation settings on a restricted
+    topology to quantify the residual physical-depth overhead.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO C: COMPILER OPTIMIZATION COMPARATIVE EVALUATION")
+    print("SCENARIO C: COMPILER OPTIMIZATION COMPARISON")
     print("=" * 70)
     
     # Step 1: Construct the Test Subject
@@ -390,14 +390,14 @@ def run_scenario_c(n_qubits=5, k=2):
     heavy_hex_map_5 = [[0, 1], [1, 0], [1, 2], [2, 1], [1, 3], [3, 1], [3, 4], [4, 3]]
     basis_gates = ['cx', 'id', 'rz', 'sx', 'x']
     
-    print(f"1. The Test Subject")
+    print(f"1. Problem Instance")
     print(f"   - Qubits: {n_qubits}, Grover Iterations (k): {k}")
     print(f"   - Ideal Logical Depth: {ideal_depth}")
     print(f"   - Architecture: Heavy-Hex Lattice (5 qubits)")
     print(f"   - Basis Gates: {basis_gates}")
     
     # Step 2: The Naive Mapping (Level 0)
-    print("\n2. Transpiling at Level 0 (Naive Mapping)...")
+    print("\n2. Transpiling at optimization level 0...")
     qc_level_0, depth_0, ops_0 = transpile_for_hardware(
         raw_qc, 
         coupling_map=heavy_hex_map_5, 
@@ -410,7 +410,7 @@ def run_scenario_c(n_qubits=5, k=2):
     print(f"   -> Total CX Gates: {cx_0}")
     
     # Step 3: The Aggressive Synthesis (Level 3)
-    print("\n3. Transpiling at Level 3 (Aggressive Synthesis)...")
+    print("\n3. Transpiling at optimization level 3...")
     qc_level_3, depth_3, ops_3 = transpile_for_hardware(
         raw_qc, 
         coupling_map=heavy_hex_map_5, 
@@ -434,26 +434,25 @@ def run_scenario_c(n_qubits=5, k=2):
     print(f"   -> Depth reduced by {depth_reduction:.2f}% (from {depth_0} down to {depth_3})")
     print(f"   -> CNOTs reduced by {cx_reduction:.2f}% (from {cx_0} down to {cx_3})")
     
-    blowup_factor = depth_3 / ideal_depth
-    print(f"\nThe Hard Mathematical Wall:")
-    print(f"   -> Despite max optimization, physical depth is STILL {blowup_factor:.2f}x greater than ideal logical depth.")
+    depth_multiplier = depth_3 / ideal_depth
+    print(f"\nInterpretation:")
+    print(f"   -> Even after aggressive optimization, physical depth remains {depth_multiplier:.2f}x the ideal logical depth.")
     
 
 def run_scenario_d(max_qubits=8):
     """
-    Scenario D: The Dimensional Breaking Point (The Extreme Scaling Test)
-    
-    Demonstrates the exponential blowup of algorithm scaling (k*) and 
-    hardware scaling (mcx decomposition) as n increases, proving monolithic 
-    Grover's impossibility on NISQ.
+    Scenario D: Dimensional Scaling Analysis
+
+    Studies how the optimal Grover iteration count and routed circuit depth
+    scale with the search-register size.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO D: THE DIMENSIONAL BREAKING POINT")
+    print("SCENARIO D: DIMENSIONAL SCALING ANALYSIS")
     print("=" * 70)
     
     basis_gates = ['cx', 'id', 'rz', 'sx', 'x']
     print(f"Basis Gates: {basis_gates}")
-    print("Hardware Topology: Linear (Worst-case routing)")
+    print("Hardware Topology: Linear (worst-case routing proxy)")
     
     print(f"\n{'n':<4} | {'N (2^n)':<8} | {'k*':<4} | {'Logical Depth':<14} | {'Physical Depth':<15} | {'CX Count'}")
     print("-" * 75)
@@ -487,7 +486,7 @@ def run_scenario_d(max_qubits=8):
         
         marker = ""
         if t_depth > coherence_limit and not breached:
-            marker = "  <-- NISQ Coherence Limit Breached!"
+            marker = "  <-- Estimated coherence threshold exceeded"
             breached = True
             
         print(f"{n:<4} | {2**n:<8} | {k_star:<4} | {logical_depth:<14} | {t_depth:<15} | {cx_count}{marker}")
@@ -495,18 +494,18 @@ def run_scenario_d(max_qubits=8):
     print("\n" + "-" * 70)
     print("SCALING CONCLUSION")
     print("-" * 70)
-    print("-> Physical depth scales severely as n increases due to MCX unrolling + SWAP routing.")
-    print("-> Validates the necessity of Distributed Amplitude Amplification (DQAA) to partition the search space.")
+    print("-> Physical depth increases rapidly with n due to MCX decomposition and SWAP routing.")
+    print("-> This trend motivates partitioned or distributed amplitude-amplification strategies.")
 
 def run_scenario_e(n_qubits=4, max_k=10):
     """
-    Scenario E: The "Flattened Over-Rotation" (Noise Injection)
-    
-    Proof that near-term physical noise destroys the fragile geometric 
-    rotation of standard Grover amplification before it can reach P=1.0.
+    Scenario E: Noise-Induced Performance Degradation
+
+    Examines the degradation of Grover amplification under a simple
+    depolarizing noise model after routing and gate decomposition.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO E: THE FLATTENED SOUFFLÉ (NOISE INJECTION)")
+    print("SCENARIO E: NOISE-INDUCED PERFORMANCE DEGRADATION")
     print("=" * 70)
     
     try:
@@ -534,7 +533,7 @@ def run_scenario_e(n_qubits=4, max_k=10):
     good_indices = [0] # Target |0000>
     compiler = GroverCompiler(n_qubits=n_qubits, good_indices=good_indices)
     
-    print(f"Target Qubits: {n_qubits}, Base Success Prob p: {compiler.p:.4f}")
+    print(f"Target Qubits: {n_qubits}, Initial Success Probability p: {compiler.p:.4f}")
     print(f"Noise Profile: {error_rate*100}% depolarizing error on CX gates")
     print(f"Architecture: Heavy-Hex (4 qubits)")
     print(f"\n{'k':<3} | {'Logical Depth':<14} | {'Physical Depth':<15} | {'CX Count':<10} | {'Noisy Success Prob'}")
@@ -580,20 +579,19 @@ def run_scenario_e(n_qubits=4, max_k=10):
     print("\n" + "-" * 70)
     print("NOISE DEGRADATION CONCLUSION")
     print("-" * 70)
-    print("-> The deep physical circuits accumulate massive SWAP/unrolling errors.")
-    print("-> The theoretical P=1.0 peak is crushed by the high CX count.")
-    print("-> Validation for Fixed-Point Amplitude Amplification (FPAA) robust passbands!")
+    print("-> The routed physical circuits accumulate substantial decomposition and routing overhead.")
+    print("-> Under the selected noise model, the ideal peak success probability is significantly reduced.")
+    print("-> This behavior motivates fixed-point amplitude amplification with bounded passband behavior.")
 
 def run_scenario_f(qubit_sizes=[3, 5, 7]):
     """
-    Scenario F: Fault-Tolerant Compilation (T-Gate Explosion)
-    
-    Proof that compiling standard multi-controlled continuous reflections into 
-    a discrete, fault-tolerant universal basis (Clifford+T) results in an 
-    exponential explosion of costly T-gates.
+    Scenario F: Fault-Tolerant Compilation Overhead
+
+    Estimates the resource overhead associated with compiling Grover iterates
+    into a Clifford+T gate set.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO F: FAULT-TOLERANT COMPILATION (T-GATE EXPLOSION)")
+    print("SCENARIO F: FAULT-TOLERANT COMPILATION OVERHEAD")
     print("=" * 70)
     
     # Step 1 & 2: The Fault-Tolerant Setup & Constraints
@@ -644,17 +642,16 @@ def run_scenario_f(qubit_sizes=[3, 5, 7]):
     print("\n" + "-" * 70)
     print("FAULT-TOLERANT CONCLUSION")
     print("-" * 70)
-    print("-> The T-gate factory cost for decomposing monolithic multi-controlled rotations is astronomical.")
-    print("-> Explains the transition toward QSVT block-encodings, which parameterize algorithmic primitives")
-    print("   to utilize more favorable single-qubit phase rotation synthesis.")
+    print("-> The T-count required to decompose monolithic multi-controlled reflections is substantial.")
+    print("-> This motivates block-encoding and QSVT-style constructions that rely more heavily")
+    print("   on structured single-qubit phase synthesis.")
 
 def run_scenario_g(n_qubits=STANDARD_QUBITS):
     """
-    Scenario G: The Ancilla-Space Trade-off (The Compiler Hack)
-    
-    Proof that compiling massive multi-controlled unitaries forces a 
-    severe spacetime tradeoff. Providing clean ancilla qubits allows 
-    the compiler to shortcut quadratic depth scaling using v-chains.
+    Scenario G: Ancilla-Space Trade-off
+
+    Compares constrained and ancilla-assisted decompositions of large
+    multi-controlled operations to quantify the space-time trade-off.
     """
     print("\n" + "=" * 70)
     print("SCENARIO G: THE ANCILLA-SPACE TRADE-OFF")
@@ -744,24 +741,22 @@ def run_scenario_g(n_qubits=STANDARD_QUBITS):
     depth_saved = t_depth_constrained - t_depth_expanded
     cx_saved = cx_constrained - cx_expanded
     
-    print(f"By burning {num_ancilla} clean ancilla qubits, we saved:")
-    print(f"   -> {depth_saved} physical gate depth!")
-    print(f"   -> {cx_saved} CNOT operations!")
-    print("\n-> This quantifies the exact physical real estate cost required to construct")
-    print("   efficient block-encodings and oblivious purification primitives natively.")
+    print(f"Using {num_ancilla} clean ancilla qubits reduces:")
+    print(f"   -> physical depth by {depth_saved}")
+    print(f"   -> CNOT count by {cx_saved}")
+    print("\n-> These data quantify the ancillary-qubit cost associated with reducing")
+    print("   the depth of large multi-controlled constructions.")
 
 
 def run_scenario_h(n_qubits=6, M=48):
     """
-    Scenario H: The High-Density Noise Limitation
-    
-    Demonstrates the paradox of too much success (M > N/2). 
-    A single Grover iteration forcibly overshoots the target theoretically, 
-    and the required deep physical circuit adds massive thermal routing noise, 
-    making it worse than simply random classical guessing.
+    Scenario H: High-Density Regime Analysis
+
+    Examines the M > N/2 regime, where a single Grover iterate overshoots the
+    optimal success region and hardware noise further reduces performance.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO H: THE HIGH-DENSITY NOISE LIMITATION")
+    print("SCENARIO H: HIGH-DENSITY REGIME ANALYSIS")
     print("=" * 70)
     
     try:
@@ -793,7 +788,7 @@ def run_scenario_h(n_qubits=6, M=48):
     print(f"Target Qubits: {n_qubits} (N={N})")
     print(f"Target Solutions (M): {M}  (High-Density Regime)")
     print(f"-> 1. Classical Random Guess Probability: {classical_prob:.4f}")
-    print(f"-> 2. Theoretical Quantum Probability (k=1): {theoretical_prob:.4f}  <-- The Overshoot!")
+    print(f"-> 2. Theoretical quantum success probability at k=1: {theoretical_prob:.4f}")
     
     # 3. The Noisy Execution
     raw_qc = compiler.generate_ideal_circuit()
@@ -831,17 +826,16 @@ def run_scenario_h(n_qubits=6, M=48):
     noisy_prob = success_count / shots
     cx_count = t_ops.get('cx', 0)
     
-    print(f"-> 3. Physical Noisy Hardware Probability (k=1): {noisy_prob:.4f}  <-- The Noise Trap")
+    print(f"-> 3. Physical noisy hardware success probability at k=1: {noisy_prob:.4f}")
     
     print("\n" + "-" * 70)
     print("NOISE LIMITATION CONCLUSION")
     print("-" * 70)
     print(f"Physical execution cost {t_depth} levels of depth and {cx_count} CNOT gates.")
-    print("Because Grover's iterate is strictly unitary, it forcibly rotates the state")
-    print("AWAY from the target. The massive hardware noise then flattens whatever")
-    print("remains. This empirically frames the necessity of Fixed-Point Amplitude")
-    print("Amplification (FPAA), which utilizes Chebyshev polynomials to create")
-    print("bound passbands that do not suffer from oscillatory over-rotation.")
+    print("In this regime, a single Grover iterate rotates the state beyond the optimal")
+    print("success region, and hardware noise further suppresses the remaining signal.")
+    print("These results motivate fixed-point amplitude amplification, which replaces")
+    print("oscillatory over-rotation with bounded passband behavior.")
 
 def run_profiling_benchmark(n_qubits=STANDARD_QUBITS):
     """
@@ -856,7 +850,7 @@ def run_profiling_benchmark(n_qubits=STANDARD_QUBITS):
         profiler_mod = _import_local_module("grover_quantum_profiler_module", "quantum_profiler.py")
         HardwareProfiler = profiler_mod.HardwareProfiler
     except Exception:
-        print("Could not import HardwareProfiler. Make sure quantum_profiler.py exists.")
+        print("Could not import HardwareProfiler. Ensure quantum_profiler.py is available.")
         return
         
     good_indices = [0]
@@ -900,10 +894,10 @@ def run_profiling_benchmark(n_qubits=STANDARD_QUBITS):
     print(f"Total Physical Execution Time (ns): {metrics['total_time_ns']} ns")
     
     print(f"\n======================================================================")
-    print(f"-> UNIFIED HARDWARE PENALTY SCORE: {metrics['hardware_penalty_score']}")
+    print(f"Composite hardware penalty score: {metrics['hardware_penalty_score']}")
     print(f"======================================================================")
-    print("This unified cost function serves as the definitive comparative baseline")
-    print("to judge Fixed-Point Amplitude Amplification (FPAA) and QSVT against.")
+    print("This composite metric provides a comparative baseline for assessing")
+    print("fixed-point amplitude amplification and QSVT-style alternatives.")
 
 
 def _save_grover_algorithm_figure(
@@ -919,7 +913,7 @@ def _save_grover_algorithm_figure(
     ideal_depths = []
     physical_depths = []
     cx_counts = []
-    blowups = []
+    depth_multipliers = []
 
     for n_qubits in qubit_sweep:
         compiler = GroverCompiler(n_qubits=n_qubits, good_indices=[0])
@@ -941,7 +935,7 @@ def _save_grover_algorithm_figure(
         ideal_depths.append(ideal_depth)
         physical_depths.append(physical_depth)
         cx_counts.append(cx_count)
-        blowups.append(physical_depth / max(1.0, ideal_depth))
+        depth_multipliers.append(physical_depth / max(1.0, ideal_depth))
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 10), constrained_layout=True)
     fig.suptitle("Grover Transpile Resource Profile", fontsize=14, fontweight="bold")
@@ -961,8 +955,8 @@ def _save_grover_algorithm_figure(
     ax3.set_title("Entangling Cost on Linear Topology")
     ax3.set_ylabel("CX count")
 
-    ax4.plot(n_vals, blowups, marker="D", linewidth=2.2, color="#ff7f0e")
-    ax4.set_title("Routing Blowup Factor")
+    ax4.plot(n_vals, depth_multipliers, marker="D", linewidth=2.2, color="#ff7f0e")
+    ax4.set_title("Routing Depth Multiplier")
     ax4.set_ylabel("Physical depth / logical depth")
 
     for axis in axes.flat:
@@ -1010,7 +1004,7 @@ def _save_grover_topology_figure(
     depths = []
     cx_counts = []
     swap_estimates = []
-    blowups = []
+    depth_multipliers = []
     base_depth = None
     base_cx = None
     for label, cmap in architectures.items():
@@ -1029,7 +1023,7 @@ def _save_grover_topology_figure(
             base_cx = cx
         extra_cx = max(0.0, cx - float(base_cx or 0.0))
         swap_estimates.append(extra_cx / 3.0)
-        blowups.append(float(depth) / max(1.0, float(base_depth or 1.0)))
+        depth_multipliers.append(float(depth) / max(1.0, float(base_depth or 1.0)))
 
     x = np.arange(len(labels), dtype=float)
     fig, axes = plt.subplots(2, 2, figsize=(13.5, 9.5), constrained_layout=True)
@@ -1048,7 +1042,7 @@ def _save_grover_topology_figure(
     ax3.set_title("Approximate SWAP Burden")
     ax3.set_ylabel("Estimated SWAP count")
 
-    ax4.plot(x, blowups, marker="o", linewidth=2.2, color="#ff7f0e")
+    ax4.plot(x, depth_multipliers, marker="o", linewidth=2.2, color="#ff7f0e")
     ax4.set_title("Depth Multiplier vs All-to-All")
     ax4.set_ylabel("Multiplier")
 
@@ -1105,7 +1099,7 @@ if __name__ == "__main__":
     )
     prepare_backend_validation_artifacts(publishability)
     
-    print("Starting Transpilation Benchmark Suite...")
+    print("Starting Grover transpilation benchmark suite...")
     print(f"Saving all results to: {output_filepath}\n")
     print(publishability.summary())
     default_scenarios = [
@@ -1141,7 +1135,7 @@ if __name__ == "__main__":
                     fn()
                 except Exception:
                     import traceback
-                    print(f"\n*** SCENARIO {label} FAILED ***")
+                    print(f"\nSCENARIO {label} EXECUTION FAILED")
                     traceback.print_exc()
             run_interactive_scenario_repl(
                 interactive_wrapped,
@@ -1154,4 +1148,5 @@ if __name__ == "__main__":
         # Restore standard output and close the log file
         logger.log.close()
         sys.stdout = logger.terminal
-        print("\nBenchmark Suite finished. Results saved.")
+        print("\nBenchmark suite complete. Results saved.")
+
