@@ -467,8 +467,8 @@ def run_scenario_e(global_n: int = GLOBAL_N, j: int = J, good_global: str = "110
     If the state prep circuit creates cross-register entanglement, the local
     diffusion operator S_s(alpha) completely breaks down.
 
-    This is the negative proof — we show the probability collapse when the
-    separability assumption is violated.
+    This provides the counterexample: we quantify the success-probability
+    reduction when the separability assumption is violated.
     """
     print(f"\n{SEP}")
     print("SCENARIO E: THE ENTANGLEMENT OBSTRUCTION (State-Prep Limitation)")
@@ -500,7 +500,7 @@ def run_scenario_e(global_n: int = GLOBAL_N, j: int = J, good_global: str = "110
 
         print(f"\n-> Separable prep: purity=1.0 (pure suffix state), peak success={peak_sep:.4f}")
         print(f"   Entangled prep:  purity={res.entangled_suffix_purity:.4f} (mixed), peak success={peak_ent:.6f}")
-        print(f"-> Obstruction ratio: {ratio:.1f}x — entanglement collapses success by {ratio:.1f}x")
+        print(f"-> Obstruction ratio: {ratio:.1f}x — entanglement reduces peak success by a factor of {ratio:.1f}.")
         print("-> CONCLUSION: Cross-register entanglement traces out the prefix, creating a")
         print("   mixed suffix state. The local diffusion cannot amplify a mixed-state target.")
         print("   This is the formal physical proof of the DQAA separability pre-condition.")
@@ -545,13 +545,13 @@ def run_scenario_f(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str
         peak_dist_noisy = float(np.max(res.distributed_noisy_success))
 
         # Find the advantaged node with highest noisy success
-        lucky_prefix = None
-        lucky_peak = 0.0
+        best_prefix = None
+        best_peak = 0.0
         for prefix, arr in res.distributed_node_noisy_success.items():
             pk = float(np.max(arr))
-            if pk > lucky_peak:
-                lucky_peak = pk
-                lucky_prefix = prefix
+            if pk > best_peak:
+                best_peak = pk
+                best_prefix = prefix
 
         l_steps = (int(res.L) - 1) // 2
         print(f"Backend: {res.backend_name} ({res.backend_source})")
@@ -566,15 +566,15 @@ def run_scenario_f(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str
         noise_penalty_dist = peak_dist_ideal - peak_dist_noisy
         print(f"{'Noise penalty (ideal - noisy)':<40} | {noise_penalty_mono:<15.4f} | {noise_penalty_dist:.4f}")
 
-        if lucky_prefix:
-            print(f"\nLucky node '{lucky_prefix}' peak noisy success: {lucky_peak:.4f}")
-            mono_vs_lucky = peak_mono_noisy / max(1e-6, lucky_peak)
-            print(f"Monolithic noisy / Lucky-node noisy ratio: {mono_vs_lucky:.3f}")
+        if best_prefix:
+            print(f"\nMost favorable node '{best_prefix}' peak noisy success: {best_peak:.4f}")
+            mono_vs_best = peak_mono_noisy / max(1e-6, best_peak)
+            print(f"Monolithic noisy / distributed-node ratio: {mono_vs_best:.3f}")
 
-        print(f"\n-> Monolithic noise penalty: {noise_penalty_mono:.4f} (deep circuit burns coherence)")
-        print(f"   Distributed noise penalty: {noise_penalty_dist:.4f} (shallow node survives)")
+        print(f"\n-> Monolithic noise penalty: {noise_penalty_mono:.4f} (deeper circuit incurs greater coherence loss)")
+        print(f"   Distributed noise penalty: {noise_penalty_dist:.4f} (shallower node retains higher coherence)")
         print("-> CONCLUSION: The monolithic circuit's SWAP-inflated depth destroys coherence under")
-        print("   realistic noise. The distributed node's shallower circuit survives above the floor.")
+        print("   realistic noise. The distributed node's shallower circuit remains above the baseline.")
     except Exception as exc:
         print(f"[Scenario F requires qiskit-aer + fake backend. Skipped: {exc}]")
 
@@ -642,12 +642,12 @@ def run_scenario_g(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str
 
 
 # =============================================================================
-# Scenario H: Grand Unified Profiler Comparative Evaluation (Monolithic vs DQAA)
+# Scenario H: Hardware Profiler Comparative Evaluation (Monolithic vs DQAA)
 # =============================================================================
 
 def run_scenario_h(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str, ...] = GLOBAL_GOODS) -> None:
     """
-    H. GRAND UNIFIED PROFILER COMPARATIVE EVALUATION (Monolithic vs DQAA)
+    H. HARDWARE PROFILER COMPARATIVE EVALUATION (Monolithic vs DQAA)
 
     Feeds the monolithic Grover-step circuit and the worst-case distributed
     node circuit through the quantum_profiler.HardwareProfiler to get a
@@ -659,7 +659,7 @@ def run_scenario_h(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str
     sees the native gate set, then the profiler adds routing SWAPs.
     """
     print(f"\n{SEP}")
-    print("SCENARIO H: GRAND UNIFIED PROFILER COMPARATIVE EVALUATION (Monolithic vs DQAA)")
+    print("SCENARIO H: HARDWARE PROFILER COMPARATIVE EVALUATION (Monolithic vs DQAA)")
     print(SEP)
 
     try:
@@ -712,95 +712,95 @@ def run_scenario_h(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str
     speedup = m_mono['total_time_ns'] / max(1, m_local['total_time_ns'])
     print(f"\n-> Hardware time speedup: {speedup:.2f}x (monolithic / distributed node)")
     print("-> CONCLUSION: DQAA's local node executes in a fraction of the monolithic time.")
-    print("   This is the definitive physical limit-clock proof of the distributed paradigm.")
+    print("   This provides direct hardware-time evidence for the distributed architecture.")
 
 
 # =============================================================================
-# Scenario I: The "Disadvantaged Node" Coherence Overhead (QPU Waste)
+# Scenario I: Low-Utility Node Coherence Overhead (QPU Resource Expenditure)
 # =============================================================================
 
 def run_scenario_i(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str, ...] = GLOBAL_GOODS, epsilon: float = EPSILON) -> None:
     """
-    I. THE "UNLUCKY NODE" COHERENCE OVERHEAD (QPU Waste)
+    I. LOW-UTILITY NODE COHERENCE OVERHEAD (QPU Resource Expenditure)
 
     In a 2^j distributed network with only a few marked items, most nodes are
-    "disadvantaged" (zero local targets). Yet every disadvantaged node must execute the
-    same l-step FPAA circuit as the advantaged node — incurring quantum coherence for
-    absolutely nothing.
+    disadvantaged (zero local targets). Yet every disadvantaged node must execute the
+    same l-step FPAA circuit as the advantaged node, expending quantum coherence without
+    contributing useful output.
 
     We quantify the total wasted quantum volume across the network.
     """
     print(f"\n{SEP}")
-    print("SCENARIO I: THE 'UNLUCKY NODE' COHERENCE OVERHEAD (QPU Waste)")
+    print("SCENARIO I: LOW-UTILITY NODE COHERENCE OVERHEAD (QPU Resource Expenditure)")
     print(SEP)
 
     global_n, j, global_goods, epsilon, local_n, global_a = _problem_params(global_n, j, global_goods, epsilon)
     res_fpaa = dist_fpaa(global_n=global_n, j=j, global_goods=global_goods, epsilon=epsilon)
 
-    n_total  = 2 ** j
-    n_lucky  = len(res_fpaa.lucky_nodes)
-    n_unlucky = len(res_fpaa.unlucky_nodes)
+    n_total = 2 ** j
+    n_advantaged = len(res_fpaa.lucky_nodes)
+    n_disadvantaged = len(res_fpaa.unlucky_nodes)
     L = res_fpaa.L
     l_steps = res_fpaa.l_opt
 
     # Estimate gates per full FPAA circuit (l generalized iterates).
     # Use hw_tradeoff to get worst-case node metrics
     hw = hw_tradeoff(global_n=global_n, j=j, global_goods=global_goods, basis_gates=tuple(BASIS_NISQ))
-    lucky_cx   = max(
+    advantaged_cx = max(
         hw.distributed_node_metrics[p]["routed_cx"]
         for p in res_fpaa.lucky_nodes if p in hw.distributed_node_metrics
     ) if res_fpaa.lucky_nodes else 0
-    unlucky_cx = min(
+    disadvantaged_cx = min(
         hw.distributed_node_metrics[p]["routed_cx"]
         for p in res_fpaa.unlucky_nodes if p in hw.distributed_node_metrics
     ) if res_fpaa.unlucky_nodes else 0
 
-    total_network_cx   = sum(hw.distributed_node_metrics[p]["routed_cx"] for p in hw.distributed_node_metrics) * l_steps
-    lucky_total_cx     = lucky_cx * l_steps
-    wasted_cx          = total_network_cx - lucky_total_cx
-    waste_ratio        = wasted_cx / max(1, total_network_cx)
+    total_network_cx = sum(hw.distributed_node_metrics[p]["routed_cx"] for p in hw.distributed_node_metrics) * l_steps
+    advantaged_total_cx = advantaged_cx * l_steps
+    wasted_cx = total_network_cx - advantaged_total_cx
+    waste_ratio = wasted_cx / max(1, total_network_cx)
 
     print(f"{'Metric':<45} | {'Value'}")
     print("-" * 65)
     print(f"{'Total nodes (2^j)':<45} | {n_total}")
-    print(f"{'Advantaged nodes (have target suffixes)':<45} | {n_lucky}  ({res_fpaa.lucky_nodes})")
-    print(f"{'Disadvantaged nodes (empty oracle)':<45} | {n_unlucky}  ({res_fpaa.unlucky_nodes})")
+    print(f"{'Advantaged nodes (have target suffixes)':<45} | {n_advantaged}  ({res_fpaa.lucky_nodes})")
+    print(f"{'Disadvantaged nodes (empty oracle)':<45} | {n_disadvantaged}  ({res_fpaa.unlucky_nodes})")
     print(f"{'FPAA odd length L':<45} | {L}")
     print(f"{'FPAA generalized iterates l':<45} | {l_steps}")
-    print(f"{'CX gates per advantaged node (1 local FPAA iterate)':<45} | {int(lucky_cx)}")
-    print(f"{'CX gates per disadvantaged node (empty-oracle iterate)':<45} | {int(unlucky_cx)}")
+    print(f"{'CX gates per advantaged node (1 local FPAA iterate)':<45} | {int(advantaged_cx)}")
+    print(f"{'CX gates per disadvantaged node (empty-oracle iterate)':<45} | {int(disadvantaged_cx)}")
     print(f"{'Total network CX gates (l iterates, all nodes)':<45} | {int(total_network_cx)}")
-    print(f"{'CX gates on advantaged path only':<45} | {int(lucky_total_cx)}")
+    print(f"{'CX gates on advantaged path only':<45} | {int(advantaged_total_cx)}")
     print(f"{'Wasted CX network-wide':<45} | {int(wasted_cx)}")
     print(f"{'Quantum Waste Ratio (wasted/total)':<45} | {waste_ratio:.1%}")
 
     print(f"\n-> {waste_ratio:.0%} of all CX gates executed network-wide produce no useful output.")
-    print(f"   {n_unlucky} out of {n_total} QPUs burn coherence on an empty oracle for l={l_steps} generalized iterates (L={L}).")
+    print(f"   {n_disadvantaged} out of {n_total} QPUs expend coherence on an empty oracle for l={l_steps} generalized iterates (L={L}).")
     print("-> CONCLUSION: DQAA's distributed efficiency gain is offset by the QPU waste ratio.")
     print("   As j grows, disadvantaged nodes dominate: with 1 marked item in 2^n states,")
     print("   the disadvantaged fraction → (2^j - 1)/2^j → 1.0 as j increases.")
 
 
 # =============================================================================
-# Scenario J: Heterogeneous Network Noise (The "Bad QPU" Limitation)
+# Scenario J: Heterogeneous Network Noise (Degraded-QPU Limitation)
 # =============================================================================
 
 def run_scenario_j(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str, ...] = GLOBAL_GOODS, epsilon: float = EPSILON, pristine_depol: float = 0.01, degraded_depol: float = 0.05, shots: int = 2048) -> None:
     """
-    J. HETEROGENEOUS NETWORK NOISE (The "Bad QPU" Limitation)
+    J. HETEROGENEOUS NETWORK NOISE (Degraded-QPU Limitation)
 
     In a real quantum cluster, QPUs have different noise levels. If the advantaged
     node happens to be assigned to a degraded QPU (5% depolarizing vs 1%),
-    the FPAA amplification collapses and the classical master node never finds
-    the signal.
+    the FPAA amplification is materially reduced and the classical master node may fail
+    to identify the signal.
 
     We simulate this by building two AerSimulator instances with different
     noise levels and testing both on the advantaged node's circuit.
     """
     print(f"\n{SEP}")
-    print("SCENARIO J: HETEROGENEOUS NETWORK NOISE (The 'Bad QPU' Limitation)")
+    print("SCENARIO J: HETEROGENEOUS NETWORK NOISE (Degraded-QPU Limitation)")
     print(SEP)
-    print(f"Scenario: lucky node gets either a pristine (1%) or degraded (5%) QPU.")
+    print("Scenario: the advantaged node is assigned either a pristine (1%) or degraded (5%) QPU.")
     global_n, j, global_goods, epsilon, local_n, global_a = _problem_params(global_n, j, global_goods, epsilon)
     print(f"Problem: n={global_n}, j={j}, {len(global_goods)} targets, l-step FPAA with odd length L=2l+1.\n")
 
@@ -811,9 +811,9 @@ def run_scenario_j(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str
 
         # Identify the advantaged node (one with most targets)
         node_targets = dqaa._partition_targets_by_prefix(list(global_goods), j=j)
-        lucky_prefix = max(node_targets.keys(), key=lambda p: len(node_targets[p]))
-        local_targets = node_targets[lucky_prefix]
-        print(f"Lucky node prefix: '{lucky_prefix}', targets: {local_targets}\n")
+        selected_prefix = max(node_targets.keys(), key=lambda p: len(node_targets[p]))
+        local_targets = node_targets[selected_prefix]
+        print(f"Advantaged node prefix: '{selected_prefix}', targets: {local_targets}\n")
 
         # Build FPAA schedule
         l_opt = int(math.ceil((0.5 * math.log(2.0 / epsilon)) / math.sqrt(global_a)))
@@ -847,10 +847,10 @@ def run_scenario_j(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str
 
         prist_snr = results["Pristine (1% depol)"][3]
         degr_snr  = results["Degraded (5% depol)"][3]
-        print(f"\n-> SNR collapse: {prist_snr:.2f}x → {degr_snr:.2f}x ({(1-degr_snr/max(1e-6,prist_snr))*100:.0f}% SNR loss)")
+        print(f"\n-> SNR reduction: {prist_snr:.2f}x → {degr_snr:.2f}x ({(1-degr_snr/max(1e-6,prist_snr))*100:.0f}% SNR loss)")
         print("   The classical master node requires SNR > 1.0 to distinguish signal above noise floor.")
         if degr_snr < 1.0:
-            print("-> DEGRADED QPU IS BELOW NOISE FLOOR: master node cannot find the marked item!")
+            print("-> The degraded QPU falls below the effective noise floor: the master node cannot reliably identify the marked item.")
         print("-> CONCLUSION: DQAA is as strong as its weakest QPU. If the advantaged node is on a")
         print("   degraded chip, the distributed speedup is entirely erased by thermal noise.")
     except ImportError as exc:
@@ -858,27 +858,27 @@ def run_scenario_j(global_n: int = GLOBAL_N, j: int = J, global_goods: tuple[str
 
 
 # =============================================================================
-# Scenario K: The Extreme Partitioning Limit (Classical Avalanche)
+# Scenario K: The Partitioning Tradeoff (Classical Coordination Growth)
 # =============================================================================
 
 def run_scenario_k(global_n: int = GLOBAL_N, global_goods: tuple[str, ...] = GLOBAL_GOODS, j_min: int = 1, j_max: int | None = None) -> None:
     """
-    K. THE EXTREME PARTITIONING LIMIT (Classical Avalanche)
+    K. THE PARTITIONING TRADEOFF (Classical Coordination Growth)
 
     Sweeps j from 1 to n-2, proving DQAA is a U-shaped optimization problem:
-    - As j increases: quantum circuit depth SHRINKS (good for NISQ)
-    - As j increases: classical nodes = 2^j EXPLODE (bad for network)
-    - As j increases: classical verification queries EXPLODE
+    - As j increases: quantum circuit depth decreases
+    - As j increases: classical nodes = 2^j increases rapidly
+    - As j increases: classical verification queries increase accordingly
 
-    The optimal j is where quantum benefit > classical avalanche cost.
+    The optimal j is where quantum benefit outweighs classical coordination cost.
     """
     print(f"\n{SEP}")
-    print("SCENARIO K: THE EXTREME PARTITIONING LIMIT (Classical Avalanche)")
+    print("SCENARIO K: PARTITIONING TRADEOFF (Classical Coordination Growth)")
     print(SEP)
     if j_max is None:
         j_max = global_n - 2
     print(f"Sweeping j from {j_min} to {j_max} for n={global_n}, {len(global_goods)} marked items.")
-    print(f"Tracking: local circuit depth (↓ good), 2^j nodes (↑ bad), verification queries (↑ bad)\n")
+    print("Tracking: local circuit depth, 2^j node count, and verification-query growth.\n")
 
     print(f"{'j':<5} | {'2^j nodes':<12} | {'Local n (bits)':<16} | {'Max Routed Depth':<18} | {'Max CX':<10} | {'Est. Verify Queries'}")
     print("-" * 85)
@@ -907,9 +907,9 @@ def run_scenario_k(global_n: int = GLOBAL_N, global_goods: tuple[str, ...] = GLO
 
         print(f"{j_val:<5} | {n_nodes:<12} | {local_n_val:<16} | {max_depth:<18} | {max_cx:<10} | {est_queries}")
 
-    print(f"\n-> Quantum depth DECREASES with j (smaller register = shallower circuit).")
-    print(f"   Classical overhead (nodes, queries) INCREASES as 2^j.")
-    print(f"   The optimal j balances quantum depth savings against classical avalanche.")
+    print(f"\n-> Quantum depth decreases with j because the local register becomes shallower.")
+    print(f"   Classical overhead (nodes and queries) increases as 2^j.")
+    print(f"   The optimal j balances quantum depth savings against classical coordination cost.")
     print(f"-> CONCLUSION: DQAA is a U-shaped optimization. Choosing j too large makes the")
     print(f"   classical coordinator the bottleneck, not the quantum hardware.")
     print(f"   For n={global_n} with {len(global_goods)} items, optimal j ≈ floor(n/2) = {global_n//2}.")
@@ -1402,3 +1402,4 @@ if __name__ == "__main__":
     logger.close()
     sys.stdout = logger.terminal
     print(f"\nBenchmark suite complete. Results saved to {output_filepath}")
+
