@@ -18,13 +18,20 @@ Standing notation aligned with final.tex:
 
 from __future__ import annotations
 
+import ast
 import argparse
 import csv
 import math
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_RESULT_DIR = os.path.join(_HERE, f"[RESULT]{os.path.splitext(os.path.basename(__file__))[0]}")
+os.makedirs(_RESULT_DIR, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(_RESULT_DIR, ".mplconfig"))
 
 import numpy as np
 try:
@@ -163,6 +170,123 @@ def _good_state_to_indices(num_qubits: int, good_state: Optional[str]) -> List[i
     if len(good_state) != num_qubits or any(ch not in "01" for ch in good_state):
         raise ValueError("H_Good state must be a binary bitstring of length num_qubits.")
     return [int(good_state, 2)]
+
+
+def _parse_cli_value(raw: str):
+    try:
+        return ast.literal_eval(raw)
+    except Exception:
+        lowered = raw.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered == "none":
+            return None
+        return raw
+
+
+def _split_top_level_commas(text: str) -> List[str]:
+    parts: List[str] = []
+    current: List[str] = []
+    depth = 0
+    quote_char = ""
+    escaped = False
+
+    for ch in text:
+        if escaped:
+            current.append(ch)
+            escaped = False
+            continue
+        if quote_char:
+            current.append(ch)
+            if ch == "\\":
+                escaped = True
+            elif ch == quote_char:
+                quote_char = ""
+            continue
+        if ch in ("'", '"'):
+            quote_char = ch
+            current.append(ch)
+            continue
+        if ch in "([{":
+            depth += 1
+            current.append(ch)
+            continue
+        if ch in ")]}":
+            depth = max(0, depth - 1)
+            current.append(ch)
+            continue
+        if ch == "," and depth == 0:
+            piece = "".join(current).strip()
+            if piece:
+                parts.append(piece)
+            current = []
+            continue
+        current.append(ch)
+
+    piece = "".join(current).strip()
+    if piece:
+        parts.append(piece)
+    return parts
+
+
+def _parse_kwargs_text(raw: str) -> Dict[str, object]:
+    kwargs: Dict[str, object] = {}
+    for chunk in _split_top_level_commas(raw.strip()):
+        if "=" not in chunk:
+            raise ValueError(f"Expected key=value pair, got '{chunk}'")
+        key, value = chunk.split("=", 1)
+        kwargs[key.strip()] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_kwargs_tokens(tokens: Sequence[str]) -> Dict[str, object]:
+    kwargs: Dict[str, object] = {}
+    for token in tokens:
+        piece = token.strip()
+        if not piece:
+            continue
+        if "=" not in piece:
+            raise ValueError(f"Expected key=value pair, got '{piece}'")
+        key, value = piece.split("=", 1)
+        kwargs[key.strip()] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_command_line(argv: Sequence[str]) -> Optional[Dict[str, object]]:
+    if not argv:
+        return {}
+    if any(token.startswith("-") for token in argv):
+        return None
+    if len(argv) == 1:
+        return _parse_kwargs_text(argv[0])
+    return _parse_kwargs_tokens(argv)
+
+
+def _normalize_good_indices(value: Optional[object]) -> Optional[List[int]]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if text.startswith("[") or text.startswith("("):
+            parsed = ast.literal_eval(text)
+            return [int(item) for item in parsed]
+        return [int(chunk.strip(), 0) for chunk in text.split(",") if chunk.strip()]
+    return [int(item) for item in value]
+
+
+def _normalize_good_state(value: Optional[object], num_qubits: int) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if isinstance(value, int):
+        return format(value, f"0{num_qubits}b")
+    return str(value)
 
 
 # -----------------------------------------------------------------------------
@@ -867,12 +991,18 @@ def _save_resource_table(rows: List[CompilationResult], output_csv: str) -> None
 # CLI orchestration
 # -----------------------------------------------------------------------------
 
-def main(argv: Optional[Sequence[str]] = None) -> None:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="FPAA Section III architectural trade-off study")
     parser.add_argument("--L", type=int, default=3, help="FPAA sequence length")
     parser.add_argument("--delta", type=float, default=0.1, help="Failure bound parameter")
     parser.add_argument("--qubits", type=int, default=4, help="Qubit count for circuit benchmarks")
     parser.add_argument("--good", type=str, default=None, help="H_Good basis-state bitstring, e.g. 1111")
+    parser.add_argument(
+        "--good-indices",
+        type=str,
+        default=None,
+        help="Optional comma-separated H_Good basis indices, e.g. 3,7",
+    )
     parser.add_argument("--out-prefix", type=str, default="fpaa", help="Output artifact prefix")
     parser.add_argument(
         "--synthesis-eps",
@@ -880,13 +1010,33 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         default=1e-3,
         help="Per-rotation synthesis precision for FTQC T-count estimation fallback",
     )
+    parser.add_argument("--noise-L", type=int, default=None, help="Override the L used in the noise benchmark.")
+    parser.add_argument("--nesting-L1", type=int, default=3, help="Inner FPAA length for the nesting comparison.")
+    parser.add_argument("--nesting-L2", type=int, default=3, help="Outer FPAA length for the nesting comparison.")
     parser.add_argument("--run-all", action="store_true", help="Run all six modules and emit artifacts")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def run_full_analysis(
+    L: int = 3,
+    delta: float = 0.1,
+    qubits: int = 4,
+    good: Optional[object] = None,
+    good_indices: Optional[object] = None,
+    out_prefix: str = "fpaa",
+    synthesis_eps: float = 1e-3,
+    noise_L: Optional[int] = None,
+    nesting_L1: int = 3,
+    nesting_L2: int = 3,
+    run_all: bool = False,
+) -> None:
+    normalized_good_indices = _normalize_good_indices(good_indices)
+    normalized_good = _normalize_good_state(good, qubits)
 
     # Core rigor checks for Modules 1 and 2.
-    test_table_i_exact_match(delta=0.1)
+    test_table_i_exact_match(delta=delta)
     print("Phase schedule test (L=3 analytical Table-I check): PASSED")
-    test_fpaa_closed_form_match(L=args.L, delta=args.delta)
+    test_fpaa_closed_form_match(L=L, delta=delta)
     print("Closed-form Chebyshev map test: PASSED")
 
     try:
@@ -895,16 +1045,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     except RuntimeError as exc:
         print(f"Generalized iterate test skipped: {exc}")
 
-    if not args.run_all:
-        a, b = generate_fpaa_phases(args.L, args.delta)
+    if not run_all:
+        a, b = generate_fpaa_phases(L, delta)
         print("alpha:", np.array2string(a, precision=10))
         print("beta :", np.array2string(b, precision=10))
-        print(f"passband edge w = {passband_edge(args.L, args.delta):.10f}")
+        print(f"passband edge w = {passband_edge(L, delta):.10f}")
         return
 
     # Module 3: passband plateau proof.
-    passband_png = f"{args.out_prefix}_passband.png"
-    pass_curve = plot_passband_plateau(L=args.L, delta=args.delta, output=passband_png)
+    passband_png = f"{out_prefix}_passband.png"
+    pass_curve = plot_passband_plateau(L=L, delta=delta, output=passband_png)
     print(f"Saved: {passband_png}")
     print(
         "Passband rigor:"
@@ -915,11 +1065,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     )
 
     # Module 5: NISQ robustness benchmark.
-    noise_L = max(args.L, 5)
-    noise_png = f"{args.out_prefix}_noise.png"
-    noise = plot_nisq_robustness_benchmark(L=noise_L, delta=args.delta, output=noise_png)
+    effective_noise_L = max(L, 5) if noise_L is None else int(noise_L)
+    noise_png = f"{out_prefix}_noise.png"
+    noise = plot_nisq_robustness_benchmark(L=effective_noise_L, delta=delta, output=noise_png)
     print(f"Saved: {noise_png}")
-    print(f"NISQ robustness diagnostics (L={noise_L}):")
+    print(f"NISQ robustness diagnostics (L={effective_noise_L}):")
     for eps, c in sorted(noise.items(), key=lambda kv: kv[0]):
         print(
             f"  eps={100*eps:>4.0f}% | min(FPAA|p>=w)={float(c['min_passband'][0]):.6f}"
@@ -927,22 +1077,26 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         )
 
     # Module 4: recursive nesting proof.
-    nesting_png = f"{args.out_prefix}_nesting.png"
-    nesting = plot_recursive_nesting_proof(L1=3, L2=3, delta=args.delta, output=nesting_png)
+    nesting_png = f"{out_prefix}_nesting.png"
+    nesting = plot_recursive_nesting_proof(L1=nesting_L1, L2=nesting_L2, delta=delta, output=nesting_png)
     print(f"Saved: {nesting_png}")
     print(f"Nesting overlap max |nested-native|: {float(nesting['max_abs_diff'][0]):.3e}")
-    print(f"Chebyshev identity max error T3(T3(x))-T9(x): {nesting_composition_error(3, 3):.3e}")
+    print(
+        f"Chebyshev identity max error T{nesting_L2}(T{nesting_L1}(x))-T{nesting_L1 * nesting_L2}(x): "
+        f"{nesting_composition_error(nesting_L1, nesting_L2):.3e}"
+    )
 
     # Module 6: FTQC Clifford+T overhead table.
     try:
         rows = benchmark_t_gate_blowup(
-            num_qubits=args.qubits,
-            L=args.L,
-            delta=args.delta,
-            good_state=args.good,
-            synthesis_eps=args.synthesis_eps,
+            num_qubits=qubits,
+            L=L,
+            delta=delta,
+            good_state=normalized_good,
+            good_indices=normalized_good_indices,
+            synthesis_eps=synthesis_eps,
         )
-        table_csv = f"{args.out_prefix}_resource_overhead.csv"
+        table_csv = f"{out_prefix}_resource_overhead.csv"
         _save_resource_table(rows, table_csv)
         print(f"Saved: {table_csv}")
         for r in rows:
@@ -954,10 +1108,118 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         print(f"Module 6 skipped: {exc}")
 
 
+def _interactive_rerun_prompt(defaults: Dict[str, object]) -> None:
+    if not sys.stdin.isatty():
+        return
+
+    print("\n" + "=" * 72)
+    print("INTERACTIVE RE-RUN MODE")
+    print("=" * 72)
+    print("Press Enter to finish, or enter custom key=value pairs to rerun.")
+    print("Example: L=5, delta=0.05, run_all=True")
+    print("Example: qubits=5, good='10101', nesting_L1=5, nesting_L2=3")
+    print("Example: good_indices=[3, 7], run_all=True")
+
+    try:
+        raw = input("Custom parameters: ").strip()
+    except EOFError:
+        print("\nInteractive mode closed.")
+        return
+
+    if not raw:
+        print("Interactive mode finished.")
+        return
+    if "=" not in raw:
+        print("No key=value parameters detected. Interactive mode finished.")
+        return
+
+    try:
+        kwargs = _parse_kwargs_text(raw)
+    except Exception as exc:
+        print(f"Could not parse custom parameters: {exc}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    allowed = {
+        "L",
+        "delta",
+        "qubits",
+        "good",
+        "good_indices",
+        "out_prefix",
+        "synthesis_eps",
+        "noise_L",
+        "nesting_L1",
+        "nesting_L2",
+        "run_all",
+    }
+    unknown = set(kwargs) - allowed
+    if unknown:
+        print(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    merged = dict(defaults)
+    merged.update(kwargs)
+    print(f"\nRe-running with parameters: {merged}")
+    run_full_analysis(**merged)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    args = _build_parser().parse_args(argv)
+    run_full_analysis(
+        L=args.L,
+        delta=args.delta,
+        qubits=args.qubits,
+        good=args.good,
+        good_indices=args.good_indices,
+        out_prefix=args.out_prefix,
+        synthesis_eps=args.synthesis_eps,
+        noise_L=args.noise_L,
+        nesting_L1=args.nesting_L1,
+        nesting_L2=args.nesting_L2,
+        run_all=args.run_all,
+    )
+
+
 if __name__ == "__main__":
     start_one_click_session(__file__, figure_prefix="fpaa")
-    if len(sys.argv) == 1:
-        script_stem = Path(__file__).stem
-        main(["--run-all", "--out-prefix", script_stem])
-    else:
+    cli_kwargs = _parse_command_line(sys.argv[1:])
+    if cli_kwargs is None:
         main()
+    elif cli_kwargs:
+        allowed = {
+            "L",
+            "delta",
+            "qubits",
+            "good",
+            "good_indices",
+            "out_prefix",
+            "synthesis_eps",
+            "noise_L",
+            "nesting_L1",
+            "nesting_L2",
+            "run_all",
+        }
+        unknown = set(cli_kwargs) - allowed
+        if unknown:
+            raise ValueError(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        run_full_analysis(**cli_kwargs)
+    else:
+        script_stem = Path(__file__).stem
+        default_kwargs: Dict[str, object] = {
+            "L": 3,
+            "delta": 0.1,
+            "qubits": 4,
+            "good": None,
+            "good_indices": None,
+            "out_prefix": script_stem,
+            "synthesis_eps": 1e-3,
+            "noise_L": None,
+            "nesting_L1": 3,
+            "nesting_L2": 3,
+            "run_all": True,
+        }
+        run_full_analysis(**default_kwargs)
+        _interactive_rerun_prompt(default_kwargs)
+
