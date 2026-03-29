@@ -317,17 +317,17 @@ def run_scenario_b_topological_routing(n_qubits: int = 5, good_indices: list = [
 
 def run_scenario_c_synthesis_annihilation_failure(n_qubits: int = 5, good_indices: list = [0], L: int = 5) -> None:
     """
-    Scenario C: The Synthesis Annihilation Failure
-    Proves that FPAA's fractional continuous phases act as "walls" that block
+    Scenario C: The Synthesis Cancellation Limitation
+    Proves that FPAA's fractional continuous phases act as barriers that limit
     standard classical compiler commutation optimizations (Qiskit level 3),
     resulting in significantly worse gate depth reduction compared to standard Grover.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO C: THE SYNTHESIS ANNIHILATION FAILURE")
+    print("SCENARIO C: THE SYNTHESIS CANCELLATION LIMITATION")
     print("=" * 70)
     print(f"Target Qubits: {n_qubits}, FPAA odd parameter L={L} (l={fpaa_generalized_iterates(L)} generalized iterates)")
     print(f"Architecture: Heavy-Hex Lattice (5 qubits)")
-    print("Comparing Optimization Level 0 (Naive) vs Level 3 (Aggressive Synthesis)\n")
+    print("Comparing Optimization Level 0 (baseline) vs Level 3 (aggressive synthesis)\n")
 
     delta = 0.1
     fpaa_qc = build_fpaa_circuit(n_qubits, L, delta, good_indices=good_indices)
@@ -511,7 +511,7 @@ def run_scenario_e_high_density_rescue(n_qubits: int = 6, M: int = 48) -> None:
     print("-> FPAA's Chebyshev polynomial actively intercepts the state and flattens")
     print("   it safely inside the passband threshold.")
     print("-> Even with massive SWAP noise and CNOT accumulations, the robust FPAA")
-    print("   passband out-survives the baseline classical random guess.")
+    print("   passband remains above the baseline classical random guess.")
 
 
 def _estimate_t_per_rotation(synthesis_eps: float) -> int:
@@ -648,12 +648,12 @@ def run_scenario_g_modular_nesting_tradeoff(n_qubits: int = 4, L1: int = 3, L2: 
     print("\n----------------------------------------------------------------------")
     print("NESTING ARCHITECTURE CONCLUSION")
     print("----------------------------------------------------------------------")
-    print("-> Just because you *can* nest FPAA modularly, doesn't mean you *should*")
-    print("   execute it that way on monolithic hardware.")
+    print("-> A modular FPAA nesting construction is algebraically valid, but it is not")
+    print("   the preferred execution strategy on monolithic hardware.")
     print("-> The uncomputation layers required for modular quantum reflection spawn massive")
     print("   multi-controlled ladders that cannot be easily optimized away by classical compilers.")
-    print("-> You should always instruct the host to algebraically flatten the nested Chebyshev")
-    print("   polynomial into a single, native physical sequence.")
+    print("-> The host should algebraically flatten the nested Chebyshev polynomial into")
+    print("   a single native physical sequence whenever the target hardware is monolithic.")
 
 
 def run_scenario_h_coherent_calibration_trap(n_qubits: int = 4, L: int = 5) -> None:
@@ -809,7 +809,7 @@ def run_scenario_i_ancilla_assisted_mcp_decomposition(n_qubits: int = STANDARD_Q
     print("ANCILLA-ASSISTED MCP CONCLUSION")
     print("----------------------------------------------------------------------")
     if cx_constrained > 0:
-        print(f"By burning {num_ancilla} clean ancilla qubits, we saved:")
+        print(f"By allocating {num_ancilla} clean ancilla qubits, the circuit saves:")
         print(f"-> {depth_constrained - depth_expanded} gate depth ({(1 - depth_expanded/max(1, depth_constrained))*100:.1f}%)")
         print(f"-> {cx_constrained - cx_expanded} CNOT operations ({(1 - cx_expanded/max(1, cx_constrained))*100:.1f}%)")
         print("-> FPAA scaling is severely deep without extra width.")
@@ -853,7 +853,7 @@ def run_scenario_j_plateau_overhead_tax(p_target: float = 0.05, P_floor: float =
     print(f"Required FPAA odd parameter L : {L} (query count L-1 = {fpaa_queries}, yields P>={P_floor:.4f} for all p>={passband_edge_func(L, delta):.4f})")
     
     overhead_ratio = fpaa_queries / max(1, k_star)
-    print(f"\n-> The FPAA 'Insurance Premium' (Logical Overhead): {overhead_ratio:.2f}x multiplier.")
+    print(f"\n-> FPAA logical overhead multiplier: {overhead_ratio:.2f}x.")
 
     print("\n----------------------------------------------------------------------")
     print("PLATEAU OVERHEAD CONCLUSION")
@@ -866,9 +866,9 @@ def run_scenario_j_plateau_overhead_tax(p_target: float = 0.05, P_floor: float =
     print("   overhead in runtime depth and SWAP accumulation.")
 
 
-def run_scenario_k_unified_profiler_showdown(n_qubits: int = STANDARD_QUBITS, p_density: float = 0.25) -> None:
+def run_scenario_k_unified_profiler_evaluation(n_qubits: int = STANDARD_QUBITS, p_density: float = 0.25) -> None:
     """
-    Scenario K: The Grand Unified Profiler Comparative Evaluation (Grover vs FPAA)
+    Scenario K: Unified Hardware Profiler Comparative Evaluation (Grover vs FPAA)
     Pass optimal Grover and standard FPAA through QuantumProfiler to get ns time.
     """
     try:
@@ -880,7 +880,7 @@ def run_scenario_k_unified_profiler_showdown(n_qubits: int = STANDARD_QUBITS, p_
 
     import math
     print("\n" + "=" * 70)
-    print("SCENARIO K: THE GRAND UNIFIED PROFILER COMPARATIVE EVALUATION")
+    print("SCENARIO K: UNIFIED HARDWARE PROFILER COMPARATIVE EVALUATION")
     print("=" * 70)
     print(f"Target Qubits: {n_qubits}, Density p: {p_density}")
     
@@ -926,8 +926,8 @@ def run_scenario_k_unified_profiler_showdown(n_qubits: int = STANDARD_QUBITS, p_
     print("\n----------------------------------------------------------------------")
     print("PROFILER COMPARATIVE EVALUATION CONCLUSION")
     print("----------------------------------------------------------------------")
-    print(f"-> Grover takes {grover_metrics['total_time_ns']} ns before overshoot-induced failure risk emerges.")
-    print(f"-> FPAA takes {fpaa_metrics['total_time_ns']} ns to guarantee success in the passband.")
+    print(f"-> Grover takes {grover_metrics['total_time_ns']} ns before overshoot-related performance risk becomes material.")
+    print(f"-> FPAA takes {fpaa_metrics['total_time_ns']} ns to guarantee passband performance.")
     print("-> By collapsing all routing, synthesis, and parameter penalties into")
     print("   a single physical timeframe, we justify the temporal scaling arguments")
     print("   required for Variable-Time Amplitude Amplification (VTAA).")
@@ -1138,7 +1138,7 @@ if __name__ == "__main__":
         ("H", lambda: run_scenario_h_coherent_calibration_trap(n_qubits=4, L=5)),
         ("I", lambda: run_scenario_i_ancilla_assisted_mcp_decomposition(n_qubits=10)),
         ("J", lambda: run_scenario_j_plateau_overhead_tax(p_target=0.05, P_floor=0.99)),
-        ("K", lambda: run_scenario_k_unified_profiler_showdown(n_qubits=4, p_density=0.25)),
+        ("K", lambda: run_scenario_k_unified_profiler_evaluation(n_qubits=4, p_density=0.25)),
     ]
     interactive_scenarios = [
         ("A", run_scenario_a_unrolling_baseline),
@@ -1151,7 +1151,7 @@ if __name__ == "__main__":
         ("H", run_scenario_h_coherent_calibration_trap),
         ("I", run_scenario_i_ancilla_assisted_mcp_decomposition),
         ("J", run_scenario_j_plateau_overhead_tax),
-        ("K", run_scenario_k_unified_profiler_showdown),
+        ("K", run_scenario_k_unified_profiler_evaluation),
     ]
     scenarios = wrap_scenarios(default_scenarios, module_globals=globals(), extra_patch_objects=(fpaa_mod,), config=publishability)
     interactive_wrapped = wrap_scenarios(
@@ -1181,3 +1181,4 @@ if __name__ == "__main__":
         logger.log.close()
         sys.stdout = logger.terminal
         print("\nFPAA Benchmark Suite finished. Results saved.")
+
