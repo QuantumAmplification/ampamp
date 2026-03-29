@@ -1,0 +1,11 @@
+algorithm,post_optimization_depth,final_cnots,hardware_penalty_score,parity_status
+1_grover,486,248,51080.0,similar
+1.1_qaoa_grover,153,72,16020.0,similar
+2_fixed_point,976,494,102540.0,similar
+3_oblivious,4,0,400.0,similar
+3.25_controlled,89,42,9320.0,similar
+3.5_foqa,9,2,920.0,similar
+4_distributed,3,0,300.0,similar
+5_variable_time,69,28,7180.0,similar
+6_qsvt,5,0,500.0,similar
+7_unified_comparative,976,886,188260.0,similar

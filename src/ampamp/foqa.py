@@ -5,6 +5,7 @@ for oblivious amplitude amplification with fixed-point success guarantees.
 """
 
 import numpy as np
+from qiskit import QuantumCircuit
 
 class FOQAEngine:
     """Core engine for Fixed-Point Oblivious Amplitude Amplification.
@@ -110,3 +111,39 @@ class FOQAEngine:
             cumulative_success[idx] = prob_already_halted + prob_continue * (t_n**2)
 
         return cumulative_success
+
+    def build_proxy_sequence(
+        self,
+        n_steps: int,
+        mizel_c: float = 1.5,
+        m_content: int = 1,
+        zeno_alpha: float | None = None,
+    ) -> QuantumCircuit:
+        """Builds a transpilation-ready FOQA proxy sequence.
+
+        Circuit order: ancilla, index, content[0..m-1].
+        Each step applies a ctrl-0 RY(alpha_n) on ancilla conditioned by index qubit.
+        """
+        if n_steps < 1:
+            raise ValueError("n_steps must be >= 1")
+        if m_content < 1:
+            raise ValueError("m_content must be >= 1")
+
+        n_total = 2 + int(m_content)
+        qc = QuantumCircuit(n_total, name=f"FOQA_proxy_n{n_steps}")
+
+        # Prepare proxy index state sin(theta)|0> + cos(theta)|1>.
+        qc.ry(np.pi - 2.0 * float(self.theta), 1)
+
+        for n in range(n_steps):
+            if zeno_alpha is None:
+                alpha = float(mizel_c) / np.sqrt(float(n + 1))
+            else:
+                alpha = float(zeno_alpha)
+
+            # ctrl-0 on index qubit (1), target ancilla qubit (0)
+            qc.x(1)
+            qc.cry(alpha, 1, 0)
+            qc.x(1)
+
+        return qc

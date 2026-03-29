@@ -6,6 +6,7 @@ Provides the `FixedPointEngine` for running algorithms with monotonic convergenc
 import numpy as np
 from qiskit import QuantumCircuit, transpile
 from qiskit.quantum_info import partial_trace
+from .grover import GroverEngine
 
 class FixedPointEngine:
     """Engine for Fixed-Point Amplitude Amplification (FPAA).
@@ -70,18 +71,25 @@ class FixedPointEngine:
         if num_qubits < 1:
             raise ValueError("num_qubits must be >= 1")
             
-        qc = QuantumCircuit(num_qubits)
-        qc.h(range(num_qubits)) # Initial superposition
+        core = GroverEngine(num_qubits, marked_indices)
+        oracle = core.get_oracle()
+        diffusion = core.get_diffusion()
 
+        qc = QuantumCircuit(num_qubits)
+        qc.h(range(num_qubits))
+
+        # Library-compatible FPAA proxy:
+        # keep Grover structural skeleton while injecting continuous phase knobs
+        # between oracle/diffusion blocks using synthesized alpha/beta sequences.
         for a_j, b_j in zip(self.alphas, self.betas):
-            # 1. Oracle with phase beta
-            qc.global_phase += np.pi 
-            # (In a real lib, you'd call a generalized_oracle helper here)
-            
-            # 2. Diffusion with phase alpha
-            # (In a real lib, you'd call a generalized_diffusion helper here)
-            
+            qc.append(oracle, range(num_qubits))
+            for q in range(num_qubits):
+                qc.rz(float(b_j), q)
+
+            qc.append(diffusion, range(num_qubits))
+            for q in range(num_qubits):
+                qc.rz(float(a_j), q)
+
         return qc
 
 # ----------------------------------------------------------------------------
-
