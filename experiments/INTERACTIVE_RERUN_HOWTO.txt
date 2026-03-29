@@ -1,0 +1,775 @@
+INTERACTIVE RERUN MODE AND CUSTOM CLI GUIDE
+
+This guide explains:
+1. how to use the end-of-run INTERACTIVE RE-RUN MODE prompt,
+2. what to type at the prompt,
+3. what to type directly in the CLI,
+4. which scene/module each algorithm contains,
+5. which keys control each scene/module.
+
+The examples below are written in neutral form with:
+python "Theory Algorithms/<script>.py"
+
+GENERAL USAGE
+
+Default run, then prompt:
+python "Theory Algorithms/<script>.py"
+
+When the terminal shows:
+INTERACTIVE RE-RUN MODE
+Custom parameters:
+type one comma-separated line such as:
+key1=value1, key2=value2, key3=value3
+
+Direct one-shot CLI custom run:
+python "Theory Algorithms/<script>.py" key1=value1 key2=value2 key3=value3
+
+VALUE SYNTAX
+
+Booleans:
+True
+False
+
+Lists:
+[1,2,3]
+[0.1,0.2,0.3]
+['0101','1110']
+
+Strings:
+'output_name'
+
+Null:
+None
+
+
+ALGORITHM 1.1
+Theory Algorithms/1.1_QAOA_Grover_Laboratory.py
+
+Scenes in this algorithm:
+- Depth sweep
+- Backend agreement analysis
+- Target symmetry analysis
+- Optimizer robustness analysis
+- Shell-spread analysis
+
+Rerun style:
+- Whole-analysis rerun only
+- No per-scene run flags
+
+Main custom keys:
+num_qubits, max_p, target_idx, n_restarts, seed
+
+What to type at the prompt:
+num_qubits=4, max_p=3, target_idx=2, n_restarts=2, seed=9
+
+Direct CLI example:
+python "Theory Algorithms/1.1_QAOA_Grover_Laboratory.py" num_qubits=3 max_p=2 target_idx=1 n_restarts=1 seed=7
+
+
+ALGORITHM 1
+Theory Algorithms/1_Grover's_Search_Algorithm.py
+
+Scenes in this algorithm:
+- Mathematical overview
+- M vs N test-case table
+- Geometric analysis in the invariant 2D plane
+- Nested-amplification / equivalent-depth comparison
+- Optional Qiskit demo
+
+Scene control keys:
+- Mathematical overview: no_math_overview
+- Test-case table: test_cases, skip_test_cases
+- Geometric analysis: n_qubits, good_indices, max_k, k_multiplier
+- Nested-depth controls: nesting_k1, nesting_k2, nesting_p_max
+- Heatmap controls: heatmap_k_max, heatmap_p_max, heatmap_resolution
+- Optional demo: run_qiskit_demo
+- Output controls: save_plot, show_plot
+
+What to type at the prompt:
+n_qubits=5, good_indices=[3,7], max_k=4, skip_test_cases=True
+
+Other prompt example:
+test_cases=Sparse|1024|3;Dense|1024|64, skip_test_cases=False
+
+Direct CLI example:
+python "Theory Algorithms/1_Grover's_Search_Algorithm.py" n_qubits=4 good_indices='[1,3]' max_k=3 skip_test_cases=True save_plot='grover_custom.png'
+
+
+ALGORITHM 2
+Theory Algorithms/2_Fixed_Point_Ammplitude_Amplification.py
+
+Scenes in this algorithm:
+- Core phase-schedule checks
+- Closed-form Chebyshev map check
+- Grover-fallback check
+- Passband plateau proof
+- Recursive nesting proof
+- NISQ robustness benchmark
+- Resource-overhead summary
+
+Rerun style:
+- run_all=False gives the compact core-rigor scene
+- run_all=True executes the full theory package
+
+Main custom keys:
+L, delta, qubits, good, good_indices, out_prefix, synthesis_eps, noise_L, nesting_L1, nesting_L2, run_all
+
+What to type at the prompt:
+L=5, delta=0.05, run_all=False
+
+Other prompt examples:
+qubits=5, good='10101', nesting_L1=5, nesting_L2=3
+good_indices=[3,7], run_all=True
+
+Direct CLI example:
+python "Theory Algorithms/2_Fixed_Point_Ammplitude_Amplification.py" L=5 delta=0.05 run_all=False
+
+
+ALGORITHM 3
+Theory Algorithms/3_Oblivious_Ampltude_Amplification.py
+
+Scenes in this algorithm:
+- Module 1: Subnormalization rescue analysis
+- Module 2: Geometric obstruction analysis
+- Module 3: Explicit LCU block encoding
+- Module 4: Identity block extractor numerical audit
+
+Rerun style:
+- Whole-analysis rerun
+- Module-specific parameter prefixes control the corresponding module
+
+Main custom keys by module:
+- Module 1: rescue_p, rescue_data_gate, rescue_overshoot_factor
+- Module 2: obstruction_p_valid, obstruction_p_invalid_zero, obstruction_p_invalid_one, obstruction_max_k
+- Module 3: lcu_c0, lcu_c1, lcu_ft_basis, lcu_optimization_level
+- Module 4: audit_m, audit_l, audit_p, audit_seed, audit_c0, audit_c1
+- Output controls: out_prefix, show_plot
+
+What to type at the prompt:
+rescue_p=0.01, rescue_overshoot_factor=2.0, show_plot=False
+
+Other prompt examples:
+obstruction_p_invalid_one=0.35, obstruction_max_k=20
+lcu_c0=0.7, lcu_c1=0.3, audit_seed=7
+
+Direct CLI example:
+python "Theory Algorithms/3_Oblivious_Ampltude_Amplification.py" rescue_p=0.01 rescue_overshoot_factor=2.0 show_plot=False
+
+
+ALGORITHM 3.25
+Theory Algorithms/3.25_Controlled_Quantum_Amplification.py
+
+Scenes in this algorithm:
+- Principal-eigenvector audit
+- QHT comparison
+- Angle sweep
+- Single-target and multiple-target dynamics
+
+Rerun style:
+- If no run_* key is set, the default full CQAA package runs
+- If a run_* key is set, you can selectively choose scenes
+
+Scene selector keys:
+run_all, run_principal_audit, run_qht_comparison, run_angle_sweep, run_dynamics
+
+Main parameter keys:
+search_dim, epsilon, epsilon_pi, rotation_angles, target_weights, eps_sweep, angle_factors, max_iterations, out_prefix, save_json, show_plots
+
+What to type at the prompt:
+run_all=False, run_qht_comparison=True, search_dim=6, max_iterations=10, out_prefix='cqaa_custom', save_json=None
+
+Other prompt examples:
+run_all=True, search_dim=6, epsilon=0.08
+run_dynamics=True, max_iterations=30, out_prefix='cqaa_dynamics'
+
+Direct CLI example:
+python "Theory Algorithms/3.25_Controlled_Quantum_Amplification.py" run_all=False run_qht_comparison=True search_dim=6 max_iterations=10 out_prefix='cqaa_custom' save_json=None
+
+
+ALGORITHM 3.5
+Theory Algorithms/3.5_FOAA.py
+
+Scenes in this algorithm:
+- Module 1: LCU oblivious circuit synthesizer
+- Module 2: Damping regime sweeper
+- Module 3: Non-linear recurrence auditor
+- Module 4: Asymptotic complexity auditor
+- Module 5: Quantum Zeno catastrophe
+- Module 6: Empty database paradox
+
+Rerun style:
+- Key=value rerun covers the full FOAA script
+- Module-specific keys let you tune one module while the rest keep defaults
+
+Main parameter groups:
+- Module 1: module1_theta, module1_alpha
+- Module 2: module2_theta, module2_iterations, module2_alpha_under, module2_alpha_over, module2_mizel_c
+- Module 3: module3_theta, module3_iterations, module3_recurrence_c
+- Module 4: module4_num_p_values, module4_p_max_exp, module4_p_min_exp, module4_target_success, module4_complexity_c, module4_max_iterations, module4_slope_tolerance
+- Module 5: module5_theta, module5_iterations, module5_zeno_alpha, module5_mizel_c, module5_classical_tolerance, module5_penalty_threshold
+- Module 6: module6_iterations, module6_control_theta, module6_mizel_c, module6_noise_floor
+- Output controls: out_prefix, show_plot, enforce_audit
+
+What to type at the prompt:
+module2_theta=0.02, module2_iterations=40, enforce_audit=False, show_plot=False
+
+Other prompt examples:
+module4_num_p_values=30, module4_target_success=0.995
+module5_theta=0.02, module6_iterations=80
+
+Direct CLI example:
+python "Theory Algorithms/3.5_FOAA.py" module2_theta=0.02 module2_iterations=40 enforce_audit=False show_plot=False
+
+
+ALGORITHM 4
+Theory Algorithms/4_Distributed _Quantum_Amplitude_Amplification.py
+
+Scenes in this algorithm:
+- Lucky-node single instance
+- Lucky-node Monte Carlo evidence
+- Distributed FPAA execution
+- Hardware tradeoff table
+- Entanglement obstruction
+- Noise benchmark
+- Oracle compiler benchmark
+- Classical network statistics
+- DEQAAA resource continuation
+- DEQAAA shot precision
+- DEQAAA partition sweep
+- DEQAAA target sweep
+- DEQAAA distribution robustness
+- DEQAAA phase mismatch sweep
+
+Rerun style:
+- If you set any run_* key, the script switches to selective mode
+- Otherwise, changing ordinary keys keeps the default full package
+
+Scene selector keys:INTERACTIVE RERUN MODE AND CUSTOM CLI GUIDE
+
+This guide explains:
+1. how to use the end-of-run INTERACTIVE RE-RUN MODE prompt,
+2. what to type at the prompt,
+3. what to type directly in the CLI,
+4. which scene/module each algorithm contains,
+5. which keys control each scene/module.
+
+The examples below are written in neutral form with:
+python "Theory Algorithms/<script>.py"
+
+GENERAL USAGE
+
+Default run, then prompt:
+python "Theory Algorithms/<script>.py"
+
+When the terminal shows:
+INTERACTIVE RE-RUN MODE
+Custom parameters:
+type one comma-separated line such as:
+key1=value1, key2=value2, key3=value3
+
+Direct one-shot CLI custom run:
+python "Theory Algorithms/<script>.py" key1=value1 key2=value2 key3=value3
+
+VALUE SYNTAX
+
+Booleans:
+True
+False
+
+Lists:
+[1,2,3]
+[0.1,0.2,0.3]
+['0101','1110']
+
+Strings:
+'output_name'
+
+Null:
+None
+
+
+ALGORITHM 1.1
+Theory Algorithms/1.1_QAOA_Grover_Laboratory.py
+
+Scenes in this algorithm:
+- Depth sweep
+- Backend agreement analysis
+- Target symmetry analysis
+- Optimizer robustness analysis
+- Shell-spread analysis
+
+Rerun style:
+- Whole-analysis rerun only
+- No per-scene run flags
+
+Main custom keys:
+num_qubits, max_p, target_idx, n_restarts, seed
+
+What to type at the prompt:
+num_qubits=4, max_p=3, target_idx=2, n_restarts=2, seed=9
+
+Direct CLI example:
+python "Theory Algorithms/1.1_QAOA_Grover_Laboratory.py" num_qubits=3 max_p=2 target_idx=1 n_restarts=1 seed=7
+
+
+ALGORITHM 1
+Theory Algorithms/1_Grover's_Search_Algorithm.py
+
+Scenes in this algorithm:
+- Mathematical overview
+- M vs N test-case table
+- Geometric analysis in the invariant 2D plane
+- Nested-amplification / equivalent-depth comparison
+- Optional Qiskit demo
+
+Scene control keys:
+- Mathematical overview: no_math_overview
+- Test-case table: test_cases, skip_test_cases
+- Geometric analysis: n_qubits, good_indices, max_k, k_multiplier
+- Nested-depth controls: nesting_k1, nesting_k2, nesting_p_max
+- Heatmap controls: heatmap_k_max, heatmap_p_max, heatmap_resolution
+- Optional demo: run_qiskit_demo
+- Output controls: save_plot, show_plot
+
+What to type at the prompt:
+n_qubits=5, good_indices=[3,7], max_k=4, skip_test_cases=True
+
+Other prompt example:
+test_cases=Sparse|1024|3;Dense|1024|64, skip_test_cases=False
+
+Direct CLI example:
+python "Theory Algorithms/1_Grover's_Search_Algorithm.py" n_qubits=4 good_indices='[1,3]' max_k=3 skip_test_cases=True save_plot='grover_custom.png'
+
+
+ALGORITHM 2
+Theory Algorithms/2_Fixed_Point_Ammplitude_Amplification.py
+
+Scenes in this algorithm:
+- Core phase-schedule checks
+- Closed-form Chebyshev map check
+- Grover-fallback check
+- Passband plateau proof
+- Recursive nesting proof
+- NISQ robustness benchmark
+- Resource-overhead summary
+
+Rerun style:
+- run_all=False gives the compact core-rigor scene
+- run_all=True executes the full theory package
+
+Main custom keys:
+L, delta, qubits, good, good_indices, out_prefix, synthesis_eps, noise_L, nesting_L1, nesting_L2, run_all
+
+What to type at the prompt:
+L=5, delta=0.05, run_all=False
+
+Other prompt examples:
+qubits=5, good='10101', nesting_L1=5, nesting_L2=3
+good_indices=[3,7], run_all=True
+
+Direct CLI example:
+python "Theory Algorithms/2_Fixed_Point_Ammplitude_Amplification.py" L=5 delta=0.05 run_all=False
+
+
+ALGORITHM 3
+Theory Algorithms/3_Oblivious_Ampltude_Amplification.py
+
+Scenes in this algorithm:
+- Module 1: Subnormalization rescue analysis
+- Module 2: Geometric obstruction analysis
+- Module 3: Explicit LCU block encoding
+- Module 4: Identity block extractor numerical audit
+
+Rerun style:
+- Whole-analysis rerun
+- Module-specific parameter prefixes control the corresponding module
+
+Main custom keys by module:
+- Module 1: rescue_p, rescue_data_gate, rescue_overshoot_factor
+- Module 2: obstruction_p_valid, obstruction_p_invalid_zero, obstruction_p_invalid_one, obstruction_max_k
+- Module 3: lcu_c0, lcu_c1, lcu_ft_basis, lcu_optimization_level
+- Module 4: audit_m, audit_l, audit_p, audit_seed, audit_c0, audit_c1
+- Output controls: out_prefix, show_plot
+
+What to type at the prompt:
+rescue_p=0.01, rescue_overshoot_factor=2.0, show_plot=False
+
+Other prompt examples:
+obstruction_p_invalid_one=0.35, obstruction_max_k=20
+lcu_c0=0.7, lcu_c1=0.3, audit_seed=7
+
+Direct CLI example:
+python "Theory Algorithms/3_Oblivious_Ampltude_Amplification.py" rescue_p=0.01 rescue_overshoot_factor=2.0 show_plot=False
+
+
+ALGORITHM 3.25
+Theory Algorithms/3.25_Controlled_Quantum_Amplification.py
+
+Scenes in this algorithm:
+- Principal-eigenvector audit
+- QHT comparison
+- Angle sweep
+- Single-target and multiple-target dynamics
+
+Rerun style:
+- If no run_* key is set, the default full CQAA package runs
+- If a run_* key is set, you can selectively choose scenes
+
+Scene selector keys:
+run_all, run_principal_audit, run_qht_comparison, run_angle_sweep, run_dynamics
+
+Main parameter keys:
+search_dim, epsilon, epsilon_pi, rotation_angles, target_weights, eps_sweep, angle_factors, max_iterations, out_prefix, save_json, show_plots
+
+What to type at the prompt:
+run_all=False, run_qht_comparison=True, search_dim=6, max_iterations=10, out_prefix='cqaa_custom', save_json=None
+
+Other prompt examples:
+run_all=True, search_dim=6, epsilon=0.08
+run_dynamics=True, max_iterations=30, out_prefix='cqaa_dynamics'
+
+Direct CLI example:
+python "Theory Algorithms/3.25_Controlled_Quantum_Amplification.py" run_all=False run_qht_comparison=True search_dim=6 max_iterations=10 out_prefix='cqaa_custom' save_json=None
+
+
+ALGORITHM 3.5
+Theory Algorithms/3.5_FOAA.py
+
+Scenes in this algorithm:
+- Module 1: LCU oblivious circuit synthesizer
+- Module 2: Damping regime sweeper
+- Module 3: Non-linear recurrence auditor
+- Module 4: Asymptotic complexity auditor
+- Module 5: Quantum Zeno catastrophe
+- Module 6: Empty database paradox
+
+Rerun style:
+- Key=value rerun covers the full FOAA script
+- Module-specific keys let you tune one module while the rest keep defaults
+
+Main parameter groups:
+- Module 1: module1_theta, module1_alpha
+- Module 2: module2_theta, module2_iterations, module2_alpha_under, module2_alpha_over, module2_mizel_c
+- Module 3: module3_theta, module3_iterations, module3_recurrence_c
+- Module 4: module4_num_p_values, module4_p_max_exp, module4_p_min_exp, module4_target_success, module4_complexity_c, module4_max_iterations, module4_slope_tolerance
+- Module 5: module5_theta, module5_iterations, module5_zeno_alpha, module5_mizel_c, module5_classical_tolerance, module5_penalty_threshold
+- Module 6: module6_iterations, module6_control_theta, module6_mizel_c, module6_noise_floor
+- Output controls: out_prefix, show_plot, enforce_audit
+
+What to type at the prompt:
+module2_theta=0.02, module2_iterations=40, enforce_audit=False, show_plot=False
+
+Other prompt examples:
+module4_num_p_values=30, module4_target_success=0.995
+module5_theta=0.02, module6_iterations=80
+
+Direct CLI example:
+python "Theory Algorithms/3.5_FOAA.py" module2_theta=0.02 module2_iterations=40 enforce_audit=False show_plot=False
+
+
+ALGORITHM 4
+Theory Algorithms/4_Distributed _Quantum_Amplitude_Amplification.py
+
+Scenes in this algorithm:
+- Lucky-node single instance
+- Lucky-node Monte Carlo evidence
+- Distributed FPAA execution
+- Hardware tradeoff table
+- Entanglement obstruction
+- Noise benchmark
+- Oracle compiler benchmark
+- Classical network statistics
+- DEQAAA resource continuation
+- DEQAAA shot precision
+- DEQAAA partition sweep
+- DEQAAA target sweep
+- DEQAAA distribution robustness
+- DEQAAA phase mismatch sweep
+
+Rerun style:
+- If you set any run_* key, the script switches to selective mode
+- Otherwise, changing ordinary keys keeps the default full package
+
+Scene selector keys:
+run_all, run_distributed_fpaa, run_hardware_tradeoff, run_entanglement_obstruction, run_noise_benchmark, run_oracle_compiler, run_network_statistics, run_deqaaa_resource_continuation, run_deqaaa_shot_precision, run_deqaaa_partition_sweep, run_deqaaa_target_sweep, run_deqaaa_distribution_robustness, run_deqaaa_phase_mismatch
+
+High-use parameter groups:
+- Global lucky-node controls: n, j, num_good, seed, trials, mc_seed
+- Distributed FPAA controls: global_goods, epsilon
+- Obstruction controls: good_global, schedule_global_a, obstruction_L
+- Noise controls: noise_backend, noise_shots, noise_k_max, noise_seed
+- Compiler controls: compiler_formula, compiler_format, compiler_opt_level, compiler_seed
+- Network controls: network_shots, network_sigma, network_seed
+- DEQAAA controls: deqaaa_global_n, deqaaa_dqaa_j, deqaaa_node_qubits, deqaaa_target_indices, deqaaa_distribution_seed, deqaaa_shot_counts, deqaaa_measurement_seed, deqaaa_max_nodes, deqaaa_target_set_sweep, deqaaa_distribution_seeds
+- Output controls: out_prefix, save_json, show_plots
+
+What to type at the prompt:
+run_all=False, run_distributed_fpaa=True, n=4, j=2, global_goods=['0101','1110'], epsilon=0.2, save_json=None, out_prefix='dqaa_custom'
+
+Other prompt examples:
+n=6, j=2, num_good=4, trials=50
+run_deqaaa_target_sweep=True, deqaaa_target_set_sweep=[[8,14],[8,9]]
+
+Direct CLI example:
+python "Theory Algorithms/4_Distributed _Quantum_Amplitude_Amplification.py" run_all=False run_distributed_fpaa=True n=4 j=2 global_goods='["0101","1110"]' epsilon=0.2 save_json=None out_prefix='dqaa_custom'
+
+
+ALGORITHM 5
+Theory Algorithms/5_Variable_Time_Amplitude_Amplification.py
+
+Always-on scene:
+- Branch-level VTAA report (p_success, theta0, Grover comparison, restart cost, worst-case AA cost, VTAA asymptotic estimate)
+
+Optional scenes/modules:
+- 2D subspace SVD audit
+- Geometric phase staircase
+- Souffle catastrophe
+- FTQC diffusion scaling
+- Exact amplitude amplification benchmark
+- Phase-mismatch leakage
+- Open-system trajectory
+- VTAA state synthesis
+- VTAA cost sweep
+
+Rerun style:
+- If you set any run_* key, the script switches to selective mode
+- The branch-level VTAA report still prints first
+
+Scene selector keys:
+run_subspace_audit, run_phase_staircase, run_souffle_catastrophe, run_ftqc_scaling, run_exact_aa, run_phase_leakage, run_open_system_trajectory, run_vtaa_synthesis, run_vtaa_sweep
+
+Main parameter groups:
+- Core branch model: times, weights, success, polylog, c1, c2, verify_k
+- Subspace audit: subspace_n, subspace_k_max, subspace_good_state, subspace_rank_threshold
+- Staircase: staircase_n, staircase_k_max, staircase_good_state
+- Souffle: souffle_n, souffle_guessed_m, souffle_actual_m, souffle_k_factor
+- FTQC: ftqc_n_min, ftqc_n_max, ftqc_noancilla_max, ftqc_opt_level
+- Exact AA: exact_aa_n, exact_aa_m, exact_aa_grid
+- Leakage: leakage_n, leakage_k_max, leakage_eps_oracle_deg, leakage_eps_diff_deg, leakage_crosstalk_deg, leakage_local_z_deg, leakage_rank_threshold
+- Open system: open_system_n, open_system_k_max, open_system_phase_damp_1q, open_system_phase_damp_2q, open_system_good_state
+- VTAA sweep: vtaa_total_ps, vtaa_t1, vtaa_t2, vtaa_t3
+- Output controls: plot_prefix, no_plots
+
+What to type at the prompt:
+run_souffle_catastrophe=True, no_plots=True, souffle_n=10, souffle_actual_m=9
+
+Other prompt examples:
+times=[1,2,4,8], weights=[0.4,0.3,0.2,0.1], success=[0.02,0.08,0.2,0.5]
+run_vtaa_sweep=True, vtaa_total_ps=0.08, vtaa_t1=50, vtaa_t2=500, vtaa_t3=5000
+
+Direct CLI example:
+python "Theory Algorithms/5_Variable_Time_Amplitude_Amplification.py" run_souffle_catastrophe=True no_plots=True souffle_n=10 souffle_actual_m=9 plot_prefix='vtaa_custom'
+
+
+ALGORITHM 6
+Theory Algorithms/6_Quantum_Singular_Variable_Transformation.py
+
+Scenes/modules in this algorithm:
+- Module 1: SU(2) QSP engine diagnostics
+- Module 2: LCU block-encoding synthesizer
+- Module 3: QSVT invariant subspace audit
+- Module 4: Hamiltonian simulation
+- Module 5: QSVT matrix inversion
+- Module 6: Fixed-point search
+- Module 7: LCU operator algebra
+- Module 8: Uniform singular value amplification
+- Module 9: Markov brothers' boundary
+- Module 10: Physical phase-fragility and hardware limits
+- Module 11: Adversarial Gibbs overshoot regime
+- Module 12: Adversarial parity scramble
+- Module 13: Adversarial ill-conditioned abyss
+- Module 14: Adversarial non-normal eigenvalue limitation
+- Module 15: Adversarial phase quantization limit
+- Module 16: Adversarial subnormalization over-normalization
+
+Rerun style:
+- If you set any run_* key, the script switches to selective mode
+- This script uses key=value custom mode only
+
+Scene selector keys:
+run_qsp_engine_diagnostics, run_lcu_block_encoding, run_qsvt_invariant_subspace, run_qsvt_hamiltonian_simulation, run_qsvt_matrix_inversion, run_qsvt_fixed_point_search, run_lcu_operator_algebra, run_qsvt_uniform_amplification, run_markov_brothers_boundary, run_physical_phase_fragility, run_adversarial_gibbs_catastrophe, run_adversarial_parity_scramble, run_adversarial_ill_conditioned_abyss, run_adversarial_non_normal_trap, run_adversarial_phase_quantization, run_adversarial_subnormalization_hubris
+
+Main parameter groups:
+- Invariant subspace: invariant_degree, invariant_seed
+- Hamiltonian simulation: hamiltonian_t, hamiltonian_target_epsilon
+- Matrix inversion: inversion_kappa, inversion_degree, inversion_scale_factor
+- Fixed-point search: fixed_point_delta, fixed_point_target_degree, fixed_point_test_x0
+- Operator algebra: operator_seed, operator_depth_max
+- Uniform amplification: usva_c_amp, usva_degree, usva_alpha_A, usva_rescue_threshold, usva_max_depth
+- Markov boundary: markov_d_visual, markov_max_degree
+- Phase fragility: fragility_degree, fragility_phase_error, fragility_x_bound, fragility_max_depth
+- Gibbs: gibbs_degree, gibbs_num_points
+- Parity scramble: parity_dim, parity_seed
+- Ill-conditioned abyss: abyss_degree, abyss_kappas, abyss_scale_factor, abyss_outside_weight, abyss_num_points
+- Phase quantization: phase_quantization_degree, phase_quantization_test_bits, phase_quantization_sweep_range, phase_quantization_num_points
+- Subnormalization hubris: hubris_dim, hubris_target_sigma_max, hubris_valid_margin, hubris_seed
+- Output control: plot
+
+What to type at the prompt:
+plot=False, run_qsvt_matrix_inversion=True, inversion_kappa=20, inversion_degree=81, inversion_scale_factor=0.7
+
+Other prompt examples:
+run_physical_phase_fragility=True, fragility_phase_error=0.04, fragility_max_depth=60
+run_adversarial_phase_quantization=True, phase_quantization_test_bits=[6,8,10,12]
+
+Direct CLI example:
+python "Theory Algorithms/6_Quantum_Singular_Variable_Transformation.py" plot=False run_qsvt_matrix_inversion=True inversion_kappa=20 inversion_degree=81 inversion_scale_factor=0.7
+
+Note:
+Do not use --flag syntax for this script. Use key=value custom mode.
+
+
+QUICK CHECKLIST
+
+To see the prompt:
+python "Theory Algorithms/<script>.py"
+
+To run one custom case immediately:
+python "Theory Algorithms/<script>.py" key1=value1 key2=value2
+
+At the prompt:
+type one comma-separated line of key=value pairs
+
+To leave the prompt without rerunning:
+press Enter on an empty line
+run_all, run_distributed_fpaa, run_hardware_tradeoff, run_entanglement_obstruction, run_noise_benchmark, run_oracle_compiler, run_network_statistics, run_deqaaa_resource_continuation, run_deqaaa_shot_precision, run_deqaaa_partition_sweep, run_deqaaa_target_sweep, run_deqaaa_distribution_robustness, run_deqaaa_phase_mismatch
+
+High-use parameter groups:
+- Global lucky-node controls: n, j, num_good, seed, trials, mc_seed
+- Distributed FPAA controls: global_goods, epsilon
+- Obstruction controls: good_global, schedule_global_a, obstruction_L
+- Noise controls: noise_backend, noise_shots, noise_k_max, noise_seed
+- Compiler controls: compiler_formula, compiler_format, compiler_opt_level, compiler_seed
+- Network controls: network_shots, network_sigma, network_seed
+- DEQAAA controls: deqaaa_global_n, deqaaa_dqaa_j, deqaaa_node_qubits, deqaaa_target_indices, deqaaa_distribution_seed, deqaaa_shot_counts, deqaaa_measurement_seed, deqaaa_max_nodes, deqaaa_target_set_sweep, deqaaa_distribution_seeds
+- Output controls: out_prefix, save_json, show_plots
+
+What to type at the prompt:
+run_all=False, run_distributed_fpaa=True, n=4, j=2, global_goods=['0101','1110'], epsilon=0.2, save_json=None, out_prefix='dqaa_custom'
+
+Other prompt examples:
+n=6, j=2, num_good=4, trials=50
+run_deqaaa_target_sweep=True, deqaaa_target_set_sweep=[[8,14],[8,9]]
+
+Direct CLI example:
+python "Theory Algorithms/4_Distributed _Quantum_Amplitude_Amplification.py" run_all=False run_distributed_fpaa=True n=4 j=2 global_goods='["0101","1110"]' epsilon=0.2 save_json=None out_prefix='dqaa_custom'
+
+
+ALGORITHM 5
+Theory Algorithms/5_Variable_Time_Amplitude_Amplification.py
+
+Always-on scene:
+- Branch-level VTAA report (p_success, theta0, Grover comparison, restart cost, worst-case AA cost, VTAA asymptotic estimate)
+
+Optional scenes/modules:
+- 2D subspace SVD audit
+- Geometric phase staircase
+- Souffle catastrophe
+- FTQC diffusion scaling
+- Exact amplitude amplification benchmark
+- Phase-mismatch leakage
+- Open-system trajectory
+- VTAA state synthesis
+- VTAA cost sweep
+
+Rerun style:
+- If you set any run_* key, the script switches to selective mode
+- The branch-level VTAA report still prints first
+
+Scene selector keys:
+run_subspace_audit, run_phase_staircase, run_souffle_catastrophe, run_ftqc_scaling, run_exact_aa, run_phase_leakage, run_open_system_trajectory, run_vtaa_synthesis, run_vtaa_sweep
+
+Main parameter groups:
+- Core branch model: times, weights, success, polylog, c1, c2, verify_k
+- Subspace audit: subspace_n, subspace_k_max, subspace_good_state, subspace_rank_threshold
+- Staircase: staircase_n, staircase_k_max, staircase_good_state
+- Souffle: souffle_n, souffle_guessed_m, souffle_actual_m, souffle_k_factor
+- FTQC: ftqc_n_min, ftqc_n_max, ftqc_noancilla_max, ftqc_opt_level
+- Exact AA: exact_aa_n, exact_aa_m, exact_aa_grid
+- Leakage: leakage_n, leakage_k_max, leakage_eps_oracle_deg, leakage_eps_diff_deg, leakage_crosstalk_deg, leakage_local_z_deg, leakage_rank_threshold
+- Open system: open_system_n, open_system_k_max, open_system_phase_damp_1q, open_system_phase_damp_2q, open_system_good_state
+- VTAA sweep: vtaa_total_ps, vtaa_t1, vtaa_t2, vtaa_t3
+- Output controls: plot_prefix, no_plots
+
+What to type at the prompt:
+run_souffle_catastrophe=True, no_plots=True, souffle_n=10, souffle_actual_m=9
+
+Other prompt examples:
+times=[1,2,4,8], weights=[0.4,0.3,0.2,0.1], success=[0.02,0.08,0.2,0.5]
+run_vtaa_sweep=True, vtaa_total_ps=0.08, vtaa_t1=50, vtaa_t2=500, vtaa_t3=5000
+
+Direct CLI example:
+python "Theory Algorithms/5_Variable_Time_Amplitude_Amplification.py" run_souffle_catastrophe=True no_plots=True souffle_n=10 souffle_actual_m=9 plot_prefix='vtaa_custom'
+
+
+ALGORITHM 6
+Theory Algorithms/6_Quantum_Singular_Variable_Transformation.py
+
+Scenes/modules in this algorithm:
+- Module 1: SU(2) QSP engine diagnostics
+- Module 2: LCU block-encoding synthesizer
+- Module 3: QSVT invariant subspace audit
+- Module 4: Hamiltonian simulation
+- Module 5: QSVT matrix inversion
+- Module 6: Fixed-point search
+- Module 7: LCU operator algebra
+- Module 8: Uniform singular value amplification
+- Module 9: Markov brothers' boundary
+- Module 10: Physical phase-fragility and hardware limits
+- Module 11: Adversarial Gibbs overshoot regime
+- Module 12: Adversarial parity scramble
+- Module 13: Adversarial ill-conditioned abyss
+- Module 14: Adversarial non-normal eigenvalue limitation
+- Module 15: Adversarial phase quantization limit
+- Module 16: Adversarial subnormalization over-normalization
+
+Rerun style:
+- If you set any run_* key, the script switches to selective mode
+- This script uses key=value custom mode only
+
+Scene selector keys:
+run_qsp_engine_diagnostics, run_lcu_block_encoding, run_qsvt_invariant_subspace, run_qsvt_hamiltonian_simulation, run_qsvt_matrix_inversion, run_qsvt_fixed_point_search, run_lcu_operator_algebra, run_qsvt_uniform_amplification, run_markov_brothers_boundary, run_physical_phase_fragility, run_adversarial_gibbs_catastrophe, run_adversarial_parity_scramble, run_adversarial_ill_conditioned_abyss, run_adversarial_non_normal_trap, run_adversarial_phase_quantization, run_adversarial_subnormalization_hubris
+
+Main parameter groups:
+- Invariant subspace: invariant_degree, invariant_seed
+- Hamiltonian simulation: hamiltonian_t, hamiltonian_target_epsilon
+- Matrix inversion: inversion_kappa, inversion_degree, inversion_scale_factor
+- Fixed-point search: fixed_point_delta, fixed_point_target_degree, fixed_point_test_x0
+- Operator algebra: operator_seed, operator_depth_max
+- Uniform amplification: usva_c_amp, usva_degree, usva_alpha_A, usva_rescue_threshold, usva_max_depth
+- Markov boundary: markov_d_visual, markov_max_degree
+- Phase fragility: fragility_degree, fragility_phase_error, fragility_x_bound, fragility_max_depth
+- Gibbs: gibbs_degree, gibbs_num_points
+- Parity scramble: parity_dim, parity_seed
+- Ill-conditioned abyss: abyss_degree, abyss_kappas, abyss_scale_factor, abyss_outside_weight, abyss_num_points
+- Phase quantization: phase_quantization_degree, phase_quantization_test_bits, phase_quantization_sweep_range, phase_quantization_num_points
+- Subnormalization hubris: hubris_dim, hubris_target_sigma_max, hubris_valid_margin, hubris_seed
+- Output control: plot
+
+What to type at the prompt:
+plot=False, run_qsvt_matrix_inversion=True, inversion_kappa=20, inversion_degree=81, inversion_scale_factor=0.7
+
+Other prompt examples:
+run_physical_phase_fragility=True, fragility_phase_error=0.04, fragility_max_depth=60
+run_adversarial_phase_quantization=True, phase_quantization_test_bits=[6,8,10,12]
+
+Direct CLI example:
+python "Theory Algorithms/6_Quantum_Singular_Variable_Transformation.py" plot=False run_qsvt_matrix_inversion=True inversion_kappa=20 inversion_degree=81 inversion_scale_factor=0.7
+
+Note:
+Do not use --flag syntax for this script. Use key=value custom mode.
+
+
+QUICK CHECKLIST
+
+To see the prompt:
+python "Theory Algorithms/<script>.py"
+
+To run one custom case immediately:
+python "Theory Algorithms/<script>.py" key1=value1 key2=value2
+
+At the prompt:
+type one comma-separated line of key=value pairs
+
+To leave the prompt without rerunning:
+press Enter on an empty line
