@@ -112,7 +112,7 @@ class GroverEngine:
         qc.global_phase = np.pi
         return qc
 
-    def construct_circuit(self, iterations: int) -> QuantumCircuit:
+    def construct_circuit(self, iterations: int, decompose: bool = False) -> QuantumCircuit:
         """Synthesizes the full Grover circuit.
 
         Links the oracle operator and diffusion operator for $k$ iterations 
@@ -121,6 +121,8 @@ class GroverEngine:
         Args:
             iterations (int): The amount of generalized Grover operator iterations 
                 to sequentially run $Q = -A S_0 A^{-1} S_f$.
+            decompose (bool): If True, recursively decomposes the circuit instructions 
+                into their constituent gates (useful for transpilation analysis).
 
         Returns:
             QuantumCircuit: The synthesized Grover standard algorithm sequence.
@@ -132,10 +134,10 @@ class GroverEngine:
         diffusion = self.get_diffusion()
         
         for _ in range(iterations):
-            qc.append(oracle, range(self.n))
-            qc.append(diffusion, range(self.n))
+            qc.append(oracle.to_instruction(label="Oracle"), range(self.n))
+            qc.append(diffusion.to_instruction(label="Diffusion"), range(self.n))
         
-        return qc
+        return qc.decompose() if decompose else qc
 
 
 # ----------------------------------------------------------------------------
