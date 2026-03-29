@@ -1,2 +1,0 @@
-{"timestamp": "2026-03-29T11:02:15.336772+00:00", "scenario": "BASELINE", "metrics": {"depth": 1629, "gate_counts": {"rz": 1085, "cx": 822, "sx": 264, "x": 9}, "qubits": 6, "clbits": 0, "blowup_factor": 26.704918032786885}, "extra": {"topology": "All-to-All"}}
-{"timestamp": "2026-03-29T11:02:15.539954+00:00", "scenario": "LINEAR", "metrics": {"depth": 3025, "gate_counts": {"rz": 2011, "cx": 1611, "sx": 1096, "x": 67}, "qubits": 6, "clbits": 0, "blowup_factor": 49.59016393442623}, "extra": {"topology": "Linear"}}

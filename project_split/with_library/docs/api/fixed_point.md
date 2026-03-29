@@ -1,1 +1,0 @@
-::: ampamp.fixed_point

@@ -1,1 +1,0 @@
-::: ampamp.variable_time
