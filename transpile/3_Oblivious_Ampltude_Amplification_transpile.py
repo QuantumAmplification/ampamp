@@ -746,33 +746,33 @@ def run_scenario_e(p: float = 0.001) -> None:
     print(f"{'Noisy Simulation Success':<30} = {noisy_success:.4f}")
     print(f"{'Degradation from jitter':<30} = {theory - noisy_success:.4f}")
     print("-> CONCLUSION: Microscopic θ deviation from π/2 cannot be reliably")
-    print("   executed. Hardware jitter collapses OAA amplification for small p.")
+    print("   executed. Hardware jitter materially degrades OAA amplification for small p.")
 
 
 # =============================================================================
-# Scenario F: Purified vs. Violated Routing Cost
+# Scenario F: Valid vs. Invalid Routing Cost
 # =============================================================================
 
 def run_scenario_f() -> None:
     """
-    F. The Purified vs. Violated Routing Cost (Geometric Obstruction).
+    F. The Valid vs. Invalid Routing Cost (Geometric Obstruction).
 
-    Valid purified setting: A_valid has ancilla rotation INDEPENDENT of data.
-    Violated setting: A_invalid has ancilla rotation CONDITIONED on data state
+    Valid setting: A_valid has ancilla rotation independent of data.
+    Invalid setting: A_invalid has ancilla rotation conditioned on data state
     (cry gates), violating the clean-block identity
     (<0| x I) A (|0> x I) = sqrt(p) · U.
 
-    We prove the violated setting is BOTH mathematically broken AND physically
+    We show that the invalid setting is mathematically inconsistent and physically
     more expensive to transpile (requires controlled-RY = CRY across registers).
     """
     print("\n" + "=" * 70)
-    print("SCENARIO F: PURIFIED vs. VIOLATED ROUTING COST (GEOMETRIC OBSTRUCTION)")
+    print("SCENARIO F: VALID VS. INVALID ROUTING COST (GEOMETRIC OBSTRUCTION)")
     print("=" * 70)
     p_valid = 0.05
-    p_0 = 0.05     # Pr(ancilla=0 | data=|0⟩) in violated setting
-    p_1 = 0.20     # Pr(ancilla=0 | data=|1⟩) in violated setting
+    p_0 = 0.05     # Pr(ancilla=0 | data=|0⟩) in invalid setting
+    p_1 = 0.20     # Pr(ancilla=0 | data=|1⟩) in invalid setting
     print(f"Valid setting: p = {p_valid} (ancilla prep independent of data).")
-    print(f"Violated setting: p(anc=0|data=|0⟩)={p_0}, p(anc=0|data=|1⟩)={p_1}")
+    print(f"Invalid setting: p(anc=0|data=|0⟩)={p_0}, p(anc=0|data=|1⟩)={p_1}")
     print(f"Architecture: Heavy-Hex (2 qubits)\n")
 
     anc = QuantumRegister(1, "anc")
@@ -783,7 +783,7 @@ def run_scenario_f() -> None:
     A_valid = QuantumCircuit(anc, data, name="A_valid")
     A_valid.ry(2.0 * theta_valid, anc[0])
 
-    # A_invalid: CRY conditioned on data qubit — violates purified block condition
+    # A_invalid: CRY conditioned on data qubit — violates the clean block condition
     theta_0 = np.arccos(np.sqrt(p_0))
     theta_1 = np.arccos(np.sqrt(p_1))
     A_invalid = QuantumCircuit(anc, data, name="A_invalid")
@@ -804,8 +804,8 @@ def run_scenario_f() -> None:
     print(f"{'A_valid':<15} | {dv:<8} | {cxv}")
     print(f"{'A_invalid':<15} | {di:<8} | {cxi}")
     print(f"-> Routing penalty: {di / max(1, dv):.2f}x Depth, {cxi / max(1, cxv):.2f}x CX")
-    print("-> CONCLUSION: Violated block encoding requires CRY (cross-register)")
-    print("   gates, both geometrically invalidating OAA AND physically doubling cost.")
+    print("-> CONCLUSION: Invalid block encoding requires cross-register CRY")
+    print("   gates, which both invalidates the OAA construction and materially increases cost.")
 
 
 # =============================================================================
@@ -1003,19 +1003,19 @@ def run_scenario_j() -> None:
 
 
 # =============================================================================
-# Scenario K: Grand Unified Profiler Comparative Evaluation (OAA)
+# Scenario K: Hardware Profiler Comparative Evaluation (OAA)
 # =============================================================================
 
 def run_scenario_k(p: float = 0.25) -> None:
     """
-    K. The Grand Unified Profiler Comparative Evaluation (OAA Block-Encoding Evaluation).
+    K. The Hardware Profiler Comparative Evaluation (OAA Block-Encoding Evaluation).
 
     Feeds the full Q^k_opt · A circuit through the HardwareProfiler to get
-    a single unified hardware penalty score in nanoseconds, collapsing all
-    physical bottlenecks (routing, uncomputation, reflections) into one number.
+    a single unified hardware penalty score in nanoseconds, summarizing all
+    physical bottlenecks (routing, uncomputation, reflections) in one metric.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO K: THE GRAND UNIFIED PROFILER COMPARATIVE EVALUATION (OAA)")
+    print("SCENARIO K: HARDWARE PROFILER COMPARATIVE EVALUATION (OAA)")
     print("=" * 70)
 
     try:
@@ -1050,7 +1050,7 @@ def run_scenario_k(p: float = 0.25) -> None:
     print(f"{'Total Execution Time (ns)':<30} | {metrics['total_time_ns']:.1f}")
     print(f"{'Unified Hardware Penalty':<30} | {metrics['hardware_penalty_score']:.1f}")
     print("\n-> CONCLUSION: All OAA bottlenecks (star-graph routing, uncomputation")
-    print("   depth, multi-ancilla reflections) collapse into a single hardware time.")
+    print("   depth, multi-ancilla reflections) are summarized by a single hardware-time metric.")
     print("   This establishes the physical baseline before transitioning to QSVT.")
 
 
@@ -1190,11 +1190,11 @@ def _save_oaa_routing_figure(
     ax2.set_ylabel("SWAP count")
     ax2.legend(fontsize=8)
 
-    hex_blowup = [h / max(1.0, a) for h, a in zip(depth_hex, depth_all)]
-    lin_blowup = [l / max(1.0, a) for l, a in zip(depth_lin, depth_all)]
-    ax3.plot(ms, hex_blowup, marker="s", linewidth=2.0, label="heavy-hex / all", color="#8c564b")
-    ax3.plot(ms, lin_blowup, marker="D", linewidth=2.0, label="linear / all", color="#1f77b4")
-    ax3.set_title("Depth Blowup Factor")
+    hex_multiplier = [h / max(1.0, a) for h, a in zip(depth_hex, depth_all)]
+    lin_multiplier = [l / max(1.0, a) for l, a in zip(depth_lin, depth_all)]
+    ax3.plot(ms, hex_multiplier, marker="s", linewidth=2.0, label="heavy-hex / all", color="#8c564b")
+    ax3.plot(ms, lin_multiplier, marker="D", linewidth=2.0, label="linear / all", color="#1f77b4")
+    ax3.set_title("Depth Multiplier")
     ax3.set_ylabel("Multiplier")
     ax3.legend(fontsize=8)
 
@@ -1299,3 +1299,4 @@ if __name__ == "__main__":
         logger.log.close()
         sys.stdout = logger.terminal
         print(f"\nBenchmark suite complete. Results saved to {output_filepath}")
+
