@@ -20,6 +20,7 @@ Compatibility note:
 
 from __future__ import annotations
 
+import ast
 import argparse
 import csv
 import json
@@ -29,12 +30,22 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _RESULT_DIR = os.path.join(_HERE, f"[RESULT]{os.path.splitext(os.path.basename(__file__))[0]}")
 os.makedirs(_RESULT_DIR, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", os.path.join(_RESULT_DIR, ".mplconfig"))
+# Normal paper-companion runs only save figures, so prefer a non-interactive
+# backend unless the user explicitly asks for on-screen plot windows.
+_SHOW_PLOTS_REQUESTED = "--show-plots" in sys.argv or any(
+    token.split("=", 1)[0].strip().replace("-", "_").lower() == "show_plots"
+    and token.split("=", 1)[1].strip().lower() == "true"
+    for token in sys.argv[1:]
+    if "=" in token
+)
+if not _SHOW_PLOTS_REQUESTED:
+    os.environ.setdefault("MPLBACKEND", "Agg")
 
 import numpy as np
 import sympy as sp
@@ -116,6 +127,239 @@ try:
     from qiskit.providers.fake_provider import GenericBackendV2
 except Exception:  # pragma: no cover
     GenericBackendV2 = None  # type: ignore[assignment]
+
+
+def _parse_cli_value(raw: str):
+    try:
+        return ast.literal_eval(raw)
+    except Exception:
+        lowered = raw.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered == "none":
+            return None
+        return raw
+
+
+def _split_top_level_commas(text: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    quote_char = ""
+    escaped = False
+
+    for ch in text:
+        if escaped:
+            current.append(ch)
+            escaped = False
+            continue
+        if quote_char:
+            current.append(ch)
+            if ch == "\\":
+                escaped = True
+            elif ch == quote_char:
+                quote_char = ""
+            continue
+        if ch in ("'", '"'):
+            quote_char = ch
+            current.append(ch)
+            continue
+        if ch in "([{":
+            depth += 1
+            current.append(ch)
+            continue
+        if ch in ")]}":
+            depth = max(0, depth - 1)
+            current.append(ch)
+            continue
+        if ch == "," and depth == 0:
+            piece = "".join(current).strip()
+            if piece:
+                parts.append(piece)
+            current = []
+            continue
+        current.append(ch)
+
+    piece = "".join(current).strip()
+    if piece:
+        parts.append(piece)
+    return parts
+
+
+def _normalize_cli_key(key: str) -> str:
+    return key.strip().replace("-", "_")
+
+
+def _parse_kwargs_text(raw: str) -> dict[str, object]:
+    kwargs: dict[str, object] = {}
+    for chunk in _split_top_level_commas(raw.strip()):
+        if "=" not in chunk:
+            raise ValueError(f"Expected key=value pair, got '{chunk}'")
+        key, value = chunk.split("=", 1)
+        kwargs[_normalize_cli_key(key)] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_kwargs_tokens(tokens: Sequence[str]) -> dict[str, object]:
+    kwargs: dict[str, object] = {}
+    for token in tokens:
+        piece = token.strip()
+        if not piece:
+            continue
+        if "=" not in piece:
+            raise ValueError(f"Expected key=value pair, got '{piece}'")
+        key, value = piece.split("=", 1)
+        kwargs[_normalize_cli_key(key)] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_command_line(argv: Sequence[str]) -> Optional[dict[str, object]]:
+    # Preserve the existing argparse path whenever standard option flags are used.
+    if not argv:
+        return {}
+    if any(token.startswith("-") for token in argv):
+        return None
+    if len(argv) == 1:
+        return _parse_kwargs_text(argv[0])
+    return _parse_kwargs_tokens(argv)
+
+
+def _build_default_cli_kwargs() -> dict[str, object]:
+    stem = Path(__file__).stem
+    parser = _build_parser()
+    defaults = vars(parser.parse_args([]))
+    defaults.update(
+        {
+            "run_all": True,
+            "run_distributed_fpaa": True,
+            "run_hardware_tradeoff": True,
+            "run_entanglement_obstruction": True,
+            "run_noise_benchmark": True,
+            "run_oracle_compiler": True,
+            "run_network_statistics": True,
+            "run_deqaaa_resource_continuation": True,
+            "run_deqaaa_shot_precision": True,
+            "run_deqaaa_partition_sweep": True,
+            "run_deqaaa_target_sweep": True,
+            "run_deqaaa_distribution_robustness": True,
+            "run_deqaaa_phase_mismatch": True,
+            "out_prefix": stem,
+            "save_json": f"{stem}_summary.json",
+        }
+    )
+    return defaults
+
+
+def _build_selective_cli_kwargs() -> dict[str, object]:
+    stem = Path(__file__).stem
+    parser = _build_parser()
+    defaults = vars(parser.parse_args([]))
+    defaults.update(
+        {
+            "out_prefix": stem,
+            "save_json": f"{stem}_summary.json",
+        }
+    )
+    return defaults
+
+
+def _canonicalize_kwargs(kwargs: dict[str, object], valid_keys: Sequence[str]) -> tuple[dict[str, object], list[str]]:
+    key_map = {key.lower(): key for key in valid_keys}
+    canonical: dict[str, object] = {}
+    unknown: list[str] = []
+    for key, value in kwargs.items():
+        canonical_key = key_map.get(key.lower())
+        if canonical_key is None:
+            unknown.append(key)
+            continue
+        canonical[canonical_key] = value
+    return canonical, unknown
+
+
+def _format_cli_option_value(value: object) -> str:
+    if isinstance(value, (list, tuple)):
+        if value and all(isinstance(item, (list, tuple)) for item in value):
+            return ";".join(",".join(str(part) for part in item) for item in value)
+        return ",".join(str(item) for item in value)
+    return str(value)
+
+
+def _kwargs_to_cli_args(kwargs: dict[str, object], parser: argparse.ArgumentParser) -> list[str]:
+    argv: list[str] = []
+    option_actions = [action for action in parser._actions if action.option_strings]
+
+    for action in option_actions:
+        if action.dest not in kwargs:
+            continue
+        value = kwargs[action.dest]
+        option = action.option_strings[-1]
+        if action.nargs == 0:
+            if bool(value):
+                argv.append(option)
+            continue
+        if value is None:
+            continue
+        if action.nargs == "?" and value is True:
+            argv.append(option)
+            continue
+        argv.extend([option, _format_cli_option_value(value)])
+    return argv
+
+
+def _merge_custom_kwargs(overrides: dict[str, object], default_kwargs: dict[str, object]) -> dict[str, object]:
+    run_keys = {key for key in default_kwargs if key.startswith("run_")}
+    base = dict(default_kwargs)
+    if any(key in overrides for key in run_keys):
+        base = _build_selective_cli_kwargs()
+    base.update(overrides)
+    return base
+
+
+def _interactive_rerun_prompt(defaults: dict[str, object]) -> None:
+    if not sys.stdin.isatty():
+        return
+
+    print("\n" + "=" * 72)
+    print("INTERACTIVE RE-RUN MODE")
+    print("=" * 72)
+    print("Press Enter to finish, or enter custom key=value pairs to rerun.")
+    print("Example: n=6, j=2, num_good=4, trials=50")
+    print("Example: run_all=False, run_distributed_fpaa=True, epsilon=0.2")
+    print("Example: run_deqaaa_target_sweep=True, deqaaa_target_set_sweep=[[8,14],[8,9]]")
+
+    try:
+        raw = input("Custom parameters: ").strip()
+    except EOFError:
+        print("\nInteractive mode closed.")
+        return
+
+    if not raw:
+        print("Interactive mode finished.")
+        return
+    if "=" not in raw:
+        print("No key=value parameters detected. Interactive mode finished.")
+        return
+
+    try:
+        kwargs = _parse_kwargs_text(raw)
+    except Exception as exc:
+        print(f"Could not parse custom parameters: {exc}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    canonical_kwargs, unknown = _canonicalize_kwargs(kwargs, defaults.keys())
+    if unknown:
+        print(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    merged = _merge_custom_kwargs(canonical_kwargs, defaults)
+    parser = _build_parser()
+    cli_args = _kwargs_to_cli_args(merged, parser)
+    print(f"\nRe-running with parameters: {merged}")
+    main(cli_args)
 
 
 @dataclass
@@ -3506,29 +3750,23 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 if __name__ == "__main__":
     start_one_click_session(__file__, figure_prefix="dqaa")
-    if len(sys.argv) == 1:
-        stem = Path(__file__).stem
-        raise SystemExit(
-            main(
-                [
-                    "--run-all",
-                    "--run-distributed-fpaa",
-                    "--run-hardware-tradeoff",
-                    "--run-entanglement-obstruction",
-                    "--run-noise-benchmark",
-                    "--run-oracle-compiler",
-                    "--run-network-statistics",
-                    "--run-deqaaa-resource-continuation",
-                    "--run-deqaaa-shot-precision",
-                    "--run-deqaaa-partition-sweep",
-                    "--run-deqaaa-target-sweep",
-                    "--run-deqaaa-distribution-robustness",
-                    "--run-deqaaa-phase-mismatch",
-                    "--out-prefix",
-                    stem,
-                    "--save-json",
-                    f"{stem}_summary.json",
-                ]
-            )
-        )
-    raise SystemExit(main())
+    cli_kwargs = _parse_command_line(sys.argv[1:])
+    if cli_kwargs is None:
+        raise SystemExit(main())
+
+    default_kwargs = _build_default_cli_kwargs()
+    if cli_kwargs:
+        canonical_kwargs, unknown = _canonicalize_kwargs(cli_kwargs, default_kwargs.keys())
+        if unknown:
+            raise ValueError(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        merged = _merge_custom_kwargs(canonical_kwargs, default_kwargs)
+        parser = _build_parser()
+        raise SystemExit(main(_kwargs_to_cli_args(merged, parser)))
+
+    # No explicit CLI arguments means: run the default paper companion once,
+    # then offer an optional interactive rerun with custom overrides.
+    parser = _build_parser()
+    exit_code = main(_kwargs_to_cli_args(default_kwargs, parser))
+    _interactive_rerun_prompt(default_kwargs)
+    raise SystemExit(exit_code)
+
