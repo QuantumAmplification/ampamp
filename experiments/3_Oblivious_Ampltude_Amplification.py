@@ -16,12 +16,19 @@ Standing notation aligned with final.tex:
 
 from __future__ import annotations
 
+import ast
 import logging
 import csv
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional, Sequence
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_RESULT_DIR = os.path.join(_HERE, f"[RESULT]{os.path.splitext(os.path.basename(__file__))[0]}")
+os.makedirs(_RESULT_DIR, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(_RESULT_DIR, ".mplconfig"))
 
 import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister, transpile
@@ -76,7 +83,97 @@ except Exception:
 
 # configure logger for informative output
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+
+
+def _parse_cli_value(raw: str):
+    try:
+        return ast.literal_eval(raw)
+    except Exception:
+        lowered = raw.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered == "none":
+            return None
+        return raw
+
+
+def _split_top_level_commas(text: str) -> List[str]:
+    parts: List[str] = []
+    current: List[str] = []
+    depth = 0
+    quote_char = ""
+    escaped = False
+
+    for ch in text:
+        if escaped:
+            current.append(ch)
+            escaped = False
+            continue
+        if quote_char:
+            current.append(ch)
+            if ch == "\\":
+                escaped = True
+            elif ch == quote_char:
+                quote_char = ""
+            continue
+        if ch in ("'", '"'):
+            quote_char = ch
+            current.append(ch)
+            continue
+        if ch in "([{":
+            depth += 1
+            current.append(ch)
+            continue
+        if ch in ")]}":
+            depth = max(0, depth - 1)
+            current.append(ch)
+            continue
+        if ch == "," and depth == 0:
+            piece = "".join(current).strip()
+            if piece:
+                parts.append(piece)
+            current = []
+            continue
+        current.append(ch)
+
+    piece = "".join(current).strip()
+    if piece:
+        parts.append(piece)
+    return parts
+
+
+def _parse_kwargs_text(raw: str) -> Dict[str, object]:
+    kwargs: Dict[str, object] = {}
+    for chunk in _split_top_level_commas(raw.strip()):
+        if "=" not in chunk:
+            raise ValueError(f"Expected key=value pair, got '{chunk}'")
+        key, value = chunk.split("=", 1)
+        kwargs[key.strip()] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_kwargs_tokens(tokens: Sequence[str]) -> Dict[str, object]:
+    kwargs: Dict[str, object] = {}
+    for token in tokens:
+        piece = token.strip()
+        if not piece:
+            continue
+        if "=" not in piece:
+            raise ValueError(f"Expected key=value pair, got '{piece}'")
+        key, value = piece.split("=", 1)
+        kwargs[key.strip()] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_command_line(argv: Sequence[str]) -> Dict[str, object]:
+    if not argv:
+        return {}
+    if len(argv) == 1 and "," in argv[0]:
+        return _parse_kwargs_text(argv[0])
+    return _parse_kwargs_tokens(argv)
 
 
 @dataclass
@@ -530,6 +627,9 @@ def experiment_subnormalization_rescue(
             np.sum(np.abs(state.data[0::2]) ** 2)
         )
 
+    print("\n" + "-" * 62)
+    print("SUBNORMALIZATION RESCUE ANALYSIS")
+    print("-" * 62)
     print(f"Initial success probability p: {p:.6f}")
     print(f"Theoretical OAA optimum k*: {k_opt}")
     print(f"Best simulated success probability p_k: {success_probs.max():.6f} at k={int(np.argmax(success_probs))}")
@@ -685,7 +785,9 @@ def experiment_geometric_obstruction(
     valid_fid, valid_prob = _run_loop(A_valid, A_valid_inv)
     invalid_fid, invalid_prob = _run_loop(A_invalid, A_invalid_inv)
 
-    print("Geometric Obstruction Experiment")
+    print("\n" + "-" * 62)
+    print("GEOMETRIC OBSTRUCTION ANALYSIS")
+    print("-" * 62)
     print(f"Valid setting p={p_valid:.3f}")
     print(f"Invalid setting p(|0>)={p_invalid_zero:.3f}, p(|1>)={p_invalid_one:.3f}")
     print(f"Valid fidelity range: [{valid_fid.min():.6f}, {valid_fid.max():.6f}]")
@@ -1082,46 +1184,159 @@ def experiment_identity_block_extractor(
 # end of module
 
 
-def run_all_one_click(show_plot: bool = False) -> None:
-    """Run all OAA experiments and persist artifacts in the current directory."""
-    stem = Path(__file__).stem
+def run_full_analysis(
+    rescue_p: float = 0.005,
+    rescue_data_gate: str = "h",
+    rescue_overshoot_factor: float = 1.5,
+    obstruction_p_valid: float = 0.05,
+    obstruction_p_invalid_zero: float = 0.05,
+    obstruction_p_invalid_one: float = 0.20,
+    obstruction_max_k: int = 15,
+    lcu_c0: float = 0.6,
+    lcu_c1: float = 0.4,
+    lcu_ft_basis: Optional[list[str]] = None,
+    lcu_optimization_level: int = 0,
+    audit_m: int = 2,
+    audit_l: int = 1,
+    audit_p: float = 0.15,
+    audit_seed: int = 42,
+    audit_c0: float = 0.6,
+    audit_c1: float = 0.4,
+    out_prefix: str = "oaa",
+    show_plot: bool = False,
+) -> None:
     experiment_subnormalization_rescue(
-        p=0.005,
-        data_gate="h",
-        overshoot_factor=1.5,
+        p=rescue_p,
+        data_gate=rescue_data_gate,
+        overshoot_factor=rescue_overshoot_factor,
         show_plot=show_plot,
-        save_path=f"{stem}_module1_subnormalization_rescue.png",
+        save_path=f"{out_prefix}_module1_subnormalization_rescue.png",
     )
     experiment_geometric_obstruction(
-        p_valid=0.05,
-        p_invalid_zero=0.05,
-        p_invalid_one=0.20,
-        max_k=15,
+        p_valid=obstruction_p_valid,
+        p_invalid_zero=obstruction_p_invalid_zero,
+        p_invalid_one=obstruction_p_invalid_one,
+        max_k=obstruction_max_k,
         show_plot=show_plot,
-        save_path=f"{stem}_module2_geometric_obstruction.png",
+        save_path=f"{out_prefix}_module2_geometric_obstruction.png",
     )
     experiment_explicit_lcu_block_encoding(
-        c0=0.6,
-        c1=0.4,
-        optimization_level=0,
-        save_csv_path=f"{stem}_module3_explicit_lcu_resources.csv",
+        c0=lcu_c0,
+        c1=lcu_c1,
+        ft_basis=lcu_ft_basis,
+        optimization_level=lcu_optimization_level,
+        save_csv_path=f"{out_prefix}_module3_explicit_lcu_resources.csv",
     )
     experiment_identity_block_extractor(
-        m=2,
-        l=1,
-        p=0.15,
-        seed=42,
-        c0=0.6,
-        c1=0.4,
-        save_csv_path=f"{stem}_module4_identity_block_audit.csv",
+        m=audit_m,
+        l=audit_l,
+        p=audit_p,
+        seed=audit_seed,
+        c0=audit_c0,
+        c1=audit_c1,
+        save_csv_path=f"{out_prefix}_module4_identity_block_audit.csv",
     )
-    print("One-click OAA run complete.")
+    print("Oblivious amplitude amplification analysis complete.")
+
+
+def _interactive_rerun_prompt(defaults: Dict[str, object]) -> None:
+    if not sys.stdin.isatty():
+        return
+
+    print("\n" + "=" * 72)
+    print("INTERACTIVE RE-RUN MODE")
+    print("=" * 72)
+    print("Press Enter to finish, or enter custom key=value pairs to rerun.")
+    print("Example: rescue_p=0.01, rescue_overshoot_factor=2.0")
+    print("Example: obstruction_p_invalid_one=0.35, obstruction_max_k=20")
+    print("Example: lcu_c0=0.7, lcu_c1=0.3, audit_seed=7")
+
+    try:
+        raw = input("Custom parameters: ").strip()
+    except EOFError:
+        print("\nInteractive mode closed.")
+        return
+
+    if not raw:
+        print("Interactive mode finished.")
+        return
+    if "=" not in raw:
+        print("No key=value parameters detected. Interactive mode finished.")
+        return
+
+    try:
+        kwargs = _parse_kwargs_text(raw)
+    except Exception as exc:
+        print(f"Could not parse custom parameters: {exc}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    allowed = {
+        "rescue_p",
+        "rescue_data_gate",
+        "rescue_overshoot_factor",
+        "obstruction_p_valid",
+        "obstruction_p_invalid_zero",
+        "obstruction_p_invalid_one",
+        "obstruction_max_k",
+        "lcu_c0",
+        "lcu_c1",
+        "lcu_ft_basis",
+        "lcu_optimization_level",
+        "audit_m",
+        "audit_l",
+        "audit_p",
+        "audit_seed",
+        "audit_c0",
+        "audit_c1",
+        "out_prefix",
+        "show_plot",
+    }
+    unknown = set(kwargs) - allowed
+    if unknown:
+        print(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    merged = dict(defaults)
+    merged.update(kwargs)
+    print(f"\nRe-running with parameters: {merged}")
+    run_full_analysis(**merged)
 
 
 if __name__ == "__main__":
     start_one_click_session(__file__, figure_prefix="oaa")
-    # Direct "Run" in IDE executes the full OAA pipeline.
-    if len(sys.argv) == 1:
-        run_all_one_click(show_plot=False)
+    default_kwargs: Dict[str, object] = {
+        "rescue_p": 0.005,
+        "rescue_data_gate": "h",
+        "rescue_overshoot_factor": 1.5,
+        "obstruction_p_valid": 0.05,
+        "obstruction_p_invalid_zero": 0.05,
+        "obstruction_p_invalid_one": 0.20,
+        "obstruction_max_k": 15,
+        "lcu_c0": 0.6,
+        "lcu_c1": 0.4,
+        "lcu_ft_basis": None,
+        "lcu_optimization_level": 0,
+        "audit_m": 2,
+        "audit_l": 1,
+        "audit_p": 0.15,
+        "audit_seed": 42,
+        "audit_c0": 0.6,
+        "audit_c1": 0.4,
+        "out_prefix": Path(__file__).stem,
+        "show_plot": False,
+    }
+    cli_kwargs = _parse_command_line(sys.argv[1:])
+    if cli_kwargs:
+        allowed = set(default_kwargs)
+        unknown = set(cli_kwargs) - allowed
+        if unknown:
+            raise ValueError(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        merged = dict(default_kwargs)
+        merged.update(cli_kwargs)
+        run_full_analysis(**merged)
     else:
-        run_all_one_click(show_plot=False)
+        run_full_analysis(**default_kwargs)
+        _interactive_rerun_prompt(default_kwargs)
+
