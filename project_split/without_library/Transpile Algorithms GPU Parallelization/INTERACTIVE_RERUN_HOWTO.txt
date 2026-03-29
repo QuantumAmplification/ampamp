@@ -1,0 +1,504 @@
+INTERACTIVE RERUN MODE AND CUSTOM CLI GUIDE
+
+This guide explains:
+1. how to rerun any transpile algorithm scene directly from the CLI,
+2. what scene labels each transpile script accepts,
+3. which custom keys each scene takes,
+4. what a custom command should look like,
+5. how full-state / full-entanglement capture behaves by default.
+
+The examples below use:
+python "Transpile Algorithms Parallelization/<script>.py"
+
+
+GENERAL USAGE
+
+Default run:
+python "Transpile Algorithms Parallelization/<script>.py"
+
+Run one scene directly:
+python "Transpile Algorithms Parallelization/<script>.py" A
+
+Run one scene with custom parameters:
+python "Transpile Algorithms Parallelization/<script>.py" A key1=value1 key2=value2
+
+Equivalent alternate form:
+python "Transpile Algorithms Parallelization/<script>.py" case=A key1=value1 key2=value2
+python "Transpile Algorithms Parallelization/<script>.py" scenario=A key1=value1 key2=value2
+
+Choose capture mode explicitly:
+python "Transpile Algorithms Parallelization/<script>.py" --capture-mode full
+python "Transpile Algorithms Parallelization/<script>.py" --capture-mode light
+
+If you launch a transpile script interactively without capture flags, it now asks:
+- Full: every-step state and entanglement capture, larger and slower
+- Light: sampled checkpoints, faster and lighter
+- Press Enter for Full
+
+Important default:
+- Full capture is now the default in the transpile suite.
+- That means entanglement and state monitoring are on by default.
+- Every-step capture is on by default.
+- Full basis-state export is on by default.
+
+Optional monitoring overrides:
+- Disable all monitoring:
+  python "Transpile Algorithms Parallelization/<script>.py" A --no-states --no-entanglement
+- Increase capture limits for larger circuits:
+  python "Transpile Algorithms Parallelization/<script>.py" A --state-qubits 12 --entanglement-qubits 12
+
+
+VALUE SYNTAX
+
+Integers:
+4
+12
+
+Floats:
+0.1
+1e-3
+
+Booleans:
+True
+False
+
+Lists:
+[1,2,3]
+[10,25]
+
+Tuples:
+(1,2,4,6)
+(2,2,2)
+
+Strings:
+"line"
+"1111"
+"FakeGuadalupeV2"
+
+None:
+None
+
+
+ALGORITHM 1
+Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py
+
+Scene labels and signatures:
+- A: run_scenario_a(n_qubits=6, good_indices=[10, 25])
+  Example:
+  python "Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py" A n_qubits=8 good_indices='[5,19]'
+- B: run_scenario_b(n_qubits=6, good_indices=[10, 25])
+  Example:
+  python "Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py" B n_qubits=7 good_indices='[3,9]'
+- C: run_scenario_c(n_qubits=5, k=2)
+  Example:
+  python "Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py" C n_qubits=6 k=3
+- D: run_scenario_d(max_qubits=8)
+  Example:
+  python "Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py" D max_qubits=10
+- E: run_scenario_e(n_qubits=4, max_k=10)
+  Example:
+  python "Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py" E n_qubits=5 max_k=12
+- F: run_scenario_f(qubit_sizes=[3, 5, 7])
+  Example:
+  python "Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py" F qubit_sizes='[4,6,8]'
+- G: run_scenario_g(n_qubits=STANDARD_QUBITS)
+  Example:
+  python "Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py" G n_qubits=12
+- H: run_scenario_h(n_qubits=6, M=48)
+  Example:
+  python "Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py" H n_qubits=7 M=32
+- P: run_profiling_benchmark(n_qubits=STANDARD_QUBITS)
+  Example:
+  python "Transpile Algorithms Parallelization/1_Grover's_Search_Algorithm_transpile_gpu.py" P n_qubits=6
+
+
+ALGORITHM 1.1
+Transpile Algorithms Parallelization/1.1_QAOA_Grover_Laboratory_gpu.py
+
+Scene labels and signatures:
+- A: scenario_a_baseline(num_qubits=5, max_p=6, target_idx=0, n_restarts=4, seed=42)
+  Example:
+  python "Transpile Algorithms Parallelization/1.1_QAOA_Grover_Laboratory_gpu.py" A num_qubits=4 max_p=3 target_idx=1 n_restarts=2 seed=9
+- B: scenario_b_medium_scale(num_qubits=6, max_p=5, target_idx=0, n_restarts=3, seed=84)
+  Example:
+  python "Transpile Algorithms Parallelization/1.1_QAOA_Grover_Laboratory_gpu.py" B num_qubits=5 max_p=4 target_idx=2 n_restarts=2 seed=21
+- C: scenario_c_target_symmetry(num_qubits=5, depth_p=4, target_indices=(0, 1, 3, 7, 16), n_restarts=4, seed=42)
+  Example:
+  python "Transpile Algorithms Parallelization/1.1_QAOA_Grover_Laboratory_gpu.py" C num_qubits=5 depth_p=3 target_indices='(0,3,7)' n_restarts=2 seed=12
+- D: scenario_d_optimizer_luck(num_qubits=5, depth_p=4, target_idx=0, seeds=(11, 23, 37, 41, 53), n_restarts_per_seed=2)
+  Example:
+  python "Transpile Algorithms Parallelization/1.1_QAOA_Grover_Laboratory_gpu.py" D num_qubits=4 depth_p=3 target_idx=1 seeds='(7,11,19)' n_restarts_per_seed=1
+- E: scenario_e_backend_agreement(num_qubits=5, depth_p=3, target_idx=0, n_restarts=4, seed=42)
+  Example:
+  python "Transpile Algorithms Parallelization/1.1_QAOA_Grover_Laboratory_gpu.py" E num_qubits=4 depth_p=2 target_idx=1 n_restarts=2 seed=5
+- F: scenario_f_dense_reference(num_qubits=5, max_p=4, target_idx=0, n_restarts=3, seed=42)
+  Example:
+  python "Transpile Algorithms Parallelization/1.1_QAOA_Grover_Laboratory_gpu.py" F num_qubits=4 max_p=3 target_idx=1 n_restarts=2 seed=8
+
+
+ALGORITHM 2
+Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py
+
+Scene labels and signatures:
+- A: run_scenario_a_unrolling_baseline(n_qubits=5, good_indices=[0], L=3, optimization_level=3)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" A n_qubits=6 good_indices='[1,3]' L=4 optimization_level=2
+- B: run_scenario_b_topological_routing(n_qubits=5, good_indices=[0], L=3, optimization_level=3)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" B n_qubits=6 good_indices='[0,2]' L=4 optimization_level=1
+- C: run_scenario_c_synthesis_annihilation_failure(n_qubits=5, good_indices=[0], L=5)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" C n_qubits=6 good_indices='[0,4]' L=7
+- D: run_scenario_d_passband_tightening_breaking_point(n_qubits=5, target_p=0.1)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" D n_qubits=6 target_p=0.08
+- E: run_scenario_e_high_density_rescue(n_qubits=6, M=48)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" E n_qubits=7 M=56
+- F: run_scenario_f_fault_tolerant_t_gate_explosion(n_qubits=4, L=3, synthesis_eps=1e-3)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" F n_qubits=5 L=4 synthesis_eps=1e-4
+- G: run_scenario_g_modular_nesting_tradeoff(n_qubits=4, L1=3, L2=3)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" G n_qubits=5 L1=5 L2=3
+- H: run_scenario_h_coherent_calibration_trap(n_qubits=4, L=5)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" H n_qubits=5 L=7
+- I: run_scenario_i_ancilla_assisted_mcp_decomposition(n_qubits=STANDARD_QUBITS)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" I n_qubits=8
+- J: run_scenario_j_plateau_overhead_tax(p_target=0.05, P_floor=0.99)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" J p_target=0.08 P_floor=0.995
+- K: run_scenario_k_unified_profiler_evaluation(n_qubits=STANDARD_QUBITS, p_density=0.25)
+  Example:
+  python "Transpile Algorithms Parallelization/2_Fixed_Point_Ammplitude_Amplification_transpile_gpu.py" K n_qubits=6 p_density=0.2
+
+
+ALGORITHM 3
+Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py
+
+Scene labels and signatures:
+- A: run_scenario_a(p=0.25, m=2)
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" A p=0.2 m=3
+- B: run_scenario_b(c0=0.6, c1=0.4)
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" B c0=0.7 c1=0.3
+- C: run_scenario_c(m=6)
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" C m=8
+- D: run_scenario_d()
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" D
+- E: run_scenario_e(p=0.001)
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" E p=0.01
+- F: run_scenario_f()
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" F
+- G: run_scenario_g(p=0.1)
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" G p=0.15
+- H: run_scenario_h()
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" H
+- I: run_scenario_i(c0=0.6, c1=0.4, synthesis_eps=1e-3)
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" I c0=0.55 c1=0.45 synthesis_eps=1e-4
+- J: run_scenario_j()
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" J
+- K: run_scenario_k(p=0.25)
+  Example:
+  python "Transpile Algorithms Parallelization/3_Oblivious_Ampltude_Amplification_transpile_gpu.py" K p=0.18
+
+
+ALGORITHM 3.25
+Transpile Algorithms Parallelization/3.25_Controlled_Quantum_Amplification_transpile_gpu.py
+
+Scene labels and signatures:
+- A: run_scenario_a(epsilon=0.10, max_iterations=12)
+  Example:
+  python "Transpile Algorithms Parallelization/3.25_Controlled_Quantum_Amplification_transpile_gpu.py" A epsilon=0.08 max_iterations=10
+- B: run_scenario_b(epsilon=0.10, repetitions=1, topology="all")
+  Example:
+  python "Transpile Algorithms Parallelization/3.25_Controlled_Quantum_Amplification_transpile_gpu.py" B epsilon=0.12 repetitions=2 topology=line
+- C: run_scenario_c(epsilon=0.10, repetitions=(1, 2, 4, 6), topology="line")
+  Example:
+  python "Transpile Algorithms Parallelization/3.25_Controlled_Quantum_Amplification_transpile_gpu.py" C epsilon=0.12 repetitions='(1,3,5)' topology=line
+- D: run_scenario_d(epsilon=0.10, angle_factors=(0.70, 0.85, 1.00, 1.15, 1.30), topology="line")
+  Example:
+  python "Transpile Algorithms Parallelization/3.25_Controlled_Quantum_Amplification_transpile_gpu.py" D epsilon=0.08 angle_factors='(0.8,1.0,1.2)' topology=all
+- E: run_scenario_e(epsilon=0.10, targets=((0.90, 0.25, 0.10), (0.70, 0.55, 0.10), (0.40, 0.70, 0.20)))
+  Example:
+  python "Transpile Algorithms Parallelization/3.25_Controlled_Quantum_Amplification_transpile_gpu.py" E epsilon=0.08 targets='((0.8,0.3,0.1),(0.6,0.5,0.2))'
+- F: run_scenario_f(epsilon_pi=0.12, repetitions=(1, 2, 4, 6))
+  Example:
+  python "Transpile Algorithms Parallelization/3.25_Controlled_Quantum_Amplification_transpile_gpu.py" F epsilon_pi=0.1 repetitions='(1,2,3,4)'
+- G: run_scenario_g(epsilon=0.10, repetitions=2, topology="line")
+  Example:
+  python "Transpile Algorithms Parallelization/3.25_Controlled_Quantum_Amplification_transpile_gpu.py" G epsilon=0.09 repetitions=3 topology=all
+
+
+ALGORITHM 3.5
+Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py
+
+Scene labels and signatures:
+- A: run_scenario_a(theta=0.3, mizel_c=1.5, m_content=1)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" A theta=0.25 mizel_c=1.2 m_content=2
+- B: run_scenario_b(n_steps=10, theta=0.3, mizel_c=1.5)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" B n_steps=12 theta=0.25 mizel_c=1.2
+- C: run_scenario_c(theta=0.01, zeno_alpha=1.5, n_zeno_steps=50)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" C theta=0.02 zeno_alpha=1.2 n_zeno_steps=40
+- D: run_scenario_d(theta=0.3, n_steps=5, mizel_c=1.5)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" D theta=0.25 n_steps=6 mizel_c=1.3
+- E: run_scenario_e(theta=0.3, mizel_c=1.5, m_content=3)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" E theta=0.25 mizel_c=1.2 m_content=4
+- F: run_scenario_f()
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" F
+- G: run_scenario_g(theta=0.3, n_steps=5, mizel_c=1.5)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" G theta=0.2 n_steps=7 mizel_c=1.4
+- H: run_scenario_h(theta=0.3, mizel_c=1.5)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" H theta=0.25 mizel_c=1.1
+- I: run_scenario_i(theta=0.3, mizel_c=1.5)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" I theta=0.2 mizel_c=1.3
+- J: run_scenario_j(theta=0.3, n_steps=5, mizel_c=1.5)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" J theta=0.25 n_steps=8 mizel_c=1.3
+- K: run_scenario_k(theta=0.3, n_steps=30, mizel_c=1.5)
+  Example:
+  python "Transpile Algorithms Parallelization/3.5_FOAA_transpile_gpu.py" K theta=0.25 n_steps=20 mizel_c=1.4
+
+
+ALGORITHM 4
+Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py
+
+Scene labels and signatures:
+- A: run_scenario_a(global_n=GLOBAL_N, j=J, global_goods=GLOBAL_GOODS)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" A global_n=6 j=2 global_goods='("110110","001011")'
+- B: run_scenario_b(global_n=GLOBAL_N, j=J, global_goods=GLOBAL_GOODS)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" B global_n=6 j=2 global_goods='("110110","001011")'
+- C: run_scenario_c(global_n=GLOBAL_N, j=J, formula="(v0 & v1 & v2) | (~v0 & v3) | (v1 & ~v2 & v4) | (~v3 & v5)")
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" C global_n=6 j=2 formula='(v0 & v1) | (v2 & ~v3)'
+- D: run_scenario_d(global_n=GLOBAL_N, j=J, global_goods=GLOBAL_GOODS)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" D global_n=6 j=3 global_goods='("110110","001011")'
+- E: run_scenario_e(global_n=GLOBAL_N, j=J, good_global="110110", epsilon=EPSILON)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" E global_n=6 j=2 good_global=101101 epsilon=0.05
+- F: run_scenario_f(global_n=GLOBAL_N, j=J, global_goods=GLOBAL_GOODS, epsilon=EPSILON, shots=2048, preferred_backend="FakeGuadalupeV2")
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" F global_n=6 j=2 epsilon=0.05 shots=4096 preferred_backend=FakeKyiv
+- G: run_scenario_g(global_n=GLOBAL_N, j=J, global_goods=GLOBAL_GOODS, epsilon=EPSILON, shots_per_node=100, sifting_sigma=4.0)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" G global_n=6 j=2 epsilon=0.05 shots_per_node=200 sifting_sigma=3.0
+- H: run_scenario_h(global_n=GLOBAL_N, j=J, global_goods=GLOBAL_GOODS)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" H global_n=6 j=3 global_goods='("110110","001011")'
+- I: run_scenario_i(global_n=GLOBAL_N, j=J, global_goods=GLOBAL_GOODS, epsilon=EPSILON)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" I global_n=6 j=2 epsilon=0.08
+- J: run_scenario_j(global_n=GLOBAL_N, j=J, global_goods=GLOBAL_GOODS, epsilon=EPSILON, pristine_depol=0.01, degraded_depol=0.05, shots=2048)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" J global_n=6 j=2 epsilon=0.05 pristine_depol=0.005 degraded_depol=0.03 shots=4096
+- K: run_scenario_k(global_n=GLOBAL_N, global_goods=GLOBAL_GOODS, j_min=1, j_max=None)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" K global_n=6 j_min=1 j_max=4 global_goods='("110110","001011")'
+- L: run_scenario_l(global_n=6, dqaa_j=2, deqaaa_node_qubits=(2, 2, 2), target_indices=(8, 14), distribution_seed=21)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" L global_n=6 dqaa_j=3 deqaaa_node_qubits='(3,3)' target_indices='(8,14)' distribution_seed=11
+- M: run_scenario_m(global_n=6, deqaaa_node_qubits=(2, 2, 2), target_indices=(8, 14), shot_counts=(10000, 100000), distribution_seed=21, measurement_seed=21)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" M global_n=6 deqaaa_node_qubits='(2,2,2)' target_indices='(8,14)' shot_counts='(1000,10000)' distribution_seed=11 measurement_seed=17
+- N: run_scenario_n(global_n=6, target_indices=(8, 14), distribution_seed=21, max_nodes=None)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" N global_n=6 target_indices='(8,14)' distribution_seed=13 max_nodes=4
+- O: run_scenario_o(global_n=6, deqaaa_node_qubits=(2, 2, 2), target_sets=((8, 14), (8, 9), (14, 15), (8, 14, 30)), distribution_seed=21)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" O global_n=6 deqaaa_node_qubits='(2,2,2)' target_sets='((8,14),(8,9))' distribution_seed=7
+- P: run_scenario_p(global_n=6, deqaaa_node_qubits=(2, 2, 2), target_indices=(8, 14), distribution_seeds=(7, 21, 84, 126))
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" P global_n=6 deqaaa_node_qubits='(2,2,2)' target_indices='(8,14)' distribution_seeds='(1,3,5)'
+- Q: run_scenario_q(global_n=6, deqaaa_node_qubits=(2, 2, 2), target_indices=(8, 14), shot_counts=(100, 1000, 10000, 100000), distribution_seed=21, measurement_seed=21)
+  Example:
+  python "Transpile Algorithms Parallelization/4_Distributed _Quantum_Amplitude_Amplification_transpile_gpu.py" Q global_n=6 deqaaa_node_qubits='(2,2,2)' target_indices='(8,14)' shot_counts='(100,1000,10000)' distribution_seed=21 measurement_seed=21
+
+
+ALGORITHM 5
+Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py
+
+Scene labels and signatures:
+- A: run_scenario_a(n=8, guessed_m=1, actual_m=5, k_scan_factor=1.5)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" A n=10 guessed_m=2 actual_m=6 k_scan_factor=2.0
+- B: run_scenario_b(ideal_n=8, ideal_k_max=20, noisy_n=4, noisy_k_max=12, phase_damp_1q=0.03, phase_damp_2q=0.10)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" B ideal_n=10 ideal_k_max=24 noisy_n=5 noisy_k_max=14 phase_damp_1q=0.02 phase_damp_2q=0.08
+- C: run_scenario_c(n=10, k_max=25, rank_threshold=1e-12, noisy_perturbation=0.001)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" C n=8 k_max=18 rank_threshold=1e-10 noisy_perturbation=0.002
+- D: run_scenario_d(n=6, k_max=20, eps_oracle_deg=-5.0, eps_diff_deg=2.0, crosstalk_oracle_deg=0.6, local_z_detune_deg=0.6)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" D n=7 k_max=16 eps_oracle_deg=-4.0 eps_diff_deg=1.5 crosstalk_oracle_deg=0.4 local_z_detune_deg=0.4
+- E: run_scenario_e(n=4, k_max=12, phase_damp_1q=0.02, phase_damp_2q=0.08)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" E n=5 k_max=14 phase_damp_1q=0.01 phase_damp_2q=0.05
+- F: run_scenario_f(n=8, m_good=3, coarse_grid=48, dac_bits_sweep=(6, 8, 10, 12, 14, 16))
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" F n=10 m_good=4 coarse_grid=32 dac_bits_sweep='(6,8,10,12)'
+- G: run_scenario_g(n_min=5, n_max=30, noancilla_max=8, optimization_level=1)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" G n_min=4 n_max=16 noancilla_max=6 optimization_level=2
+- H: run_scenario_h(n=8, m_good=3)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" H n=10 m_good=5
+- I: run_scenario_i(p_s1=0.20, p_fail_total=0.70)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" I p_s1=0.15 p_fail_total=0.6
+- J: run_scenario_j(p_s1=0.20, p_fail=0.70)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" J p_s1=0.18 p_fail=0.65
+- K: run_scenario_k(total_ps=0.05, t1=100.0, t2=1000.0, t3=10000.0, sample_pcts=(1, 10, 25, 50, 75, 90, 99))
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" K total_ps=0.08 t1=120.0 t2=900.0 t3=8000.0 sample_pcts='(5,25,50,75,95)'
+- L: run_scenario_l(t_halt=100, t_max=10000, cx_time_ns=100, T1_ns=100_000, T2_ns=80_000, n_qubits_idle=4)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" L t_halt=120 t_max=8000 cx_time_ns=120 T1_ns=120000 T2_ns=90000 n_qubits_idle=6
+- M: run_scenario_m(zz_rate_per_cx=0.002, n_data_cx_gates=500, n_flag_qubits=3, cx_sweep=(100, 250, 500, 1000, 2000))
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" M zz_rate_per_cx=0.003 n_data_cx_gates=600 n_flag_qubits=4 cx_sweep='(100,300,600,1200)'
+- N: run_scenario_n(mid_meas_latency_ns=1000, cx_time_ns=100)
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" N mid_meas_latency_ns=800 cx_time_ns=120
+- O: run_scenario_o(n=4, good_bits="1111")
+  Example:
+  python "Transpile Algorithms Parallelization/5_Variable_Time_Amplitude_Amplification_transpile_gpu.py" O n=5 good_bits=10111
+
+
+ALGORITHM 6
+Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py
+
+Scene labels and signatures:
+- A: run_scenario_a(n_data=6)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" A n_data=5
+- B: run_scenario_b(n_data=8, phase_count=19)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" B n_data=6 phase_count=13
+- C: run_scenario_c(n_data=5, phase=0.31)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" C n_data=4 phase=0.25
+- D: run_scenario_d(n_data=5)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" D n_data=4
+- E: run_scenario_e()
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" E
+- F: run_scenario_f(n_data=4)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" F n_data=5
+- G: run_scenario_g(n_data=3, qsvt_degree=41)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" G n_data=4 qsvt_degree=25
+- H: run_scenario_h(n_data=5, degrees=(9, 21, 41, 61), coherence_ns=80_000.0)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" H n_data=6 degrees='(7,15,31)' coherence_ns=120000.0
+- I: run_scenario_i(n_qubits=4, max_layers=6)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" I n_qubits=5 max_layers=8
+- J: run_scenario_j(n_data=4, core_degree=15)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" J n_data=5 core_degree=21
+- K: run_scenario_k(n_data=5, degrees=(5, 15, 25, 35, 45), coherence_ns=80_000.0)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" K n_data=6 degrees='(5,11,21,31)' coherence_ns=100000.0
+- L: run_scenario_l()
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" L
+- M: run_scenario_m()
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" M
+- N: run_scenario_n(n_data=4, rounds=5)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" N n_data=5 rounds=6
+- O: run_scenario_o(n_data=4, degree=41)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" O n_data=5 degree=25
+- P: run_scenario_p()
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" P
+- Q: run_scenario_q(test_bits=(4, 8, 12))
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" Q test_bits='(3,6,9)'
+- R: run_scenario_r()
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" R
+- S: run_scenario_s(n_data=5, degree=21)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" S n_data=6 degree=17
+- T: run_scenario_t(n_data=STANDARD_QUBITS, grover_iterations=3, fpaa_length=3, dqaa_prefix_bits=1, qsvt_degree=21)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" T n_data=6 grover_iterations=4 fpaa_length=5 dqaa_prefix_bits=2 qsvt_degree=17
+- U: run_scenario_u(n_data=STANDARD_QUBITS, rounds=6)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" U n_data=6 rounds=4
+- V: run_scenario_v(n_data=STANDARD_QUBITS, degree=25)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" V n_data=6 degree=19
+- W: run_scenario_w(n_data=STANDARD_QUBITS, qsvt_degree=17, fpaa_length=9)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" W n_data=6 qsvt_degree=21 fpaa_length=7
+- X: run_scenario_x(n_data=STANDARD_QUBITS, degree=21)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" X n_data=6 degree=15
+- Y: run_scenario_y(n_data=STANDARD_QUBITS)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" Y n_data=6
+- Z: run_scenario_z(n_data=STANDARD_QUBITS, grover_iterations=3, fpaa_length=3, dqaa_prefix_bits=1, qsvt_degree=21)
+  Example:
+  python "Transpile Algorithms Parallelization/6_Quantum_Singular_Variable_Transformation_transpile_gpu.py" Z n_data=6 grover_iterations=4 fpaa_length=5 dqaa_prefix_bits=2 qsvt_degree=17
+
+
+ALGORITHM 7
+Transpile Algorithms Parallelization/7_Unified_Comparative_Scaling_Analysis_gpu.py
+
+Scene labels and signatures:
+- A: run_scenario_a(n_data=4, rounds=2, seed=42)
+  Example:
+  python "Transpile Algorithms Parallelization/7_Unified_Comparative_Scaling_Analysis_gpu.py" A n_data=5 rounds=3 seed=11
+
+
+BATCH RUNNER
+Transpile Algorithms Parallelization/run_all_transpile_algorithms.py
+
+Useful commands:
+- Run one representative scene from every transpile script in full mode:
+  python "Transpile Algorithms Parallelization/run_all_transpile_algorithms.py"
+- Run all built-in scenes from every transpile script in full mode:
+  python "Transpile Algorithms Parallelization/run_all_transpile_algorithms.py" --all-scenarios
+- Filter to only one family:
+  python "Transpile Algorithms Parallelization/run_all_transpile_algorithms.py" --only Grover
+- Use a lighter sampled mode:
+  python "Transpile Algorithms Parallelization/run_all_transpile_algorithms.py" --profile sampled
+
+
+NOTES
+
+- If you give custom parameters, always place the scene label first unless you use case=A or scenario=A.
+- If a value contains spaces or shell-sensitive characters, wrap it in quotes.
+- Some scenes are computationally heavy. Full capture mode can make them much slower and larger on disk.
+- If a scene exceeds the full-state qubit limit, increase it with:
+  --state-qubits <N> --entanglement-qubits <N>
