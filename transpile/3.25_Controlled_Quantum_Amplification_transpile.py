@@ -671,3 +671,4 @@ if __name__ == "__main__":
     sys.stderr = old_stderr
     logger.close()
     print(f"\nBenchmark suite complete. Results saved to {output_filepath}")
+
