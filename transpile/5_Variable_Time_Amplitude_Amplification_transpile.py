@@ -164,14 +164,14 @@ def run_interactive_scenario_repl(scenarios, *, sep):
 # ╚═════════════════════════════════════════════════════════════════════╝
 
 def run_scenario_a(n: int = 8, guessed_m: int = 1, actual_m: int = 5, k_scan_factor: float = 1.5):
-    """A. THE OVER-ROTATION EXECUTION OVERHEAD — gate depth wasted past the true peak."""
+    """A. OVER-ROTATION OVERHEAD ANALYSIS — gate depth expended beyond the optimal peak."""
     print(f"\n{SEP}")
-    print("SCENARIO A: THE OVER-ROTATION EXECUTION OVERHEAD")
+    print("SCENARIO A: OVER-ROTATION OVERHEAD ANALYSIS")
     print(SEP)
     print(f"Guessing M={guessed_m} when true M={actual_m} in n={n} (N={2**n}). Quantifying wasted depth.\n")
     res = vtaa.experiment_souffle_catastrophe(n=n, guessed_m=guessed_m, actual_m=actual_m, k_scan_factor=k_scan_factor)
 
-    # Find the TRUE optimal k for actual M
+    # Find the exact optimal k for the actual value of M.
     theta_actual = float(np.arcsin(np.sqrt(res.actual_m / res.N)))
     k_true_opt = max(0, int(np.floor(np.pi / (4.0 * theta_actual) - 0.5)))
     p_true_peak = float(np.sin((2 * k_true_opt + 1) * theta_actual) ** 2)
@@ -192,16 +192,16 @@ def run_scenario_a(n: int = 8, guessed_m: int = 1, actual_m: int = 5, k_scan_fac
     print(f"{'P at guessed k* (actual circuit)':<40} | {res.prob_at_halt:.6f}")
     print(f"{'P at true k* (actual circuit)':<40} | {p_true_peak:.6f}")
     print(f"{'Peak P before guessed halt':<40} | {res.peak_prob_before_halt:.6f}")
-    print(f"{'Collapse from peak':<40} | {res.collapse_from_peak:.6f}")
+    print(f"{'Reduction from peak':<40} | {res.collapse_from_peak:.6f}")
     print(f"{'Wasted iterations past true peak':<40} | {wasted_iters}")
     print(f"{'Wasted CX gates (est.)':<40} | {wasted_cx}")
     print(f"{'Wasted limit-clock time (est.)':<40} | {wasted_ns} ns")
 
-    print(f"\n-> The algorithm OVER-ROTATED {wasted_iters} iterations past the true peak.")
-    print(f"   Probability collapsed from {res.peak_prob_before_halt:.4f} to {res.prob_at_halt:.4f}")
-    print(f"   incurring {wasted_cx} CX gates ({wasted_ns} ns) with no net gain.")
-    print("-> CONCLUSION: Without knowing M, over-rotation wastes physical")
-    print("   coherence time. VTAA's primary motivation is to eliminate this exact failure mode.")
+    print(f"\n-> The algorithm executed {wasted_iters} iterations beyond the true peak.")
+    print(f"   Success probability decreased from {res.peak_prob_before_halt:.4f} to {res.prob_at_halt:.4f}.")
+    print(f"   This incurred {wasted_cx} CX gates ({wasted_ns} ns) with no net gain.")
+    print("-> CONCLUSION: Without knowing M, over-rotation consumes physical")
+    print("   coherence time. VTAA is motivated in part by reducing this failure mode.")
 
 
 def run_scenario_b(
@@ -325,17 +325,17 @@ def run_scenario_d(
 
     print(f"\n-> Mismatch-only rank-2 preserved: {res.mismatch_only_rank2_all}")
     print(f"   Leaky model exceeds rank-2: {res.leaky_exceeds_rank2}")
-    print("-> CONCLUSION: Pure phase mismatch generalizes the AA rotation but stays in")
+    print("-> CONCLUSION: Pure phase mismatch generalizes the AA rotation but remains in")
     print("   the 2D plane. Analog crosstalk and local Z-detuning break rank-2 confinement,")
-    print("   proving that REAL hardware errors (not just systematic offsets) are the threat.")
+    print("   showing that realistic hardware errors, not only systematic offsets, dominate this limitation.")
 
 
 def run_scenario_e(n: int = 4, k_max: int = 12, phase_damp_1q: float = 0.02, phase_damp_2q: float = 0.08):
-    """E. THE DEPHASING SPIRAL — T2 decay collapses purity toward mixed state."""
+    """E. DEPHASING-INDUCED TRAJECTORY CONTRACTION — T2 decay drives the state toward a mixed limit."""
     print(f"\n{SEP}")
-    print("SCENARIO E: THE DEPHASING SPIRAL (Open System Decay)")
+    print("SCENARIO E: DEPHASING-INDUCED TRAJECTORY CONTRACTION (Open-System Decay)")
     print(SEP)
-    print("T2 phase damping causes the Bloch trajectory to spiral inward.\n")
+    print("T2 phase damping contracts the Bloch trajectory toward the origin.\n")
 
     try:
         res = vtaa.experiment_open_system_trajectory(n=n, k_max=k_max, phase_damp_1q=phase_damp_1q, phase_damp_2q=phase_damp_2q)
@@ -358,8 +358,8 @@ def run_scenario_e(n: int = 4, k_max: int = 12, phase_damp_1q: float = 0.02, pha
     print(f"\n-> Purity decays from {res.noisy_purity[0]:.4f} to {res.noisy_purity[-1]:.4f}")
     print(f"   Trace distance to ideal 2D plane grows to {res.trace_distance_to_plane[-1]:.4f}")
     print(f"   Mixed-state limit: 1/N = {1/res.N:.4f}")
-    print("-> CONCLUSION: T2 dephasing causes the Bloch vector to spiral inward rather")
-    print("   than reaching the target pole. The probability peak is eroded before arrival.")
+    print("-> CONCLUSION: T2 dephasing causes the Bloch vector to contract toward the origin")
+    print("   rather than reaching the target pole. The probability peak is reduced before arrival.")
     print("   VTAA, with its multi-stage structure, accumulates this decay at every stage.")
 
 
@@ -424,11 +424,11 @@ def run_scenario_f(n: int = 8, m_good: int = 3, coarse_grid: int = 48, dac_bits_
 # ╚═════════════════════════════════════════════════════════════════════╝
 
 def run_scenario_g(n_min: int = 5, n_max: int = 30, noancilla_max: int = 8, optimization_level: int = 1):
-    """G. THE DIFFUSION MEMORY LIMIT — T-gate explosion without dirty ancillas."""
+    """G. DIFFUSION SYNTHESIS MEMORY LIMIT — T-count growth without auxiliary ancillas."""
     print(f"\n{SEP}")
-    print("SCENARIO G: THE DIFFUSION MEMORY LIMIT (FTQC T-Gate Scaling)")
+    print("SCENARIO G: DIFFUSION SYNTHESIS MEMORY LIMIT (FTQC T-Gate Scaling)")
     print(SEP)
-    print("Comparing v-chain (with dirty ancillas) vs no-ancilla MCX decomposition.\n")
+    print("Comparing v-chain (with auxiliary ancillas) vs no-ancilla MCX decomposition.\n")
 
     res = vtaa.experiment_ftqc_diffusion_scaling(
         n_min=n_min, n_max=n_max, noancilla_max=noancilla_max, optimization_level=optimization_level
@@ -449,7 +449,7 @@ def run_scenario_g(n_min: int = 5, n_max: int = 30, noancilla_max: int = 8, opti
     if len(res.n_values_noancilla) >= 2:
         ratio = float(res.t_counts_noancilla[-1]) / max(1, float(res.t_counts_vchain[len(res.n_values_noancilla)-1]))
         print(f"\n-> At n={int(res.n_values_noancilla[-1])}: no-ancilla T-count is {ratio:.1f}x the v-chain T-count")
-    print("-> CONCLUSION: Without dirty ancillas, the T-count grows super-linearly,")
+    print("-> CONCLUSION: Without auxiliary ancillas, the T-count grows super-linearly,")
     print("   creating a memory limit. VTAA's diffusion operator at each stage inherits")
     print("   this cost. Memory-constrained VTAA is T-gate limited.")
 
@@ -645,11 +645,11 @@ def run_scenario_j(p_s1: float = 0.20, p_fail: float = 0.70):
 
 
 def run_scenario_k(total_ps: float = 0.05, t1: float = 100.0, t2: float = 1000.0, t3: float = 10000.0, sample_pcts=(1, 10, 25, 50, 75, 90, 99)):
-    """K. THE ASYMPTOTIC CROSSOVER SWEEP — VTAA vs worst-case standard AA cost."""
+    """K. ASYMPTOTIC CROSSOVER ANALYSIS — VTAA versus worst-case standard AA cost."""
     print(f"\n{SEP}")
-    print("SCENARIO K: THE ASYMPTOTIC CROSSOVER SWEEP")
+    print("SCENARIO K: ASYMPTOTIC CROSSOVER ANALYSIS")
     print(SEP)
-    print("Sweeping early-success fraction to find where VTAA beats worst-case AA.\n")
+    print("Sweeping early-success fraction to determine when VTAA becomes lower cost than worst-case AA.\n")
 
     res = vtaa.experiment_vtaa_cost_sweep(total_ps=total_ps, t1=t1, t2=t2, t3=t3)
 
@@ -660,23 +660,24 @@ def run_scenario_k(total_ps: float = 0.05, t1: float = 100.0, t2: float = 1000.0
             break
 
     print(f"Total p_s = {res.total_ps:.2%}, stages: t1={t1}, t2={t2}, t3={t3}")
-    print(f"\n{'Early-Success %':<18} | {'Standard AA Cost':<18} | {'VTAA Cost':<18} | {'Best-performing method'}")
+    print(f"\n{'Early-Success %':<18} | {'Standard AA Cost':<18} | {'VTAA Cost':<18} | {'Lower-cost method'}")
     print("-" * 75)
     for pct in sample_pcts:
         idx = int(pct * len(res.early_success_ratios) / 100)
         idx = min(idx, len(res.early_success_ratios) - 1)
         s = res.standard_costs[idx]; v = res.vtaa_costs[idx]
-        winner = "VTAA" if v < s else "Std AA"
-        print(f"{100*res.early_success_ratios[idx]:<18.1f} | {s:<18.1f} | {v:<18.1f} | {winner}")
+        lower_cost_method = "VTAA" if v < s else "Standard AA"
+        print(f"{100*res.early_success_ratios[idx]:<18.1f} | {s:<18.1f} | {v:<18.1f} | {lower_cost_method}")
 
     if crossover_idx is not None:
         xover_pct = 100.0 * res.early_success_ratios[crossover_idx]
-        print(f"\n-> Crossover point: VTAA wins when >{xover_pct:.1f}% of success halts early (stage 1).")
+        print(f"\n-> Crossover point: VTAA becomes lower cost when more than {xover_pct:.1f}% of success terminates at stage 1.")
     else:
         print(f"\n-> No crossover found: standard AA is always cheaper for this configuration.")
 
-    print("-> CONCLUSION: VTAA only wins when a LARGE fraction of the success amplitude")
-    print("   halts at the CHEAPEST stage. If most branches reach T_max, VTAA is slower.")
+    print("-> CONCLUSION: VTAA only outperforms standard AA when a substantial fraction of")
+    print("   the success amplitude terminates at the least expensive stage. If most branches")
+    print("   reach T_max, VTAA remains slower.")
 
 
 def run_scenario_l(t_halt: int = 100, t_max: int = 10000, cx_time_ns: int = 100, T1_ns: int = 100_000, T2_ns: int = 80_000, n_qubits_idle: int = 4):
@@ -714,9 +715,9 @@ def run_scenario_l(t_halt: int = 100, t_max: int = 10000, cx_time_ns: int = 100,
     fidelity_loss = (1.0 - p_coherence) * 100
     print(f"\n-> Idle-time coherence loss: {fidelity_loss:.1f}%")
     print(f"   The early-halting branch loses {fidelity_loss:.1f}% of its amplitude fidelity")
-    print(f"   while WAITING for the T_max branch to finish.")
-    print("-> CONCLUSION: VTAA's coherent superposition requires ALL branches to wait for")
-    print("   the SLOWEST branch. Early branches suffer severe idle-qubit decay.")
+    print(f"   while waiting for the T_max branch to finish.")
+    print("-> CONCLUSION: VTAA's coherent superposition requires all branches to wait for")
+    print("   the slowest branch. Early branches therefore experience severe idle-qubit decay.")
     print("   This is the fundamental physical cost of maintaining coherent parallelism.")
 
 
@@ -759,9 +760,9 @@ def run_scenario_m(zz_rate_per_cx: float = 0.002, n_data_cx_gates: int = 500, n_
 
 
 def run_scenario_n(mid_meas_latency_ns: int = 1000, cx_time_ns: int = 100):
-    """N. RESTART vs COHERENT-AMPLIFY TRADEOFF — dynamic circuit reset vs. VTAA depth."""
+    """N. RESTART AND COHERENT-AMPLIFICATION TRADEOFF — dynamic reset versus VTAA depth."""
     print(f"\n{SEP}")
-    print("SCENARIO N: THE RESTART vs. COHERENT-AMPLIFY TRADEOFF")
+    print("SCENARIO N: RESTART AND COHERENT-AMPLIFICATION TRADEOFF")
     print(SEP)
     print("Comparing: reset-and-restart (dynamic circuits) vs deep coherent VTAA.\n")
 
@@ -795,18 +796,19 @@ def run_scenario_n(mid_meas_latency_ns: int = 1000, cx_time_ns: int = 100):
     print(f"{'Worst-case standard AA':<35} | {report.expected_time_until_success_worst_case_aa:<20.1f} | {wc_aa_ns:<18.0f} | {'N/A'}")
     print(f"{'VTAA (asymptotic)':<35} | {report.vtaa_asymptotic_bound:<20.1f} | {vtaa_circuit_ns:<18.0f} | {'N/A'}")
 
-    winner = "Restart" if restart_total_ns + restart_meas_overhead < min(wc_aa_ns, vtaa_circuit_ns) else (
+    preferred_strategy = "Restart" if restart_total_ns + restart_meas_overhead < min(wc_aa_ns, vtaa_circuit_ns) else (
         "VTAA" if vtaa_circuit_ns < wc_aa_ns else "Worst-case AA")
-    print(f"\n-> Wall-clock winner: {winner}")
+    print(f"\n-> Preferred wall-clock strategy: {preferred_strategy}")
     print("-> CONCLUSION: Dynamic circuit reset-and-restart avoids the deep coherent")
     print("   unitary cost of VTAA, but pays a measurement latency overhead per attempt.")
-    print("   For small p, restart wins. For structured problems with early branching, VTAA wins.")
+    print("   For small p, restart is preferable. For structured problems with early branching,")
+    print("   VTAA can be preferable.")
 
 
 def run_scenario_o(n: int = 4, good_bits: str = "1111"):
-    """O. GRAND UNIFIED PROFILER COMPARATIVE EVALUATION — limit-clock ns champion."""
+    """O. UNIFIED HARDWARE PROFILING COMPARATIVE EVALUATION — execution-time comparison in nanoseconds."""
     print(f"\n{SEP}")
-    print("SCENARIO O: THE GRAND UNIFIED PROFILER COMPARATIVE EVALUATION")
+    print("SCENARIO O: UNIFIED HARDWARE PROFILING COMPARATIVE EVALUATION")
     print(SEP)
 
     try:
@@ -876,7 +878,7 @@ def run_scenario_o(n: int = 4, good_bits: str = "1111"):
     overhead = m_wc['total_time_ns'] / max(1, m_aa['total_time_ns'])
     print(f"\n-> VTAA overhead: {overhead:.2f}x the standard AA execution time")
     print("-> CONCLUSION: The flag/clock register overhead of VTAA adds physical execution")
-    print("   time. VTAA only wins when the variable-time savings (shorter expected depth)")
+    print("   time. VTAA only outperforms standard AA when the variable-time savings (shorter expected depth)")
     print("   exceed this fixed overhead — which requires strongly non-uniform branch times.")
 
 
@@ -896,7 +898,7 @@ def _save_vtaa_algorithm_figure(
     ax1.plot(souffle.k_values, souffle.actual_probs, linewidth=2.0, label="actual success", color="#1f77b4")
     ax1.plot(souffle.k_values, souffle.guess_probs_theoretical, linewidth=2.0, label="guessed-theory envelope", color="#d62728")
     ax1.axvline(souffle.k_opt_guess, linestyle="--", color="black", linewidth=1.2, label="guessed k*")
-    ax1.set_title("Over-Rotation Catastrophe")
+    ax1.set_title("Over-Rotation Overhead")
     ax1.set_ylabel("Success probability")
     ax1.legend(fontsize=8)
 
@@ -1054,3 +1056,4 @@ if __name__ == "__main__":
     logger.close()
     sys.stdout = logger.terminal
     print(f"\nBenchmark suite complete. Results saved to {output_filepath}")
+
