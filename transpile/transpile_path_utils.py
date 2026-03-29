@@ -136,3 +136,4 @@ def import_project_module(
     sys.modules[alias] = mod
     spec.loader.exec_module(mod)
     return mod, module_path
+
