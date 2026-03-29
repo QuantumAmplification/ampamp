@@ -143,11 +143,11 @@ def run_interactive_scenario_repl(scenarios, *, sep):
     scenario_pairs = list(scenarios)
     scenario_map = {label.upper(): fn for label, fn in scenario_pairs}
     print(f"\n{sep}")
-    print("INTERACTIVE SCENARIO RE-RUN MODE")
+    print("INTERACTIVE RE-RUN MODE")
     print(sep)
-    print("You can now rerun any scenario with custom inputs.")
+    print("Select a scenario for rerun with custom parameters.")
     print(f"Available labels: {', '.join(label for label, _ in scenario_pairs)}")
-    print("Enter a label like A or K, or press Enter to finish.")
+    print("Enter a scenario label such as A or K, or press Enter to exit.")
     while True:
         try:
             choice = input("\nScenario label to rerun: ").strip().upper()
@@ -155,13 +155,13 @@ def run_interactive_scenario_repl(scenarios, *, sep):
             print("\nInteractive mode closed.")
             return
         if not choice:
-            print("Interactive mode finished.")
+            print("Interactive rerun mode finished.")
             return
         if choice not in scenario_map:
             print(f"Unknown scenario '{choice}'. Available: {', '.join(scenario_map)}")
             continue
         fn = scenario_map[choice]
-        print(f"Selected {choice}: {fn.__name__}")
+        print(f"Selected scenario {choice}: {fn.__name__}")
         print(f"Parameters: {_format_signature_help(fn)}")
         print("Enter overrides as comma-separated key=value pairs.")
         print("Example: theta=0.2, n_steps=20")
@@ -169,10 +169,10 @@ def run_interactive_scenario_repl(scenarios, *, sep):
         try:
             raw_kwargs = input("Custom parameters: ")
             kwargs = _parse_kwargs_text(raw_kwargs)
-            print(f"\nRe-running {choice} with parameters: {kwargs if kwargs else 'defaults'}")
+            print(f"\nExecuting scenario {choice} with parameters: {kwargs if kwargs else 'defaults'}")
             fn(**kwargs)
         except Exception as exc:
-            print(f"\nScenario {choice} failed with custom parameters.")
+            print(f"\nScenario {choice} failed during custom execution.")
             print(f"Error: {exc}")
             traceback.print_exc()
 
@@ -332,7 +332,7 @@ def run_scenario_a(theta: float = 0.3, mizel_c: float = 1.5, m_content: int = 1)
     Physical cost: X + CRY(alpha) + X = 2 CNOTs + parameterized single-qubit gates.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO A: THE DYNAMIC WAVE-DIVISION BASELINE (TRIPARTITE UNROLLING)")
+    print("SCENARIO A: SINGLE-STEP V_N RESOURCE BASELINE")
     print("=" * 70)
     print(f"System: 1 ancilla + 1 index + {m_content} content = {2+m_content} qubits total.")
     print(f"theta={theta:.4f}, Mizel c={mizel_c:.2f}")
@@ -358,8 +358,8 @@ def run_scenario_a(theta: float = 0.3, mizel_c: float = 1.5, m_content: int = 1)
     is_unitary = np.allclose(mat.conj().T @ mat, np.eye(2**(2+m_content)), atol=1e-10)
     print(f"\nUnitary verification for n=0: {'PASS' if is_unitary else 'FAIL'}")
 
-    print("\n-> CONCLUSION: Each FOQA step costs exactly 2 CNOTs (from CRY decomposition).")
-    print("   Unlike OAA's static A, alpha_n changes continuously, preventing instruction reuse.")
+    print("\n-> Result: Each FOQA proxy step requires exactly 2 CX gates under the CRY decomposition.")
+    print("   Because alpha_n varies with n, direct instruction reuse across steps is limited.")
 
 
 # =============================================================================
@@ -377,7 +377,7 @@ def run_scenario_b(n_steps: int = 10, theta: float = 0.3, mizel_c: float = 1.5) 
     T-gate count per RZ(theta) via Ross-Selinger: ~3.21*log2(1/eps) - 6.93 gates.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO B: HETEROGENEOUS FTQC T-GATE EXPLOSION")
+    print("SCENARIO B: FAULT-TOLERANT SYNTHESIS OVERHEAD")
     print("=" * 70)
     synthesis_eps = 1e-3
     t_per_rz = max(0, int(math.ceil(3.21 * math.log2(1.0 / synthesis_eps) - 6.93)))
@@ -412,9 +412,9 @@ def run_scenario_b(n_steps: int = 10, theta: float = 0.3, mizel_c: float = 1.5) 
 
     print(f"\nTotal T-count across {n_steps} steps: {total_t}")
     print(f"Unique alpha values (= unique synthesis passes): {len(unique_alpha_set)}")
-    print(f"-> All {n_steps} steps require UNIQUE synthesis (0 reused sequences)")
-    print("-> CONCLUSION: FOQA's varying schedule bars any FTQC instruction caching.")
-    print("   Every single iteration is a fresh T-factory job — the maximum overhead.")
+    print(f"-> All {n_steps} steps require distinct synthesis instances under this proxy model.")
+    print("-> Result: The varying FOQA schedule inhibits straightforward Clifford+T instruction reuse.")
+    print("   Each iteration generally requires a separate synthesis workload.")
 
 
 # =============================================================================
@@ -437,7 +437,7 @@ def run_scenario_c(theta: float = 0.01, zeno_alpha: float = 1.5, n_zeno_steps: i
     unitary and synthesizes it as depth-1 — completely hiding the circuit cost.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO C: THE ADVERSARIAL ZENO COHERENCE BREACH")
+    print("SCENARIO C: CONSTANT-DAMPING COHERENCE STUDY")
     print("=" * 70)
     print(f"theta={theta:.4f} (p=sin²(theta)≈{math.sin(theta)**2:.5f})")
     print(f"Zeno alpha={zeno_alpha:.2f} (constant heavy damping)")
@@ -467,14 +467,13 @@ def run_scenario_c(theta: float = 0.01, zeno_alpha: float = 1.5, n_zeno_steps: i
         t = transpile(qc_zeno, basis_gates=BASIS_NISQ, coupling_map=cmap, optimization_level=3)
         d = t.depth()
         cx = t.count_ops().get('cx', 0)
-        flag = "  <-- NISQ BREACHED!" if d > NISQ_DEPTH_LIMIT else ""
+        flag = "  <-- Estimated coherence threshold exceeded" if d > NISQ_DEPTH_LIMIT else ""
         print(f"{k:<12} | {d:<10} | {cx:<8} | {flag}")
 
-    print("\n-> Proxy result: heavy constant damping gives no reliable fixed-point gain in the")
-    print("   repeated-V_n hardware model, while the depth still grows linearly with k.")
-    print("-> CONCLUSION: The Zeno schedule forces k * Depth(V_n) physical operations")
-    print("   for little algorithmic benefit in this proxy study. For the full FOQA")
-    print("   recurrence, the corresponding mathematics is audited in the theory file.")
+    print("\n-> Proxy result: heavy constant damping does not provide a clear fixed-point advantage")
+    print("   in the repeated-V_n hardware model, while depth still grows linearly with k.")
+    print("-> Result: The constant-damping schedule incurs k * Depth(V_n) physical operations")
+    print("   in this proxy study. The full FOQA recurrence is analyzed separately in the theory file.")
 
 
 # =============================================================================
@@ -497,7 +496,7 @@ def run_scenario_d(theta: float = 0.3, n_steps: int = 5, mizel_c: float = 1.5) -
     the 'dynamic limit' effect from single-gate-level synthesis optimization.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO D: THE DYNAMIC UNCOMPUTATION LIMIT")
+    print("SCENARIO D: STEPWISE UNCOMPUTATION LIMIT")
     print("=" * 70)
     print(f"Steps: {n_steps}, alpha_n = {mizel_c:.2f}/sqrt(n+1)  [all distinct]")
     print(f"Barriers between each V_n to enforce step boundaries.")
@@ -531,10 +530,10 @@ def run_scenario_d(theta: float = 0.3, n_steps: int = 5, mizel_c: float = 1.5) -
     print(f"\n-> Depth reduction L0→L3: {reduction_d:.1f}%")
     print(f"-> CX reduction L0→L3:    {reduction_cx:.1f}%")
     print(f"-> Irreducible CX floor:   2 per step * {n_steps} steps = {cx_floor}")
-    print("-> CONCLUSION: The Level-3 compiler reduces single-qubit gate overhead")
-    print("   but CANNOT reduce below 2 CX per step (the ctrl-0-CRY decomposition).")
-    print("   The barriers isolate this dynamic limit: savings are synthesis-only,")
-    print("   not from merging adjacent steps with different angles.")
+    print("-> Result: Level-3 optimization reduces single-qubit overhead")
+    print("   but cannot reduce the circuit below the 2-CX-per-step decomposition floor.")
+    print("   With barriers in place, the observed savings arise from synthesis optimization")
+    print("   rather than from merging adjacent steps with distinct angles.")
 
 
 # =============================================================================
@@ -561,7 +560,7 @@ def run_scenario_e(theta: float = 0.3, mizel_c: float = 1.5, m_content: int = 3)
     entire content register, forcing m SWAP gates.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO E: THE TRIPARTITE ROUTING PENALTY (FORCED FRAGMENTED LAYOUT)")
+    print("SCENARIO E: TRIPARTITE ROUTING PENALTY")
     print("=" * 70)
     n_total = 2 + m_content
     print(f"System: 1 anc + 1 idx + {m_content} content = {n_total} total qubits.")
@@ -601,9 +600,9 @@ def run_scenario_e(theta: float = 0.3, mizel_c: float = 1.5, m_content: int = 3)
     print(f"{'Fragmented (forced)':<22} | {d_frag:<8} | {cx_frag:<8} | {sw_frag:<8} | {d_frag/max(1,d_nat):.2f}x")
     print(f"\n-> Fragmented layout forces the CRY to cross {m_content} content qubit(s).")
     print(f"   Each crossing requires 1 SWAP (3 CX gates) = {m_content * 3} extra CX gates minimum.")
-    print("-> CONCLUSION: When the anc and idx are logically separated by the content")
-    print("   register on real hardware (e.g., ion traps with fixed logical zones),")
-    print(f"   the routing penalty scales linearly with m: O({m_content}) SWAPs here.")
+    print("-> Result: When ancilla and index qubits are separated by the content register,")
+    print("   the routing penalty grows linearly with the number of intervening qubits.")
+    print(f"   In this layout, the overhead scales as O({m_content}) SWAP operations.")
 
 
 # =============================================================================
@@ -629,7 +628,7 @@ def run_scenario_f() -> None:
         return
 
     print("\n" + "=" * 70)
-    print("SCENARIO F: THE EMPTY DATABASE NOISE LIMITATION")
+    print("SCENARIO F: EMPTY-DATABASE NOISE ANALYSIS")
     print("=" * 70)
     theta_empty = 0.0
     n_steps = 10
@@ -672,7 +671,7 @@ def run_scenario_f() -> None:
     print(f"{'Measured success (ideal sim)':<35} | {p_ideal:.6f}")
     print(f"{'Measured success (1% noise)':<35} | {p_noisy:.6f}")
     print(f"{'False-positive leakage (noise - theory)':<35} | {leakage:.6f}")
-    print("\n-> CONCLUSION: On an empty database, FOQA is mathematically safe (P_halt≈0).")
+    print("\n-> Result: On an empty database, FOQA predicts vanishing halting probability (P_halt≈0).")
     if leakage > 1e-12:
         print("   In this noisy proxy run, depolarizing noise leaked amplitude into |1>_anc,")
         print("   creating a false-positive halt signal.")
@@ -700,7 +699,7 @@ def run_scenario_g(theta: float = 0.3, n_steps: int = 5, mizel_c: float = 1.5) -
     target register is physically interleaved between anc and idx.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO G: THE PARAMETERIZED SCHEDULE SPACE-TIME TRADEOFF")
+    print("SCENARIO G: SCHEDULE SPACE-TIME TRADE-OFF")
     print("=" * 70)
     print(f"Steps: {n_steps} (with barriers), sweeping m_content from 1 to 5.")
     print("Layout: Fragmented (anc at q0, idx at far end, content sandwiched).")
@@ -742,26 +741,25 @@ def run_scenario_g(theta: float = 0.3, n_steps: int = 5, mizel_c: float = 1.5) -
         d_frag = t_frag.depth(); cx_frag = t_frag.count_ops().get('cx', 0); sw_frag = get_swap_count(t_frag)
         print(f"{m:<12} | {n_total:<9} | {d_nat:<12} | {cx_nat:<12} | {d_frag:<14} | {cx_frag:<10} | {sw_frag}")
 
-    print("\n-> Natural layout hides routing costs (SABRE keeps anc-idx always adjacent).")
-    print("-> Fragmented layout reveals the true O(m) SWAP penalty of the tripartite structure.")
-    print("-> CONCLUSION: AS m grows, fragmented depth diverges from natural depth.")
-    print("   This quantifies the real-estate (qubit count) required to mitigate the")
-    print("   depth explosion when registers are physically interleaved.")
+    print("\n-> Natural layout suppresses much of the routing overhead by keeping ancilla and index qubits adjacent.")
+    print("-> Fragmented layout reveals the O(m) SWAP penalty associated with the tripartite structure.")
+    print("-> Result: As m increases, fragmented-layout depth diverges from the natural-layout depth.")
+    print("   This quantifies the qubit-layout cost of mitigating depth growth when registers are interleaved.")
 
 
 # =============================================================================
-# Scenario H: Grand Unified Profiler Comparative Evaluation (FOQA vs OAA)
+# Scenario H: Hardware Profiler Comparative Evaluation (FOQA vs OAA)
 # =============================================================================
 
 def run_scenario_h(theta: float = 0.3, mizel_c: float = 1.5) -> None:
     """
-    H. The Grand Unified Profiler Comparative Evaluation (FOQA vs OAA).
+    H. The Hardware Profiler Comparative Evaluation (FOQA vs OAA).
 
     Feeds both an OAA circuit and an equivalently scaled FOQA circuit through
     the HardwareProfiler to get a single hardware penalty score in nanoseconds.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO H: THE GRAND UNIFIED PROFILER COMPARATIVE EVALUATION (FOQA vs OAA)")
+    print("SCENARIO H: HARDWARE PROFILER COMPARISON (FOQA VS OAA)")
     print("=" * 70)
 
     try:
@@ -836,8 +834,8 @@ def run_scenario_h(theta: float = 0.3, mizel_c: float = 1.5) -> None:
     print(f"{'Final CNOT Count':<30} | {oaa_m['final_cnots']:<15} | {foqa_m['final_cnots']}")
     print(f"{'Total Execution Time (ns)':<30} | {oaa_m['total_time_ns']:<15.1f} | {foqa_m['total_time_ns']:.1f}")
     print(f"{'Unified Hardware Penalty':<30} | {oaa_m['hardware_penalty_score']:<15.1f} | {foqa_m['hardware_penalty_score']:.1f}")
-    print("\n-> CONCLUSION: FOQA's dynamic schedule imposes a unique hardware penalty —")
-    print("   each iteration uses a DIFFERENT rotation angle, preventing gate fusion.")
+    print("\n-> Observation: FOQA's dynamic schedule introduces a distinct hardware penalty")
+    print("   because successive iterations use different rotation angles and therefore resist gate fusion.")
 
 
 # =============================================================================
@@ -862,7 +860,7 @@ def run_scenario_i(theta: float = 0.3, mizel_c: float = 1.5) -> None:
         return
 
     print("\n" + "=" * 70)
-    print("SCENARIO I: THE LAZY HALTING THERMAL OVERHEAD (NISQ REALITY CHECK)")
+    print("SCENARIO I: OVER-ITERATION HARDWARE OVERHEAD ANALYSIS")
     print("=" * 70)
 
     p = math.sin(theta) ** 2
@@ -906,7 +904,7 @@ def run_scenario_i(theta: float = 0.3, mizel_c: float = 1.5) -> None:
     shots = 4096
 
     results = {}
-    for label, k in [("k_opt", k_opt_foqa), ("k_lazy (3x)", k_lazy)]:
+    for label, k in [("k_opt", k_opt_foqa), ("k_over", k_lazy)]:
         # Build with barriers between every V_n step (prevents depth-1 unitary folding)
         n_total = 3
         qc = QuantumCircuit(n_total, name=f"FOQA_{label}")
@@ -915,12 +913,13 @@ def run_scenario_i(theta: float = 0.3, mizel_c: float = 1.5) -> None:
         for alpha in sched:
             Vn = build_controlled_Vn(alpha, m_content=1)
             qc.compose(Vn, qubits=[0, 1, 2], inplace=True)
-            qc.barrier()   # anti-folding limit: k steps remain k physical groups
+            qc.barrier()   # Prevent step fusion so k steps remain k physical groups
+        ideal_qc = qc.copy()
         qc.measure_all()
         t_qc = transpile(qc, backend=sim, optimization_level=3)
         d = t_qc.depth()
         cx = t_qc.count_ops().get('cx', 0)
-        ideal_state = Statevector.from_instruction(qc).data
+        ideal_state = Statevector.from_instruction(ideal_qc).data
         p_proxy_ideal = float(np.sum(np.abs(ideal_state[1::2]) ** 2))
         counts = sim_noisy.run(t_qc, shots=shots).result().get_counts()
         # anc=|1> (halted/success) = last bit = '1'
@@ -934,13 +933,13 @@ def run_scenario_i(theta: float = 0.3, mizel_c: float = 1.5) -> None:
         print(f"{label:<16} | {k:<6} | {d:<8} | {cx:<6} | {theory:<12.4f} | {p_proxy_ideal:<12.4f} | {p_noisy:.4f}")
 
     k0, d0, cx0, th0, pi0, pn0 = results["k_opt"]
-    k1, d1, cx1, th1, pi1, pn1 = results["k_lazy (3x)"]
-    print(f"\n-> Noisy success degradation from lazy halting: {pn0 - pn1:.4f} drop")
-    print(f"   Depth penalty: {d1//max(1,d0)}x deeper circuit for 3x iterations")
-    print("-> CONCLUSION: The full FOQA recurrence remains stable under over-iteration,")
-    print("   but the repeated-V_n hardware proxy still accumulates substantial noise as k grows.")
-    print("   The proxy metrics should therefore be read as a hardware-overhead study, not as a")
-    print("   faithful success-probability simulation of the full LCU algorithm.")
+    k1, d1, cx1, th1, pi1, pn1 = results["k_over"]
+    print(f"\n-> Noisy proxy success change under over-iteration: {pn0 - pn1:.4f}")
+    print(f"   Depth multiplier for 3x iterations: {d1 / max(1, d0):.2f}x")
+    print("-> Result: The theoretical FOQA recurrence remains stable under over-iteration,")
+    print("   whereas the repeated-V_n hardware proxy accumulates additional noise as k increases.")
+    print("   These proxy metrics should therefore be interpreted as a hardware-overhead study")
+    print("   rather than as a full success-probability simulation of the LCU construction.")
 
 
 # =============================================================================
@@ -959,7 +958,7 @@ def run_scenario_j(theta: float = 0.3, n_steps: int = 5, mizel_c: float = 1.5) -
     We compare the depth of the static circuit vs the estimated dynamic time.
     """
     print("\n" + "=" * 70)
-    print("SCENARIO J: DYNAMIC CIRCUIT MID-MEASUREMENT LATENCY (VTAA BRIDGE)")
+    print("SCENARIO J: DYNAMIC-CIRCUIT MEASUREMENT LATENCY ANALYSIS")
     print("=" * 70)
     print(f"Steps: {n_steps}, Mizel c={mizel_c:.2f}")
     print(f"Mid-measurement latency model: 1000 ns per measurement\n")
@@ -1012,10 +1011,10 @@ def run_scenario_j(theta: float = 0.3, n_steps: int = 5, mizel_c: float = 1.5) -
     print(f"{'Total Estimated Time (ns)':<35} | {time_static_ns:<15.1f} | {time_dynamic_total_ns:.1f}")
     overhead = time_dynamic_total_ns / max(1, time_static_ns)
     print(f"{'Dynamic Overhead Multiplier':<35} | {'1.00x':<15} | {overhead:.2f}x")
-    print(f"\n-> CONCLUSION: Each mid-circuit measurement costs ~1000 ns in classical")
-    print(f"   latency. {n_steps} measurements = {n_steps*1000:.0f} ns pure wait time, typically")
-    print(f"   {overhead:.1f}x the circuit execution time. FOQA's halt branching demands")
-    print("   efficient dynamic circuit support to avoid this latency explosion.")
+    print(f"\n-> Result: Each mid-circuit measurement contributes approximately 1000 ns of classical")
+    print(f"   latency. For {n_steps} measurements this yields {n_steps*1000:.0f} ns of wait time, or about")
+    print(f"   {overhead:.1f}x the circuit execution time in this proxy model.")
+    print("   Efficient dynamic-circuit support is therefore important for FOQA-style halt branching.")
 
 
 # =============================================================================
@@ -1035,7 +1034,7 @@ def run_scenario_k(theta: float = 0.3, n_steps: int = 30, mizel_c: float = 1.5) 
     quantization (hardware lookup table limits).
     """
     print("\n" + "=" * 70)
-    print("SCENARIO K: CONTROL ELECTRONICS DISCRETIZATION (BINNED SCHEDULE)")
+    print("SCENARIO K: CONTROL-ELECTRONICS ANGLE DISCRETIZATION")
     print("=" * 70)
     print(f"Steps: {n_steps}, Mizel c={mizel_c:.2f}")
     print(f"Exact schedule: alpha_n = {mizel_c:.2f}/sqrt(n+1)\n")
@@ -1082,10 +1081,10 @@ def run_scenario_k(theta: float = 0.3, n_steps: int = 30, mizel_c: float = 1.5) 
         deg = p_exact - p_binned
         print(f"{n_bins:<8} | {unique_binned:<16} | {p_binned:<12.6f} | {deg:<15.6f} | {rmse:.6f}")
 
-    print(f"\n-> CONCLUSION: With only 4-8 discrete bins, FOQA's schedule may still")
-    print("   converge acceptably (degradation < 1%), showing the algorithm is")
-    print("   somewhat robust to angle quantization. However, very coarse binning")
-    print("   (2 bins) breaks the monotonic convergence guarantee entirely.")
+    print(f"\n-> Result: With 4-8 discrete bins, the FOQA schedule remains reasonably close")
+    print("   to the exact recurrence under this proxy metric, with sub-percent degradation in the")
+    print("   reported halting probability. Very coarse binning, however, can materially degrade")
+    print("   the monotonic fixed-point behavior.")
 
 
 def _foqa_theory_halt_probability(theta: float, k: int, mizel_c: float) -> float:
@@ -1301,7 +1300,7 @@ if __name__ == "__main__":
     )
     prepare_backend_validation_artifacts(publishability)
 
-    print("FOQA Transpilation Benchmark Suite — Scenarios A through K")
+    print("FOQA transpilation benchmark suite: scenarios A-K")
     print(f"Results saved to: {output_filepath}")
     print("=" * 70)
     print(publishability.summary())
@@ -1342,7 +1341,7 @@ if __name__ == "__main__":
                     fn()
                 except Exception:
                     import traceback
-                    print(f"\n*** SCENARIO {label} FAILED ***")
+                    print(f"\nSCENARIO {label} EXECUTION FAILED")
                     traceback.print_exc()
             run_interactive_scenario_repl(
                 interactive_wrapped,
@@ -1359,3 +1358,4 @@ if __name__ == "__main__":
         logger.log.close()
         sys.stdout = logger.terminal
         print(f"\nBenchmark suite complete. Results saved to {output_filepath}")
+
