@@ -18,11 +18,18 @@ Standing notation aligned with final.tex:
 
 from __future__ import annotations
 
+import ast
 import argparse
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional, Sequence
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_RESULT_DIR = os.path.join(_HERE, f"[RESULT]{os.path.splitext(os.path.basename(__file__))[0]}")
+os.makedirs(_RESULT_DIR, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(_RESULT_DIR, ".mplconfig"))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -75,6 +82,98 @@ except Exception:
         return result_dir
 
 
+def _parse_cli_value(raw: str):
+    try:
+        return ast.literal_eval(raw)
+    except Exception:
+        lowered = raw.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered == "none":
+            return None
+        return raw
+
+
+def _split_top_level_commas(text: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    quote_char = ""
+    escaped = False
+
+    for ch in text:
+        if escaped:
+            current.append(ch)
+            escaped = False
+            continue
+        if quote_char:
+            current.append(ch)
+            if ch == "\\":
+                escaped = True
+            elif ch == quote_char:
+                quote_char = ""
+            continue
+        if ch in ("'", '"'):
+            quote_char = ch
+            current.append(ch)
+            continue
+        if ch in "([{":
+            depth += 1
+            current.append(ch)
+            continue
+        if ch in ")]}":
+            depth = max(0, depth - 1)
+            current.append(ch)
+            continue
+        if ch == "," and depth == 0:
+            piece = "".join(current).strip()
+            if piece:
+                parts.append(piece)
+            current = []
+            continue
+        current.append(ch)
+
+    piece = "".join(current).strip()
+    if piece:
+        parts.append(piece)
+    return parts
+
+
+def _parse_kwargs_text(raw: str) -> Dict[str, object]:
+    kwargs: Dict[str, object] = {}
+    for chunk in _split_top_level_commas(raw.strip()):
+        if "=" not in chunk:
+            raise ValueError(f"Expected key=value pair, got '{chunk}'")
+        key, value = chunk.split("=", 1)
+        kwargs[key.strip()] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_kwargs_tokens(tokens: Sequence[str]) -> Dict[str, object]:
+    kwargs: Dict[str, object] = {}
+    for token in tokens:
+        piece = token.strip()
+        if not piece:
+            continue
+        if "=" not in piece:
+            raise ValueError(f"Expected key=value pair, got '{piece}'")
+        key, value = piece.split("=", 1)
+        kwargs[key.strip()] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_command_line(argv: Sequence[str]) -> Optional[Dict[str, object]]:
+    if not argv:
+        return {}
+    if any(token.startswith("-") for token in argv):
+        return None
+    if len(argv) == 1:
+        return _parse_kwargs_text(argv[0])
+    return _parse_kwargs_tokens(argv)
+
+
 @dataclass
 class LCUObliviousResults:
     """Container for FOQA Module 1 outputs."""
@@ -104,6 +203,9 @@ class DampingRegimeResults:
     probs_underdamped: np.ndarray
     probs_overdamped: np.ndarray
     probs_mizel: np.ndarray
+    target_continue_underdamped: np.ndarray
+    target_continue_overdamped: np.ndarray
+    target_continue_mizel: np.ndarray
     schedule_mizel: np.ndarray
     underdamped_oscillatory: bool
     overdamped_frozen: bool
@@ -406,25 +508,47 @@ class FOQALaboratory:
             f"mizel=({mizel_c:.3f})/sqrt(n+1)"
         )
 
-        alpha_mizel = mizel_c / np.sqrt(np.arange(1, iterations + 1))
-        probs_under = self._run_module2_recurrence(theta, np.full(iterations, alpha_under))
-        probs_over = self._run_module2_recurrence(theta, np.full(iterations, alpha_over))
-        probs_mizel = self._run_module2_recurrence(theta, alpha_mizel)
+        alpha_mizel = mizel_c / np.sqrt(np.arange(1, iterations + 1, dtype=float))
+        probs_under, target_under = self._run_module2_observables(
+            theta,
+            np.full(iterations, alpha_under, dtype=float),
+        )
+        probs_over, target_over = self._run_module2_observables(
+            theta,
+            np.full(iterations, alpha_over, dtype=float),
+        )
+        probs_mizel, target_mizel = self._run_module2_observables(theta, alpha_mizel)
 
         # Qualitative regime checks (numerical "physics audit").
+        # The cumulative halt probability is monotone by construction, so the
+        # souffle-style oscillation has to be diagnosed on the continuation
+        # branch target weight |t_n|^2 instead.
+        under_peak = float(np.max(target_under))
+        over_peak = float(np.max(target_over))
+        mizel_final_target = float(target_mizel[-1])
+
         underdamped_oscillatory = bool(
-            (float(np.max(probs_under)) > 0.9)
-            and (float(np.max(probs_under) - probs_under[-1]) > 0.2)
+            (under_peak > 0.95)
+            and ((under_peak - float(target_under[-1])) > 0.2)
         )
-        overdamped_frozen = bool(float(np.max(probs_over)) < 0.2)
-        mizel_converged = bool(probs_mizel[-1] > 0.99)
-        mizel_monotonic = bool(np.all(np.diff(probs_mizel) >= -1e-12))
+        overdamped_frozen = bool(
+            (over_peak < 0.01)
+            and (float(np.max(probs_over)) < 0.2)
+        )
+        mizel_converged = bool(mizel_final_target > 0.99)
+        mizel_monotonic = bool(np.all(np.diff(target_mizel) >= -1e-12))
 
         print(
             "Final success: "
             f"under={probs_under[-1]:.6f}, "
             f"over={probs_over[-1]:.6f}, "
             f"mizel={probs_mizel[-1]:.6f}"
+        )
+        print(
+            "Final |t_n|^2 on continue branch: "
+            f"under={target_under[-1]:.6f}, "
+            f"over={target_over[-1]:.6f}, "
+            f"mizel={target_mizel[-1]:.6f}"
         )
         print(
             "Audit flags: "
@@ -447,6 +571,9 @@ class FOQALaboratory:
             probs_under=probs_under,
             probs_over=probs_over,
             probs_mizel=probs_mizel,
+            target_under=target_under,
+            target_over=target_over,
+            target_mizel=target_mizel,
             alpha_under=alpha_under,
             alpha_over=alpha_over,
             mizel_c=mizel_c,
@@ -464,6 +591,9 @@ class FOQALaboratory:
             probs_underdamped=probs_under,
             probs_overdamped=probs_over,
             probs_mizel=probs_mizel,
+            target_continue_underdamped=target_under,
+            target_continue_overdamped=target_over,
+            target_continue_mizel=target_mizel,
             schedule_mizel=alpha_mizel,
             underdamped_oscillatory=underdamped_oscillatory,
             overdamped_frozen=overdamped_frozen,
@@ -471,20 +601,23 @@ class FOQALaboratory:
             mizel_monotonic=mizel_monotonic,
         )
 
-    def _run_module2_recurrence(
+    def _run_module2_observables(
         self,
         theta: float,
         alpha_schedule: np.ndarray,
-    ) -> np.ndarray:
-        """Recurrence engine for Module 2."""
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return cumulative halt probability and continuation-branch target weight."""
         t_n = np.sin(theta)
         s_n = np.cos(theta)
 
         prob_already_halted = 0.0
         prob_continue = 1.0
         cumulative_success = np.zeros(len(alpha_schedule), dtype=float)
+        target_continue = np.zeros(len(alpha_schedule), dtype=float)
 
         for idx, alpha in enumerate(alpha_schedule):
+            target_continue[idx] = float(np.clip(t_n**2, 0.0, 1.0))
+
             p_step = (np.sin(alpha) ** 2) * (t_n**2)
             p_step = float(np.clip(p_step, 0.0, 1.0 - 1e-15))
 
@@ -493,10 +626,25 @@ class FOQALaboratory:
             cumulative_success[idx] = prob_already_halted
 
             norm = np.sqrt(max(1e-15, 1.0 - p_step))
-            t_new = (t_n * np.cos(alpha) * np.cos(2.0 * theta) + s_n * np.sin(2.0 * theta)) / norm
-            s_new = (-t_n * np.cos(alpha) * np.sin(2.0 * theta) + s_n * np.cos(2.0 * theta)) / norm
+            t_new = (
+                t_n * np.cos(alpha) * np.cos(2.0 * theta)
+                + s_n * np.sin(2.0 * theta)
+            ) / norm
+            s_new = (
+                -t_n * np.cos(alpha) * np.sin(2.0 * theta)
+                + s_n * np.cos(2.0 * theta)
+            ) / norm
             t_n, s_n = float(t_new), float(s_new)
 
+        return cumulative_success, target_continue
+
+    def _run_module2_recurrence(
+        self,
+        theta: float,
+        alpha_schedule: np.ndarray,
+    ) -> np.ndarray:
+        """Recurrence engine for Module 2."""
+        cumulative_success, _ = self._run_module2_observables(theta, alpha_schedule)
         return cumulative_success
 
     def _plot_module2_damping_regimes(
@@ -505,6 +653,9 @@ class FOQALaboratory:
         probs_under: np.ndarray,
         probs_over: np.ndarray,
         probs_mizel: np.ndarray,
+        target_under: np.ndarray,
+        target_over: np.ndarray,
+        target_mizel: np.ndarray,
         alpha_under: float,
         alpha_over: float,
         mizel_c: float,
@@ -512,10 +663,10 @@ class FOQALaboratory:
         save_plot_path: Optional[str],
     ) -> None:
         """Comparative 3-regime evidence plot for Module 2."""
-        fig, ax = plt.subplots(figsize=(11, 6))
+        fig, (ax_halt, ax_target) = plt.subplots(1, 2, figsize=(14, 6))
         steps = np.arange(1, len(probs_under) + 1)
 
-        ax.plot(
+        ax_halt.plot(
             steps,
             probs_under,
             color="#D62728",
@@ -523,7 +674,7 @@ class FOQALaboratory:
             linewidth=2.6,
             label=rf"Underdamped ($\alpha_n={alpha_under:.2f}$): Souffle oscillation",
         )
-        ax.plot(
+        ax_halt.plot(
             steps,
             probs_over,
             color="#FF7F0E",
@@ -531,7 +682,7 @@ class FOQALaboratory:
             linewidth=2.6,
             label=rf"Overdamped ($\alpha_n={alpha_over:.2f}$): Zeno-like freezing",
         )
-        ax.plot(
+        ax_halt.plot(
             steps,
             probs_mizel,
             color="#2CA02C",
@@ -539,28 +690,76 @@ class FOQALaboratory:
             label=rf"Critical (Mizel) ($\alpha_n={mizel_c:.1f}/\sqrt{{n+1}}$)",
         )
 
-        ax.annotate(
+        ax_halt.annotate(
             "Zeno-like plateau",
             xy=(len(steps) * 0.70, probs_over[int(len(steps) * 0.70)]),
             xytext=(len(steps) * 0.52, min(1.0, probs_over.max() + 0.12)),
             arrowprops=dict(arrowstyle="->", lw=1.4),
             color="#B85C00",
         )
-        ax.annotate(
-            "Fixed-point lock",
+        ax_halt.annotate(
+            "Monotone halt gain",
             xy=(len(steps) * 0.80, probs_mizel[int(len(steps) * 0.80)]),
             xytext=(len(steps) * 0.63, 0.80),
             arrowprops=dict(arrowstyle="->", lw=1.4),
             color="#1E7A1E",
         )
 
-        ax.axhline(1.0, color="black", linewidth=1.2)
-        ax.set_ylim(0.0, 1.05)
-        ax.set_xlabel("Iteration n")
-        ax.set_ylabel("Cumulative halt probability")
-        ax.set_title(f"FOQA Damping Regimes (theta0={theta:.4f})")
-        ax.grid(alpha=0.30)
-        ax.legend(loc="lower right")
+        ax_halt.axhline(1.0, color="black", linewidth=1.2)
+        ax_halt.set_ylim(0.0, 1.05)
+        ax_halt.set_xlabel("Iteration n")
+        ax_halt.set_ylabel("Cumulative halt probability")
+        ax_halt.set_title(f"FOQA Damping Regimes: Halt Probability (theta0={theta:.4f})")
+        ax_halt.grid(alpha=0.30)
+        ax_halt.legend(loc="lower right")
+
+        ax_target.plot(
+            steps,
+            target_under,
+            color="#D62728",
+            linestyle=":",
+            linewidth=2.6,
+            label="Underdamped continuation target weight",
+        )
+        ax_target.plot(
+            steps,
+            target_over,
+            color="#FF7F0E",
+            linestyle="--",
+            linewidth=2.6,
+            label="Overdamped continuation target weight",
+        )
+        ax_target.plot(
+            steps,
+            target_mizel,
+            color="#2CA02C",
+            linewidth=3.2,
+            label="Mizel continuation target weight",
+        )
+
+        under_peak_idx = int(np.argmax(target_under))
+        mizel_anchor_idx = min(len(steps) - 1, int(len(steps) * 0.80))
+        ax_target.annotate(
+            "Souffle overshoot",
+            xy=(steps[under_peak_idx], target_under[under_peak_idx]),
+            xytext=(steps[under_peak_idx] * 0.55, 0.85),
+            arrowprops=dict(arrowstyle="->", lw=1.4),
+            color="#9E1B1B",
+        )
+        ax_target.annotate(
+            "Fixed-point lock",
+            xy=(steps[mizel_anchor_idx], target_mizel[mizel_anchor_idx]),
+            xytext=(steps[mizel_anchor_idx] * 0.58, 0.62),
+            arrowprops=dict(arrowstyle="->", lw=1.4),
+            color="#1E7A1E",
+        )
+
+        ax_target.set_ylim(0.0, 1.05)
+        ax_target.set_xlabel("Iteration n")
+        ax_target.set_ylabel(r"Continuation-branch target weight $|t_n|^2$")
+        ax_target.set_title("FOQA Damping Regimes: Continuation Dynamics")
+        ax_target.grid(alpha=0.30)
+        ax_target.legend(loc="lower right")
         plt.tight_layout()
 
         if save_plot_path:
@@ -1441,68 +1640,149 @@ def experiment_adversarial_empty_database(
     )
 
 
-def run_all_modules_one_click(show_plot: bool = False) -> None:
-    """Run all six FOQA modules and save artifacts with default parameters."""
+def run_full_analysis(
+    module1_theta: float = 0.6,
+    module1_alpha: float = 1.2,
+    module2_theta: float = 0.01,
+    module2_iterations: int = 120,
+    module2_alpha_under: float = 0.02,
+    module2_alpha_over: float = 1.5,
+    module2_mizel_c: float = 1.4,
+    module3_theta: float = 0.15,
+    module3_iterations: int = 6,
+    module3_recurrence_c: float = 0.5,
+    module4_num_p_values: int = 20,
+    module4_p_max_exp: int = -1,
+    module4_p_min_exp: int = -6,
+    module4_target_success: float = 0.99,
+    module4_complexity_c: float = 1.5,
+    module4_max_iterations: int = 50_000,
+    module4_slope_tolerance: float = 0.02,
+    module5_theta: float = 0.01,
+    module5_iterations: int = 100,
+    module5_zeno_alpha: float = 1.5,
+    module5_mizel_c: float = 1.5,
+    module5_classical_tolerance: float = 0.05,
+    module5_penalty_threshold: float = 5.0,
+    module6_iterations: int = 50,
+    module6_control_theta: float = 0.1,
+    module6_mizel_c: float = 1.5,
+    module6_noise_floor: float = 1e-15,
+    out_prefix: Optional[str] = None,
+    show_plot: bool = False,
+    enforce_audit: bool = True,
+) -> None:
+    """Run all six FOQA modules and save artifacts with configurable parameters."""
     lab = FOQALaboratory()
-    stem = Path(__file__).stem
+    stem = Path(__file__).stem if out_prefix is None else str(out_prefix)
 
     lab.experiment_module1_lcu_oblivious_circuit_synthesizer(
-        theta=0.6,
-        alpha_n=1.2,
+        theta=module1_theta,
+        alpha_n=module1_alpha,
         show_plot=show_plot,
         save_plot_path=f"{stem}_module1_lcu_oblivious.png",
     )
     lab.experiment_module2_damping_regime_sweeper(
-        theta=0.01,
-        iterations=120,
-        alpha_under=0.02,
-        alpha_over=1.5,
-        mizel_c=1.4,
+        theta=module2_theta,
+        iterations=module2_iterations,
+        alpha_under=module2_alpha_under,
+        alpha_over=module2_alpha_over,
+        mizel_c=module2_mizel_c,
         show_plot=show_plot,
         save_plot_path=f"{stem}_module2_damping_regimes.png",
-        enforce_audit=True,
+        enforce_audit=enforce_audit,
     )
     lab.experiment_module3_nonlinear_recurrence_auditor(
-        theta=0.15,
-        iterations=6,
-        recurrence_c=0.5,
+        theta=module3_theta,
+        iterations=module3_iterations,
+        recurrence_c=module3_recurrence_c,
         show_plot=show_plot,
         save_plot_path=f"{stem}_module3_recurrence_audit.png",
-        enforce_audit=True,
+        enforce_audit=enforce_audit,
     )
     lab.experiment_module4_asymptotic_complexity_auditor(
-        num_p_values=20,
-        p_max_exponent=-1,
-        p_min_exponent=-6,
-        target_success=0.99,
-        complexity_c=1.5,
-        max_iterations=50_000,
-        slope_tolerance=0.02,
+        num_p_values=module4_num_p_values,
+        p_max_exponent=module4_p_max_exp,
+        p_min_exponent=module4_p_min_exp,
+        target_success=module4_target_success,
+        complexity_c=module4_complexity_c,
+        max_iterations=module4_max_iterations,
+        slope_tolerance=module4_slope_tolerance,
         show_plot=show_plot,
         save_plot_path=f"{stem}_module4_asymptotic_complexity.png",
-        enforce_audit=True,
+        enforce_audit=enforce_audit,
     )
     lab.experiment_module5_adversarial_zeno_catastrophe(
-        theta=0.01,
-        iterations=100,
-        zeno_alpha=1.5,
-        mizel_c=1.5,
-        classical_tolerance=0.05,
-        penalty_threshold=5.0,
+        theta=module5_theta,
+        iterations=module5_iterations,
+        zeno_alpha=module5_zeno_alpha,
+        mizel_c=module5_mizel_c,
+        classical_tolerance=module5_classical_tolerance,
+        penalty_threshold=module5_penalty_threshold,
         show_plot=show_plot,
         save_plot_path=f"{stem}_module5_zeno_catastrophe.png",
-        enforce_audit=True,
+        enforce_audit=enforce_audit,
     )
     lab.experiment_module6_empty_database_paradox(
-        iterations=50,
-        control_theta=0.1,
-        mizel_c=1.5,
-        noise_floor=1e-15,
+        iterations=module6_iterations,
+        control_theta=module6_control_theta,
+        mizel_c=module6_mizel_c,
+        noise_floor=module6_noise_floor,
         show_plot=show_plot,
         save_plot_path=f"{stem}_module6_empty_database.png",
-        enforce_audit=True,
+        enforce_audit=enforce_audit,
     )
-    print("One-click FOQA run complete.")
+    print("Fixed-point oblivious amplitude amplification analysis complete.")
+
+
+def run_all_modules_one_click(show_plot: bool = False) -> None:
+    """Backward-compatible wrapper for the default six-module FOQA analysis."""
+    run_full_analysis(show_plot=show_plot, out_prefix=Path(__file__).stem, enforce_audit=True)
+
+
+def _interactive_rerun_prompt(defaults: Dict[str, object]) -> None:
+    if not sys.stdin.isatty():
+        return
+
+    print("\n" + "=" * 72)
+    print("INTERACTIVE RE-RUN MODE")
+    print("=" * 72)
+    print("Press Enter to finish, or enter custom key=value pairs to rerun.")
+    print("Example: module2_theta=0.02, module2_iterations=90")
+    print("Example: module4_num_p_values=30, module4_target_success=0.995")
+    print("Example: module5_theta=0.02, module6_iterations=80")
+
+    try:
+        raw = input("Custom parameters: ").strip()
+    except EOFError:
+        print("\nInteractive mode closed.")
+        return
+
+    if not raw:
+        print("Interactive mode finished.")
+        return
+    if "=" not in raw:
+        print("No key=value parameters detected. Interactive mode finished.")
+        return
+
+    try:
+        kwargs = _parse_kwargs_text(raw)
+    except Exception as exc:
+        print(f"Could not parse custom parameters: {exc}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    allowed = set(defaults)
+    unknown = set(kwargs) - allowed
+    if unknown:
+        print(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    merged = dict(defaults)
+    merged.update(kwargs)
+    print(f"\nRe-running with parameters: {merged}")
+    run_full_analysis(**merged)
 
 
 def main(argv: Optional[list[str]] = None) -> None:
@@ -1604,7 +1884,81 @@ def main(argv: Optional[list[str]] = None) -> None:
 
 if __name__ == "__main__":
     start_one_click_session(__file__, figure_prefix="foaa")
-    if len(sys.argv) == 1:
-        run_all_modules_one_click(show_plot=False)
-    else:
+    cli_kwargs = _parse_command_line(sys.argv[1:])
+    if cli_kwargs is None:
         main()
+    elif cli_kwargs:
+        default_kwargs: Dict[str, object] = {
+            "module1_theta": 0.6,
+            "module1_alpha": 1.2,
+            "module2_theta": 0.01,
+            "module2_iterations": 120,
+            "module2_alpha_under": 0.02,
+            "module2_alpha_over": 1.5,
+            "module2_mizel_c": 1.4,
+            "module3_theta": 0.15,
+            "module3_iterations": 6,
+            "module3_recurrence_c": 0.5,
+            "module4_num_p_values": 20,
+            "module4_p_max_exp": -1,
+            "module4_p_min_exp": -6,
+            "module4_target_success": 0.99,
+            "module4_complexity_c": 1.5,
+            "module4_max_iterations": 50_000,
+            "module4_slope_tolerance": 0.02,
+            "module5_theta": 0.01,
+            "module5_iterations": 100,
+            "module5_zeno_alpha": 1.5,
+            "module5_mizel_c": 1.5,
+            "module5_classical_tolerance": 0.05,
+            "module5_penalty_threshold": 5.0,
+            "module6_iterations": 50,
+            "module6_control_theta": 0.1,
+            "module6_mizel_c": 1.5,
+            "module6_noise_floor": 1e-15,
+            "out_prefix": Path(__file__).stem,
+            "show_plot": False,
+            "enforce_audit": True,
+        }
+        unknown = set(cli_kwargs) - set(default_kwargs)
+        if unknown:
+            raise ValueError(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        merged = dict(default_kwargs)
+        merged.update(cli_kwargs)
+        run_full_analysis(**merged)
+    else:
+        default_kwargs = {
+            "module1_theta": 0.6,
+            "module1_alpha": 1.2,
+            "module2_theta": 0.01,
+            "module2_iterations": 120,
+            "module2_alpha_under": 0.02,
+            "module2_alpha_over": 1.5,
+            "module2_mizel_c": 1.4,
+            "module3_theta": 0.15,
+            "module3_iterations": 6,
+            "module3_recurrence_c": 0.5,
+            "module4_num_p_values": 20,
+            "module4_p_max_exp": -1,
+            "module4_p_min_exp": -6,
+            "module4_target_success": 0.99,
+            "module4_complexity_c": 1.5,
+            "module4_max_iterations": 50_000,
+            "module4_slope_tolerance": 0.02,
+            "module5_theta": 0.01,
+            "module5_iterations": 100,
+            "module5_zeno_alpha": 1.5,
+            "module5_mizel_c": 1.5,
+            "module5_classical_tolerance": 0.05,
+            "module5_penalty_threshold": 5.0,
+            "module6_iterations": 50,
+            "module6_control_theta": 0.1,
+            "module6_mizel_c": 1.5,
+            "module6_noise_floor": 1e-15,
+            "out_prefix": Path(__file__).stem,
+            "show_plot": False,
+            "enforce_audit": True,
+        }
+        run_full_analysis(**default_kwargs)
+        _interactive_rerun_prompt(default_kwargs)
+
