@@ -1212,9 +1212,9 @@ def run_scenario_s(n_data: int = 5, degree: int = 21) -> None:
     print("SCENARIO S: PARITY-SYMMETRY COMPILER HEURISTIC (OPT_LEVEL=3)")
     print(SEP)
 
-    hh = _heavy_hex_map(min_qubits=max(qc_sym.num_qubits, qc_asym.num_qubits))
     qc_sym = _build_symmetry_test_circuit(n_data=n_data, degree=degree, symmetric=True)
     qc_asym = _build_symmetry_test_circuit(n_data=n_data, degree=degree, symmetric=False)
+    hh = _heavy_hex_map(min_qubits=max(qc_sym.num_qubits, qc_asym.num_qubits))
 
     sym_o0 = _transpile_stats(qc_sym, coupling_map=hh, optimization_level=0)
     sym_o3 = _transpile_stats(qc_sym, coupling_map=hh, optimization_level=3)
@@ -1752,3 +1752,4 @@ if __name__ == "__main__":
     logger.close()
     sys.stdout = logger.terminal
     print(f"\nBenchmark suite complete. Results saved to {output_path}")
+
