@@ -83,4 +83,6 @@ nav:
       - Variable Time: api/variable_time.md
       - Oblivious: api/oblivious.md
       - FPOA: api/foqa.md
+      - Transpilation: api/transpilation.md
+      - Transpilation Validation: api/transpilation_validation.md
       - Diagnostics: api/diagnostics.md
