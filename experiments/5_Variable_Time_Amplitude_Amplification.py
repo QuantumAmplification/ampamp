@@ -31,11 +31,18 @@ than claiming exact gate counts.
 
 from __future__ import annotations
 
+import ast
 import argparse
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_RESULT_DIR = os.path.join(_HERE, f"[RESULT]{os.path.splitext(os.path.basename(__file__))[0]}")
+os.makedirs(_RESULT_DIR, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(_RESULT_DIR, ".mplconfig"))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -85,6 +92,103 @@ except Exception:
             log_handle.close()
         atexit.register(_cleanup)
         return result_dir
+
+
+def _parse_cli_value(raw: str):
+    try:
+        return ast.literal_eval(raw)
+    except Exception:
+        lowered = raw.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered == "none":
+            return None
+        return raw
+
+
+def _split_top_level_commas(text: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    quote_char = ""
+    escaped = False
+
+    for ch in text:
+        if escaped:
+            current.append(ch)
+            escaped = False
+            continue
+        if quote_char:
+            current.append(ch)
+            if ch == "\\":
+                escaped = True
+            elif ch == quote_char:
+                quote_char = ""
+            continue
+        if ch in ("'", '"'):
+            quote_char = ch
+            current.append(ch)
+            continue
+        if ch in "([{":
+            depth += 1
+            current.append(ch)
+            continue
+        if ch in ")]}":
+            depth = max(0, depth - 1)
+            current.append(ch)
+            continue
+        if ch == "," and depth == 0:
+            piece = "".join(current).strip()
+            if piece:
+                parts.append(piece)
+            current = []
+            continue
+        current.append(ch)
+
+    piece = "".join(current).strip()
+    if piece:
+        parts.append(piece)
+    return parts
+
+
+def _normalize_cli_key(key: str) -> str:
+    return key.strip().replace("-", "_")
+
+
+def _parse_kwargs_text(raw: str) -> dict[str, object]:
+    kwargs: dict[str, object] = {}
+    for chunk in _split_top_level_commas(raw.strip()):
+        if "=" not in chunk:
+            raise ValueError(f"Expected key=value pair, got '{chunk}'")
+        key, value = chunk.split("=", 1)
+        kwargs[_normalize_cli_key(key)] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_kwargs_tokens(tokens: Sequence[str]) -> dict[str, object]:
+    kwargs: dict[str, object] = {}
+    for token in tokens:
+        piece = token.strip()
+        if not piece:
+            continue
+        if "=" not in piece:
+            raise ValueError(f"Expected key=value pair, got '{piece}'")
+        key, value = piece.split("=", 1)
+        kwargs[_normalize_cli_key(key)] = _parse_cli_value(value.strip())
+    return kwargs
+
+
+def _parse_command_line(argv: Sequence[str]) -> Optional[dict[str, object]]:
+    # Preserve the existing argparse interface whenever standard option flags are used.
+    if not argv:
+        return {}
+    if any(token.startswith("-") for token in argv):
+        return None
+    if len(argv) == 1:
+        return _parse_kwargs_text(argv[0])
+    return _parse_kwargs_tokens(argv)
 
 
 @dataclass(frozen=True)
@@ -1653,8 +1757,8 @@ def save_vtaa_cost_sweep_plot(result: VTAA_CostSweepResults, output_prefix: str 
     return path
 
 
-def main(argv: Optional[Sequence[str]] = None) -> None:
-    parser = argparse.ArgumentParser(description="Variable-Time Amplitude Amplification lab")
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Variable-Time Amplitude Amplification theory companion")
     parser.add_argument("--times", type=str, default="1,2,4,8,16", help="comma-separated stop times")
     parser.add_argument("--weights", type=str, default="0.36,0.28,0.18,0.12,0.06", help="comma-separated branch weights")
     parser.add_argument("--success", type=str, default="0.02,0.05,0.10,0.22,0.45", help="comma-separated conditional success probabilities")
@@ -1673,7 +1777,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--staircase-n", type=int, default=8, help="qubit count for staircase audit")
     parser.add_argument("--staircase-k-max", type=int, default=25, help="iterations for staircase audit")
     parser.add_argument("--staircase-good-state", type=str, default=None, help="optional H_Good n-bit state for staircase audit")
-    parser.add_argument("--run-souffle-failure mode", action="store_true", help="run over-rotation failure mode experiment")
+    parser.add_argument("--run-souffle-catastrophe", action="store_true", help="run over-rotation failure mode experiment")
     parser.add_argument("--souffle-n", type=int, default=8, help="qubits for souffle experiment")
     parser.add_argument("--souffle-guessed-m", type=int, default=1, help="guessed number of H_Good states")
     parser.add_argument("--souffle-actual-m", type=int, default=5, help="actual number of H_Good states")
@@ -1747,6 +1851,132 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--vtaa-t1", type=float, default=100.0, help="stage-1 cost for VTAA sweep")
     parser.add_argument("--vtaa-t2", type=float, default=1000.0, help="stage-2 cost for VTAA sweep")
     parser.add_argument("--vtaa-t3", type=float, default=10000.0, help="stage-3 cost for VTAA sweep")
+    return parser
+
+
+def _build_default_cli_kwargs() -> dict[str, object]:
+    stem = Path(__file__).stem
+    parser = _build_parser()
+    defaults = vars(parser.parse_args([]))
+    defaults.update(
+        {
+            "plot_prefix": stem,
+            "run_subspace_audit": True,
+            "run_phase_staircase": True,
+            "run_souffle_catastrophe": True,
+            "run_ftqc_scaling": True,
+            "run_exact_aa": True,
+            "run_phase_leakage": True,
+            "run_open_system_trajectory": True,
+            "run_vtaa_synthesis": True,
+            "run_vtaa_sweep": True,
+        }
+    )
+    return defaults
+
+
+def _build_selective_cli_kwargs() -> dict[str, object]:
+    stem = Path(__file__).stem
+    parser = _build_parser()
+    defaults = vars(parser.parse_args([]))
+    defaults.update({"plot_prefix": stem})
+    return defaults
+
+
+def _canonicalize_kwargs(kwargs: dict[str, object], valid_keys: Sequence[str]) -> tuple[dict[str, object], list[str]]:
+    key_map = {key.lower(): key for key in valid_keys}
+    canonical: dict[str, object] = {}
+    unknown: list[str] = []
+    for key, value in kwargs.items():
+        canonical_key = key_map.get(key.lower())
+        if canonical_key is None:
+            unknown.append(key)
+            continue
+        canonical[canonical_key] = value
+    return canonical, unknown
+
+
+def _format_cli_option_value(value: object) -> str:
+    if isinstance(value, (list, tuple)):
+        return ",".join(str(item) for item in value)
+    return str(value)
+
+
+def _kwargs_to_cli_args(kwargs: dict[str, object], parser: argparse.ArgumentParser) -> list[str]:
+    argv: list[str] = []
+    option_actions = [action for action in parser._actions if action.option_strings]
+
+    for action in option_actions:
+        if action.dest not in kwargs:
+            continue
+        value = kwargs[action.dest]
+        option = action.option_strings[-1]
+        if action.nargs == 0:
+            if bool(value):
+                argv.append(option)
+            continue
+        if value is None:
+            continue
+        argv.extend([option, _format_cli_option_value(value)])
+    return argv
+
+
+def _merge_custom_kwargs(overrides: dict[str, object], default_kwargs: dict[str, object]) -> dict[str, object]:
+    run_keys = {key for key in default_kwargs if key.startswith("run_")}
+    base = dict(default_kwargs)
+    if any(key in overrides for key in run_keys):
+        base = _build_selective_cli_kwargs()
+    base.update(overrides)
+    return base
+
+
+def _interactive_rerun_prompt(defaults: dict[str, object]) -> None:
+    if not sys.stdin.isatty():
+        return
+
+    print("\n" + "=" * 72)
+    print("INTERACTIVE RE-RUN MODE")
+    print("=" * 72)
+    print("Press Enter to finish, or enter custom key=value pairs to rerun.")
+    print("Example: times=[1,2,4,8], weights=[0.4,0.3,0.2,0.1], success=[0.02,0.08,0.2,0.5]")
+    print("Example: run_souffle_catastrophe=True, souffle_n=10, souffle_actual_m=9, no_plots=True")
+    print("Example: run_vtaa_sweep=True, vtaa_total_ps=0.08, vtaa_t1=50, vtaa_t2=500, vtaa_t3=5000")
+
+    try:
+        raw = input("Custom parameters: ").strip()
+    except EOFError:
+        print("\nInteractive mode closed.")
+        return
+
+    if not raw:
+        print("Interactive mode finished.")
+        return
+    if "=" not in raw:
+        print("No key=value parameters detected. Interactive mode finished.")
+        return
+
+    try:
+        kwargs = _parse_kwargs_text(raw)
+    except Exception as exc:
+        print(f"Could not parse custom parameters: {exc}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    canonical_kwargs, unknown = _canonicalize_kwargs(kwargs, defaults.keys())
+    if unknown:
+        print(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        print("Interactive mode finished without rerun.")
+        return
+
+    merged = _merge_custom_kwargs(canonical_kwargs, defaults)
+    parser = _build_parser()
+    cli_args = _kwargs_to_cli_args(merged, parser)
+    print(f"\nRe-running with parameters: {merged}")
+    main(cli_args)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = _build_parser()
     args = parser.parse_args(argv)
 
     times = _parse_csv_floats(args.times)
@@ -1959,26 +2189,28 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         print("\nSaved plots:")
         for f in files:
             print(f"  - {f}")
+    return 0
 
 
 if __name__ == "__main__":
     start_one_click_session(__file__, figure_prefix="vtaa")
-    if len(sys.argv) == 1:
-        stem = Path(__file__).stem
-        main(
-            [
-                "--plot-prefix",
-                stem,
-                "--run-subspace-audit",
-                "--run-phase-staircase",
-                "--run-souffle-failure mode",
-                "--run-ftqc-scaling",
-                "--run-exact-aa",
-                "--run-phase-leakage",
-                "--run-open-system-trajectory",
-                "--run-vtaa-synthesis",
-                "--run-vtaa-sweep",
-            ]
-        )
-    else:
-        main()
+    cli_kwargs = _parse_command_line(sys.argv[1:])
+    if cli_kwargs is None:
+        raise SystemExit(main())
+
+    default_kwargs = _build_default_cli_kwargs()
+    if cli_kwargs:
+        canonical_kwargs, unknown = _canonicalize_kwargs(cli_kwargs, default_kwargs.keys())
+        if unknown:
+            raise ValueError(f"Unknown argument(s): {', '.join(sorted(unknown))}")
+        merged = _merge_custom_kwargs(canonical_kwargs, default_kwargs)
+        parser = _build_parser()
+        raise SystemExit(main(_kwargs_to_cli_args(merged, parser)))
+
+    # No explicit CLI arguments means: run the default VTAA companion once,
+    # then offer an optional interactive rerun with custom overrides.
+    parser = _build_parser()
+    exit_code = main(_kwargs_to_cli_args(default_kwargs, parser))
+    _interactive_rerun_prompt(default_kwargs)
+    raise SystemExit(exit_code)
+
