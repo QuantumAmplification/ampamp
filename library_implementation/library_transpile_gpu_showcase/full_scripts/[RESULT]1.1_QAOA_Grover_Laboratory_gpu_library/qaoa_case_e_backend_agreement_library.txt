@@ -1,0 +1,11 @@
+Case E: Backend Agreement (Library)
+===================================
+
+num_qubits=5
+depth_p=3
+target_idx=0
+
+grover all_to_all depth=453 cx=216 score=47460.00
+grover linear     depth=941 cx=595 score=99290.00
+transverse all_to_all depth=234 cx=108 score=24480.00
+transverse linear     depth=448 cx=282 score=47840.00

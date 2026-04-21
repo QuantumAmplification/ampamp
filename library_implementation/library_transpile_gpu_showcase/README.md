@@ -1,34 +1,32 @@
 # Library Transpile GPU Showcase
 
-This folder demonstrates GPU-oriented transpilation and execution using only library APIs (`ampamp`).
+Library-based GPU transpilation suite for all algorithm tracks, mirroring the non-library GPU workflow style.
 
-## What it does
+## Included algorithm tracks
 
-- Builds representative circuits from library modules:
-  - Grover
-  - Fixed-Point
-  - Oblivious
-  - FOQA
-  - Distributed
-  - Variable-Time
-  - QSVT
-- Tries to initialize Aer with `device="GPU"`.
-- Falls back to CPU automatically if GPU backend is unavailable.
-- Transpiles circuits with a native gate basis and optimization level 3.
-- Optionally executes transpiled circuits and records basic execution stats.
+- 1_grover
+- 1.1_qaoa_grover
+- 2_fixed_point
+- 3_oblivious
+- 3.25_controlled
+- 3.5_foqa
+- 4_distributed
+- 5_variable_time
+- 6_qsvt
+- 7_unified_comparative
 
 ## Run
 
 ```bash
-PYTHONPATH=src:. python3 library_implementation/library_transpile_gpu_showcase/run_gpu_with_library.py
+PYTHONPATH=src:. python3 library_implementation/library_transpile_gpu_showcase/run_all_gpu_with_library.py
 ```
 
 ## Output
 
-- `results/gpu_transpile_results.json`
-- `results/gpu_transpile_summary.csv`
+- `library_implementation/library_transpile_gpu_showcase/results/library_gpu_transpile_results.json`
+- `library_implementation/library_transpile_gpu_showcase/results/library_gpu_transpile_summary.csv`
 
 ## Notes
 
-- If GPU is not available, the runner reports `backend_mode=CPU` and still produces results.
-- This is a library-driven workflow; no non-library scenario scripts are required.
+- The runner tries `AerSimulator(device="GPU")` first.
+- If GPU is unavailable, it falls back to CPU automatically and records the reason in output metadata.

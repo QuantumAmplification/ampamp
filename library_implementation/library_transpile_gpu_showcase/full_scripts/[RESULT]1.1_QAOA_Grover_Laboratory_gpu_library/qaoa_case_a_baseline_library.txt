@@ -1,0 +1,19 @@
+Case A: Baseline Depth Dependence (Library)
+===========================================
+
+num_qubits=5
+target_idx=0
+max_p=4
+
+p=1 | grover_success=0.258301 | transverse_success=0.134902 | leakage=0.049372
+  grover depth=153 cx=72 score=16020.00
+  transverse depth=80 cx=36 score=8360.00
+p=2 | grover_success=0.602425 | transverse_success=0.193758 | leakage=0.097083
+  grover depth=303 cx=144 score=31740.00
+  transverse depth=157 cx=72 score=16420.00
+p=3 | grover_success=0.896937 | transverse_success=0.474111 | leakage=0.121752
+  grover depth=453 cx=216 score=47460.00
+  transverse depth=234 cx=108 score=24480.00
+p=4 | grover_success=1.000000 | transverse_success=0.600161 | leakage=0.107232
+  grover depth=603 cx=288 score=63180.00
+  transverse depth=311 cx=144 score=32540.00

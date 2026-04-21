@@ -1,0 +1,11 @@
+algorithm,num_qubits,post_optimization_depth,final_cnots,hardware_penalty_score,gpu_mode,gpu_transpiled_depth,gpu_transpiled_cnots
+1_grover,6,486,248,51080.0,gpu,7,0
+1.1_qaoa_grover,5,153,72,16020.0,gpu,5,0
+2_fixed_point,6,976,494,102540.0,gpu,13,0
+3_oblivious,3,4,0,400.0,gpu,1,0
+3.25_controlled,3,89,42,9320.0,gpu,43,18
+3.5_foqa,3,9,2,920.0,gpu,1,0
+4_distributed,6,3,0,300.0,gpu,1,0
+5_variable_time,4,69,28,7180.0,gpu,21,4
+6_qsvt,1,5,0,500.0,gpu,1,0
+7_unified_comparative,6,976,494,102540.0,gpu,13,0
