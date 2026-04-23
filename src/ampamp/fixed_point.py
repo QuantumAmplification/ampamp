@@ -72,24 +72,30 @@ class FixedPointEngine:
         if num_qubits < 1:
             raise ValueError("num_qubits must be >= 1")
             
-        core = GroverEngine(num_qubits, marked_indices)
-        oracle = core.get_oracle()
-        diffusion = core.get_diffusion()
+        try:
+            from qiskit.circuit.library import DiagonalGate as Diagonal
+        except ImportError:
+            from qiskit.circuit.library import Diagonal
 
         qc = QuantumCircuit(num_qubits)
         qc.h(range(num_qubits))
 
-        # Library-compatible FPAA proxy:
-        # keep Grover structural skeleton while injecting continuous phase knobs
-        # between oracle/diffusion blocks using synthesized alpha/beta sequences.
-        for a_j, b_j in zip(self.alphas, self.betas):
-            qc.append(oracle, range(num_qubits))
-            for q in range(num_qubits):
-                qc.rz(float(b_j), q)
+        N = 2 ** num_qubits
 
-            qc.append(diffusion, range(num_qubits))
-            for q in range(num_qubits):
-                qc.rz(float(a_j), q)
+        for a_j, b_j in zip(self.alphas, self.betas):
+            # Phase oracle: apply e^{i*beta} to marked states
+            oracle_diag = np.ones(N, dtype=complex)
+            for m in marked_indices:
+                oracle_diag[m] = np.exp(1j * float(b_j))
+            
+            qc.append(Diagonal(oracle_diag), range(num_qubits))
+
+            # Phase diffusion: H^n -> Phase on |0> -> H^n
+            qc.h(range(num_qubits))
+            diff_diag = np.ones(N, dtype=complex)
+            diff_diag[0] = np.exp(1j * float(a_j))
+            qc.append(Diagonal(diff_diag), range(num_qubits))
+            qc.h(range(num_qubits))
 
         return qc
 
