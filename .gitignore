@@ -22,3 +22,4 @@ venv/
 # egg-info
 *.egg-info/
 /site
+paper.tex
