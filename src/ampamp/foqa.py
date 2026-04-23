@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Fixed-Point Oblivious Amplitude Amplification module.
 
 Provides the `FOQAEngine` to analyze and simulate LCU dynamics 
@@ -143,7 +145,7 @@ class FOQAEngine:
 
             # ctrl-0 on index qubit (1), target ancilla qubit (0)
             qc.x(1)
-            qc.cry(alpha, 1, 0)
+            qc.cry(2.0 * alpha, 1, 0)
             qc.x(1)
 
         return qc

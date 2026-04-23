@@ -1,11 +1,12 @@
+from __future__ import annotations
+
 """Fixed-Point Amplitude Amplification module.
 
 Provides the `FixedPointEngine` for running algorithms with monotonic convergence.
 """
 
 import numpy as np
-from qiskit import QuantumCircuit, transpile
-from qiskit.quantum_info import partial_trace
+from qiskit import QuantumCircuit
 from .grover import GroverEngine
 
 class FixedPointEngine:
@@ -50,7 +51,7 @@ class FixedPointEngine:
 
         alpha = np.zeros(self.L)
         for j in range(1, self.L + 1):
-            theta_j = (2.0 * np.pi * j) / self.L
+            theta_j = (2.0 * j - 1.0) * np.pi / (2.0 * self.L)
             tan_val = float(np.tan(theta_j))
             alpha[j-1] = 2.0 * np.arctan2(1.0, tan_val * sq_term)
         

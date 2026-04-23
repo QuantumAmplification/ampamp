@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Quantum Singular Value Transformation module.
 
 Provides algebraic and compilation utilities for SU(2) signal processing
@@ -63,7 +65,7 @@ class SU2QSPEngine:
 
             p_vals[idx] = u[0, 0]
             y = np.sqrt(max(0.0, 1.0 - x * x))
-            q_vals[idx] = 0.0j if y <= 1e-15 else u[1, 0] / (1j * y)
+            q_vals[idx] = 0.0j if y <= 1e-10 else u[1, 0] / (1j * y)
 
         return p_vals, q_vals
 

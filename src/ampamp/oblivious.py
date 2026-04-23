@@ -5,7 +5,7 @@ Provides the `ObliviousEngine` to handle oblivious operations such as block enco
 
 import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister
-from qiskit.quantum_info import Operator, random_unitary
+from qiskit.quantum_info import Operator
 
 class ObliviousEngine:
     """Engine for Oblivious Amplitude Amplification (OAA).
@@ -62,7 +62,7 @@ class ObliviousEngine:
         qc = QuantumCircuit(anc, data)
 
         # 1. Rotate ancilla
-        qc.compose(self.get_ancilla_rotation(), inplace=True)
+        qc.compose(self.get_ancilla_rotation(), qubits=list(range(self.l)), inplace=True)
 
         # 2. Controlled-U conditioned on ancilla=0
         qc.x(anc[0])
@@ -81,8 +81,7 @@ class ObliviousEngine:
         anc = QuantumRegister(self.l)
         data = QuantumRegister(self.m)
         qc = QuantumCircuit(anc, data)
-        # Reflection about |0> on ancilla: I - 2|0><0|
-        qc.x(0)
+        # Reflection about |0> on ancilla: I - 2|0><0| = -Z (with global phase)
         qc.z(0)
-        qc.x(0)
+        qc.global_phase += np.pi
         return qc

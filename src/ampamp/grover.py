@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Foundations for Quantum Amplitude Amplification.
 
 This module provides basic classes and fundamental operations
@@ -5,8 +7,7 @@ for standard Grover search and amplitude amplification algorithms.
 """
 
 import numpy as np
-from qiskit import QuantumCircuit, transpile
-from qiskit.quantum_info import partial_trace
+from qiskit import QuantumCircuit
 
 class GroverEngine:
     """The core algebraic and circuit engine for Grover's Search.
@@ -109,7 +110,7 @@ class GroverEngine:
             qc.h(self.n - 1)
         qc.x(range(self.n))
         qc.h(range(self.n))
-        qc.global_phase = np.pi
+        qc.global_phase += np.pi
         return qc
 
     def construct_circuit(self, iterations: int) -> QuantumCircuit:

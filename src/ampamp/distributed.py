@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Distributed Quantum Amplitude Amplification module.
 
 Provides classes and utilities for partitioning global amplitude amplification
@@ -7,7 +9,7 @@ problems into local sub-problems suitable for distributed quantum computing.
 import numpy as np
 import sympy as sp
 from qiskit import QuantumCircuit
-from qiskit.circuit.library import PhaseOracleGate
+from qiskit.circuit.library import PhaseOracle
 
 class DQAAEngine:
     """Core engine for Distributed Quantum Amplitude Amplification.
@@ -59,16 +61,11 @@ class DQAAEngine:
         Returns:
             QuantumCircuit: The constructed local quantum circuit.
         """
-        qc = QuantumCircuit(self.local_n)
-        qc.h(range(self.local_n))
-        
-        for alpha, beta in zip(alphas, betas):
-            qc.global_phase += np.pi
-            # (Assuming you move your _build_local_oracle/diffusion helpers here)
-            # qc.append(self._build_local_oracle(local_targets, beta), range(self.local_n))
-            # qc.append(self._build_local_diffusion(alpha), range(self.local_n))
-            
-        return qc
+        raise NotImplementedError(
+            "build_node_circuit requires _build_local_oracle and "
+            "_build_local_diffusion helpers to be implemented. "
+            "Use partition_targets() + OracleSynthesizer for oracle construction."
+        )
 
 class OracleSynthesizer:
     """AST-level oracle partitioning compiler.
@@ -118,7 +115,7 @@ class OracleSynthesizer:
             return qc
             
         active_symbols = sorted([str(s) for s in simplified.free_symbols])
-        oracle_gate = PhaseOracleGate(str(simplified))
+        oracle_gate = PhaseOracle(str(simplified))
         
         qargs = [self.suffix_vars.index(v) for v in active_symbols]
         qc = QuantumCircuit(self.local_n)
