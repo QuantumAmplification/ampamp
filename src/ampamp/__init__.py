@@ -14,6 +14,7 @@ from .foqa import FOQAEngine
 from .distributed import DQAAEngine, OracleSynthesizer
 from .variable_time import VTAAEngine, VariableTimeBranch
 from .qsvt import SU2QSPEngine, QSVTSynthesizer  
+from .iqae import IQAEEngine, IQAEResult, IQAEConfig
 from .transpilation import TranspilationProfiler, TranspilationBatchProfiler, TranspilationProfileConfig, HardwareCostWeights
 from .transpilation_validation import (
     BackendValidationRunner,
@@ -36,6 +37,7 @@ __all__ = [
     "GroverEngine", "FixedPointEngine", "ObliviousEngine", "FOQAEngine", 
     "DQAAEngine", "OracleSynthesizer", "VTAAEngine", "VariableTimeBranch",
     "SU2QSPEngine", "QSVTSynthesizer",
+    "IQAEEngine", "IQAEResult", "IQAEConfig",
     "TranspilationProfiler", "TranspilationBatchProfiler", "TranspilationProfileConfig", "HardwareCostWeights",
     "BackendValidationRunner", "BackendValidationConfig", "ValidationNoiseConfig", "ValidationLogConfig",
     "GroverAuditor", "FPAAAuditor", "ObliviousAuditor", "FOQAAuditor", 
