@@ -8,6 +8,7 @@ from . import _04_distributed
 from . import _05_variable_time
 from . import _06_qsvt
 from . import _07_unified_comparative
+from . import _08_iqae
 
 ALL_ALGORITHM_RUNNERS = {
     "1_grover": _01_grover.run,
@@ -20,4 +21,5 @@ ALL_ALGORITHM_RUNNERS = {
     "5_variable_time": _05_variable_time.run,
     "6_qsvt": _06_qsvt.run,
     "7_unified_comparative": _07_unified_comparative.run,
+    "8_iqae": _08_iqae.run,
 }

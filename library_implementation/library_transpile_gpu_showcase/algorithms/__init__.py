@@ -8,6 +8,7 @@ from . import _04_distributed
 from . import _05_variable_time
 from . import _06_qsvt
 from . import _07_unified_comparative
+from . import _08_iqae
 
 ALL_BUILDERS = {
     "1_grover": _01_grover.build_circuit,
@@ -20,4 +21,5 @@ ALL_BUILDERS = {
     "5_variable_time": _05_variable_time.build_circuit,
     "6_qsvt": _06_qsvt.build_circuit,
     "7_unified_comparative": _07_unified_comparative.build_circuit,
+    "8_iqae": _08_iqae.build_circuit,
 }
