@@ -9,6 +9,9 @@ for standard Grover search and amplitude amplification algorithms.
 import numpy as np
 from qiskit import QuantumCircuit
 
+from .oracles import build_phase_oracle
+
+
 class GroverEngine:
     """The core algebraic and circuit engine for Grover's Search.
 
@@ -76,21 +79,7 @@ class GroverEngine:
         Returns:
             QuantumCircuit: An n-qubit oracle circuit flipping the phase of marked states.
         """
-        qc = QuantumCircuit(self.n)
-        for index in self.marked:
-            target_bin = format(index, f'0{self.n}b')[::-1]
-            for i, bit in enumerate(target_bin):
-                if bit == '0': qc.x(i)
-            if self.n == 1:
-                qc.z(0)
-            else:
-                qc.h(self.n - 1)
-                qc.mcx(list(range(self.n - 1)), self.n - 1)
-                qc.h(self.n - 1)
-            
-            for i, bit in enumerate(target_bin):
-                if bit == '0': qc.x(i)
-        return qc
+        return build_phase_oracle(num_qubits=self.n, marked_indices=self.marked)
 
     def get_diffusion(self) -> QuantumCircuit:
         """Generates the Grover Diffusion operator (Inversion about mean).
@@ -140,4 +129,3 @@ class GroverEngine:
 
 
 # ----------------------------------------------------------------------------
-

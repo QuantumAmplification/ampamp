@@ -77,6 +77,8 @@ nav:
   - Home: index.md
   - API Reference:
       - Foundations: api/grover.md
+      - Oracle Construction: api/oracles.md
+      - Entanglement Count: api/entanglement.md
       - Fixed-Point: api/fixed_point.md
       - QSVT: api/qsvt.md
       - Distributed: api/distributed.md

@@ -8,6 +8,14 @@ Distributed Quantum Amplitude Amplification, Variable-Time, and QSVT.
 
 # src/ampamp/__init__.py
 from .grover import GroverEngine
+from .oracles import (
+    OracleBuilder,
+    OracleSpec,
+    build_bit_flip_oracle,
+    build_phase_oracle,
+    marked_bitstrings_from_formula,
+)
+from .entanglement import EntanglementCountConfig, profile_entanglement_counts
 from .fixed_point import FixedPointEngine
 from .oblivious import ObliviousEngine
 from .foqa import FOQAEngine
@@ -34,7 +42,17 @@ from .diagnostics import (
 )
 
 __all__ = [
-    "GroverEngine", "FixedPointEngine", "ObliviousEngine", "FOQAEngine", 
+    "GroverEngine",
+    "OracleBuilder",
+    "OracleSpec",
+    "build_phase_oracle",
+    "build_bit_flip_oracle",
+    "marked_bitstrings_from_formula",
+    "EntanglementCountConfig",
+    "profile_entanglement_counts",
+    "FixedPointEngine",
+    "ObliviousEngine",
+    "FOQAEngine",
     "DQAAEngine", "OracleSynthesizer", "VTAAEngine", "VariableTimeBranch",
     "SU2QSPEngine", "QSVTSynthesizer",
     "IQAEEngine", "IQAEResult", "IQAEConfig",

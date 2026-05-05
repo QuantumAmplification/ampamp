@@ -48,6 +48,13 @@ Import surface from `ampamp`:
 ```python
 from ampamp import (
     GroverEngine,
+    OracleBuilder,
+    OracleSpec,
+    build_phase_oracle,
+    build_bit_flip_oracle,
+    marked_bitstrings_from_formula,
+    EntanglementCountConfig,
+    profile_entanglement_counts,
     FixedPointEngine,
     ObliviousEngine,
     FOQAEngine,
@@ -71,6 +78,8 @@ from ampamp import (
 ### Core Engines
 
 - `GroverEngine`: oracle/diffusion builders, Grover circuit synthesis, success-probability utilities.
+- `OracleBuilder` + helpers: general phase and bit-flip oracle construction from marked indices, bitstrings, or Boolean formulae.
+- `profile_entanglement_counts`: light/hard active-entanglement count profiling for Qiskit circuits.
 - `FixedPointEngine`: Chebyshev-derived phase schedule generation + fixed-point circuit synthesis.
 - `ObliviousEngine`: ancilla prep, block-encoding circuit construction, reflection construction.
 - `FOQAEngine`: Mizel/constant schedules, recurrence simulation, FOQA proxy circuit sequence builder.
@@ -148,7 +157,28 @@ qc = fp.build_fixed_point_circuit(num_qubits=6, marked_indices=[0])
 print(len(fp.alphas), len(fp.betas), qc.num_qubits)
 ```
 
-### 3) Backend validation with structured logs
+### 3) General oracle construction
+
+```python
+from ampamp import build_bit_flip_oracle, build_phase_oracle
+
+phase_oracle = build_phase_oracle(num_qubits=4, marked_indices=[3, 11])
+formula_oracle = build_phase_oracle(num_qubits=4, formula_text="v0 & (~v1 | v3)")
+bit_flip_oracle = build_bit_flip_oracle(num_qubits=4, marked_bitstrings=["0011", "1011"])
+```
+
+### 4) Light/hard entanglement count
+
+```python
+from ampamp import EntanglementCountConfig, profile_entanglement_counts
+
+light = profile_entanglement_counts(qc, EntanglementCountConfig.light(max_qubits=12))
+hard = profile_entanglement_counts(qc, EntanglementCountConfig.hard(max_qubits=8))
+
+print(light["peak_active_entangled_qubits"])
+```
+
+### 5) Backend validation with structured logs
 
 ```python
 from ampamp import (

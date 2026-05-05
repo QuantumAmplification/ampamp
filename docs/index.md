@@ -17,6 +17,20 @@ Amplitude Amplification (`ampamp`) provides a robust, production-grade API for r
     
     [API Reference](api/grover.md)
 
+-   **Oracle Construction**
+
+    ---
+    General phase and bit-flip oracle construction from marked indices, marked bitstrings, and Boolean formulae over variables such as `v0`, `v1`, and `v2`.
+
+    [API Reference](api/oracles.md)
+
+-   **Entanglement Count**
+
+    ---
+    Light or hard active-entangled-qubit counting for Qiskit circuits, with sampled checkpoints for constrained hardware and every-step tracing for stronger hardware.
+
+    [API Reference](api/entanglement.md)
+
 -   **Fixed-Point Search (FPAA)**
 
     ---

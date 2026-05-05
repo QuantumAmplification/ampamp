@@ -1,0 +1,3 @@
+# Entanglement Count
+
+::: ampamp.entanglement
