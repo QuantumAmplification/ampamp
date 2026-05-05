@@ -97,7 +97,7 @@ Instantiate precision-tuned engines capable of scaling to highly complex quantum
 ```python
 from ampamp import FPAAAuditor, FixedPointEngine
 
-# Establish a 15-iteration strictly monotonic Chebyshev schedule
+# Establish a degree-15 Yoder-Low-Chuang fixed-point schedule
 engine = FixedPointEngine(L=15, delta=1e-3)
 
 # Access the classical analytical hardware limits

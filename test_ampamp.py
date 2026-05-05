@@ -39,8 +39,9 @@ def main():
     print("--- 2. Fixed-Point Amplitude Amplification ---")
     fp_engine = FixedPointEngine(L=5, delta=0.1)
     fp_auditor = FPAAAuditor(fp_engine)
-    print(f"FPAA created with sequence length {fp_engine.L}")
-    print(f"Alphas: {np.round(fp_engine.alphas, 3)}\n")
+    print(f"FPAA created with Chebyshev degree {fp_engine.L}")
+    print(f"Palindromic zetas: {np.round(fp_engine.zetas, 3)}")
+    print(f"Grover phase pairs alpha/beta: {np.round(fp_engine.alphas, 3)} / {np.round(fp_engine.betas, 3)}\n")
 
     # --- 3. Oblivious Amplitude Amplification ---
     print("--- 3. Oblivious Amplitude Amplification ---")

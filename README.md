@@ -154,7 +154,7 @@ from ampamp import FixedPointEngine
 
 fp = FixedPointEngine(L=3, delta=0.1)
 qc = fp.build_fixed_point_circuit(num_qubits=6, marked_indices=[0])
-print(len(fp.alphas), len(fp.betas), qc.num_qubits)
+print(len(fp.zetas), len(fp.alphas), len(fp.betas), qc.num_qubits)
 ```
 
 ### 3) General oracle construction

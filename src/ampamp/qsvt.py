@@ -100,8 +100,45 @@ class QSVTSynthesizer:
         return Chebyshev(cos_coeffs), Chebyshev(sin_coeffs), lcu_alpha
 
     @staticmethod
+    def get_inverse_polynomial(degree: int, kappa: float, scale_factor: float = 0.8) -> np.ndarray:
+        """Return an odd-parity Chebyshev approximation to 1 / x.
+
+        This is the public matrix-inverse polynomial interface for downstream
+        QSVT workflows. The returned coefficient array follows NumPy's
+        Chebyshev basis ordering.
+        """
+        if degree < 1:
+            raise ValueError("Degree must be >= 1.")
+        if degree % 2 == 0:
+            raise ValueError("Degree must be odd for matrix inversion.")
+        if kappa <= 1.0:
+            raise ValueError("kappa must be strictly > 1.0.")
+
+        gap = 1.0 / kappa
+        x_eval = np.linspace(-1.0, 1.0, 2001)
+        y_target = np.zeros_like(x_eval)
+
+        outside = np.abs(x_eval) >= gap
+        inside = ~outside
+        y_target[outside] = scale_factor * (1.0 / (kappa * x_eval[outside]))
+        y_target[inside] = scale_factor * (kappa * x_eval[inside])
+
+        fit_weights = np.ones_like(x_eval)
+        fit_weights[outside] = 16.0  # Emphasize outside-gap accuracy
+
+        coeffs = chebfit(x_eval, y_target, degree, w=fit_weights)
+        coeffs[::2] = 0.0  # Enforce strict odd parity
+
+        # Rescale so the polynomial remains inside the QSP unit-amplitude bound.
+        max_amp = float(np.max(np.abs(chebval(x_eval, coeffs))))
+        if max_amp > 1.0:
+            coeffs /= (max_amp + 1e-12)
+
+        return coeffs
+
+    @staticmethod
     def synthesize_matrix_inverse(degree: int, kappa: float, scale_factor: float = 0.8) -> np.ndarray:
-        """Constructs an odd Chebyshev polynomial for HHL 2.0 Matrix Inversion.
+        """Construct an odd Chebyshev polynomial for matrix inversion.
 
         Approximates $1/x$ optimally outside the gap region.
 
@@ -116,31 +153,8 @@ class QSVTSynthesizer:
         Raises:
             ValueError: If the input degree is not logically odd.
         """
-        if degree < 1:
-            raise ValueError("Degree must be >= 1.")
-        if degree % 2 == 0:
-            raise ValueError("Degree must be odd for matrix inversion.")
-        if kappa <= 1.0:
-            raise ValueError("kappa must be strictly > 1.0.")
-            
-        gap = 1.0 / kappa
-        x_eval = np.linspace(-1.0, 1.0, 2001)
-        y_target = np.zeros_like(x_eval)
-        
-        outside = np.abs(x_eval) >= gap
-        inside = ~outside
-        y_target[outside] = scale_factor * (1.0 / (kappa * x_eval[outside]))
-        y_target[inside] = scale_factor * (kappa * x_eval[inside])
-
-        fit_weights = np.ones_like(x_eval)
-        fit_weights[outside] = 16.0  # Emphasize outside-gap accuracy
-        
-        coeffs = chebfit(x_eval, y_target, degree, w=fit_weights)
-        coeffs[::2] = 0.0  # Enforce strict odd parity
-        
-        # Unitarity scaling
-        max_amp = float(np.max(np.abs(chebval(x_eval, coeffs))))
-        if max_amp > 1.0:
-            coeffs /= (max_amp + 1e-12)
-            
-        return coeffs
+        return QSVTSynthesizer.get_inverse_polynomial(
+            degree=degree,
+            kappa=kappa,
+            scale_factor=scale_factor,
+        )

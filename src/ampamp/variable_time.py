@@ -9,12 +9,54 @@ from dataclasses import dataclass
 from typing import Sequence, Tuple
 from qiskit import QuantumCircuit, QuantumRegister
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class VariableTimeBranch:
     """One branch of a variable-time algorithm."""
-    stop_time: float
+    stopping_time: float
     weight: float
-    success_given_branch: float
+    p_success: float
+
+    def __init__(
+        self,
+        stopping_time: float | None = None,
+        weight: float | None = None,
+        p_success: float | None = None,
+        *,
+        stop_time: float | None = None,
+        success_given_branch: float | None = None,
+    ) -> None:
+        """Create a VTAA branch with stable public names.
+
+        Preferred field names are `stopping_time` and `p_success`. The legacy
+        aliases `stop_time` and `success_given_branch` are accepted for
+        backward compatibility.
+        """
+        if stopping_time is None:
+            stopping_time = stop_time
+        elif stop_time is not None and float(stopping_time) != float(stop_time):
+            raise ValueError("Provide either stopping_time or stop_time, not conflicting values.")
+
+        if p_success is None:
+            p_success = success_given_branch
+        elif success_given_branch is not None and float(p_success) != float(success_given_branch):
+            raise ValueError("Provide either p_success or success_given_branch, not conflicting values.")
+
+        if stopping_time is None or weight is None or p_success is None:
+            raise TypeError("VariableTimeBranch requires stopping_time, weight, and p_success.")
+
+        object.__setattr__(self, "stopping_time", float(stopping_time))
+        object.__setattr__(self, "weight", float(weight))
+        object.__setattr__(self, "p_success", float(p_success))
+
+    @property
+    def stop_time(self) -> float:
+        """Legacy alias for backward compatibility."""
+        return self.stopping_time
+
+    @property
+    def success_given_branch(self) -> float:
+        """Legacy alias for backward compatibility."""
+        return self.p_success
 
 class VTAAEngine:
     """Core engine for Variable-Time Amplitude Amplification.
@@ -34,8 +76,9 @@ class VTAAEngine:
         if not branches:
             raise ValueError("At least one branch is required.")
             
-        ordered = sorted(branches, key=lambda b: float(b.stop_time))
-        self.stop_times = np.array([float(b.stop_time) for b in ordered], dtype=float)
+        ordered = sorted(branches, key=lambda b: float(b.stopping_time))
+        self.stopping_times = np.array([float(b.stopping_time) for b in ordered], dtype=float)
+        self.stop_times = self.stopping_times
         
         weights = np.array([float(b.weight) for b in ordered], dtype=float)
         if np.any(weights < 0):
@@ -45,12 +88,13 @@ class VTAAEngine:
             raise ValueError("Total branch weight must be definitively positive.")
         self.weights = weights / total_w
         
-        self.success_given_branch = np.array([float(b.success_given_branch) for b in ordered], dtype=float)
-        if np.any((self.success_given_branch < 0.0) | (self.success_given_branch > 1.0)):
-            raise ValueError("success_given_branch probabilities must be in [0, 1].")
+        self.branch_success_probabilities = np.array([float(b.p_success) for b in ordered], dtype=float)
+        self.success_given_branch = self.branch_success_probabilities
+        if np.any((self.branch_success_probabilities < 0.0) | (self.branch_success_probabilities > 1.0)):
+            raise ValueError("p_success probabilities must be in [0, 1].")
         
-        self.good_mass = self.weights * self.success_given_branch
-        self.bad_mass = self.weights * (1.0 - self.success_given_branch)
+        self.good_mass = self.weights * self.branch_success_probabilities
+        self.bad_mass = self.weights * (1.0 - self.branch_success_probabilities)
         self.p_success = float(np.sum(self.good_mass))
         self.theta = float(np.arcsin(np.sqrt(self.p_success))) if self.p_success > 0 else 0.0
 
@@ -61,9 +105,9 @@ class VTAAEngine:
             Tuple[float, float, float]: A tuple containing $(E[T], \\sqrt{E[T^2]}, T_{max})$ 
                 under the branch distribution.
         """
-        t_mean = float(np.sum(self.weights * self.stop_times))
-        t_rms = float(np.sqrt(np.sum(self.weights * (self.stop_times ** 2))))
-        t_max = float(np.max(self.stop_times))
+        t_mean = float(np.sum(self.weights * self.stopping_times))
+        t_rms = float(np.sqrt(np.sum(self.weights * (self.stopping_times ** 2))))
+        t_max = float(np.max(self.stopping_times))
         return t_mean, t_rms, t_max
 
     def vtaa_asymptotic_bound(self, polylog_factor: float = 1.0, c_tmax: float = 1.0, c_trms: float = 1.0) -> float:
