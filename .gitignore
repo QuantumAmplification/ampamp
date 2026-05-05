@@ -23,3 +23,5 @@ venv/
 *.egg-info/
 /site
 paper.tex
+*.tex
+*.pdf
