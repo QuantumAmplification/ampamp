@@ -19,6 +19,11 @@ validating ideal/noisy backend behavior from one compact API.
 [Survey paper](https://doi.org/10.5281/zenodo.20054981) ·
 [Source](https://github.com/QuantumAmplification/ampamp)
 
+<p align="center">
+  <strong>Authors</strong><br>
+  Mithilesh Kumar · Varun Daiya · Yusuf Tahir
+</p>
+
 </div>
 
 ---
