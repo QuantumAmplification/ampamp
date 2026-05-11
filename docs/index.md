@@ -1,109 +1,181 @@
-# Amplitude Amplification
+# ampamp
 
-An open source quantum machine learning and simulation framework that accelerates the path from theoretical algorithms to practical, executable quantum circuit synthesis. 
+`ampamp` is a Python library for amplitude-amplification research workflows: circuit construction, oracle synthesis, QSVT/QSP helpers, diagnostics, transpilation profiling, and backend validation.
 
-Amplitude Amplification (`ampamp`) provides a robust, production-grade API for researchers and engineers building next-generation quantum solutions. Whether you are generating optimal polynomial sequences via Quantum Singular Value Transformation (QSVT), mapping out oblivious operator expansions, or deploying partitioned distributed quantum searches, `ampamp` ensures exact phase tracking and high-fidelity algorithmic representation.
+Current PyPI release: `0.1.4`
 
----
+```bash
+python3 -m pip install ampamp
+```
 
-## Ecosystem At A Glance
+For local development from this repository:
+
+```bash
+python3 -m pip install -e .
+```
+
+## What Is In The Library
 
 <div class="grid cards" markdown>
 
--   **Foundations**
+-   **Grover Search**
 
     ---
-    Standard Grover's Search algorithms. Contains precise analytical definitions of the Soufflé Problem, diffusion operators, and exact success probability tracking.
-    
+    Standard amplitude-amplification circuits with phase oracles, diffusion operators, optimal-iteration estimates, and analytic success probabilities.
+
     [API Reference](api/grover.md)
 
 -   **Oracle Construction**
 
     ---
-    General phase and bit-flip oracle construction from marked indices, marked bitstrings, and Boolean formulae over variables such as `v0`, `v1`, and `v2`.
+    Build phase, bit-flip, or direct unitary oracle circuits from marked states, Boolean expression strings, or user-supplied unitary matrices.
 
     [API Reference](api/oracles.md)
 
--   **Entanglement Count**
+-   **Fixed-Point AA**
 
     ---
-    Light or hard active-entangled-qubit counting for Qiskit circuits, with sampled checkpoints for constrained hardware and every-step tracing for stronger hardware.
+    Chebyshev-style fixed-point schedules and circuit synthesis for monotone amplification behavior.
 
-    [API Reference](api/entanglement.md)
-
--   **Fixed-Point Search (FPAA)**
-
-    ---
-    Achieve monotonic algorithmic convergence. Leverages monotonic Chebyshev-derived phase schedules to safely amplify target states without precise knowledge of target counts.
-    
     [API Reference](api/fixed_point.md)
 
--   **QSVT & SU(2) Calculus**
+-   **Oblivious / FOQA**
 
     ---
-    A complete engine for Quantum Singular Value Transformations via $SU(2)$ homomorphisms. Extract SVD mappings natively on quantum operators with mathematically verified parity models.
-    
-    [API Reference](api/qsvt.md)
+    Ancilla preparation, block-encoding scaffolds, reflection helpers, fixed-point oblivious schedules, and recurrence simulation.
+
+    [Oblivious](api/oblivious.md) · [FOQA](api/foqa.md)
 
 -   **Distributed AA**
 
     ---
-    Scalable search space partitioning mechanisms engineered for classical-quantum distributed processing clusters and NISQ-era parallelization networks.
-    
+    Prefix/suffix partitioning for distributed search targets and symbolic local-oracle synthesis for node-local subproblems.
+
     [API Reference](api/distributed.md)
 
--   **Oblivious Amplification (OAA)**
+-   **Variable-Time AA**
 
     ---
-    Robust block-encoding arrays and operator amplification capabilities for Oblivious algorithmic structures utilizing pristine Linear Combination of Unitaries (LCU) architectures.
+    Branch records, stopping-time statistics, success-mass calculations, asymptotic estimates, and staged-state examples.
 
-    [API Reference](api/oblivious.md)
-
--   **Variable Time (VTAA)**
-
-    ---
-    Variable-Time Amplitude Amplification branch systems mapping algorithmic costs to multi-staged state circuits ensuring asymptotic $O(\sqrt{E[t^2]})$ expected runtime scaling.
-    
     [API Reference](api/variable_time.md)
 
--   **FPOA**
+-   **QSVT / QSP**
 
     ---
-    Fixed-Point Oblivious Amplitude Amplification defining discrete $SU(2)$ non-linear recurrence paths to mitigate over-rotation faults in Hamiltonian simulations.
-    
-    [API Reference](api/foqa.md)
+    SU(2) QSP sequence evaluation and Chebyshev helpers for Jacobi-Anger and matrix-inverse polynomial synthesis.
 
--   **Algorithm Diagnostics**
+    [API Reference](api/qsvt.md)
+
+-   **Diagnostics**
 
     ---
-    An extensive suite of independent hardware realism auditors. Verify block unitarity constraints, map phase damping trajectories, limit-test empirical bounding box ranks, and identify algorithmic fidelity collapse.
-    
+    Auditors for subspace rotation, fixed-point schedules, block-encoding structure, distributed partitions, VTAA branches, and QSVT parity checks.
+
     [API Reference](api/diagnostics.md)
+
+-   **Transpilation**
+
+    ---
+    Staged compile metrics, routing statistics, basis translation, timing models, batch profiling, and hardware-cost scoring.
+
+    [API Reference](api/transpilation.md)
+
+-   **Backend Validation**
+
+    ---
+    Ideal/noisy simulator comparisons, total-variation-distance checks, noise presets, and optional JSONL validation logs.
+
+    [API Reference](api/transpilation_validation.md)
+
+-   **Entanglement Count**
+
+    ---
+    Light and hard active-entangled-qubit profiling for Qiskit circuits.
+
+    [API Reference](api/entanglement.md)
 
 </div>
 
----
-
 ## Quick Start
 
-Get started quickly by bringing `ampamp` into your Python environment locally.
-
-```bash
-pip install -e .
-```
-
-Instantiate precision-tuned engines capable of scaling to highly complex quantum states:
+Build and profile a Grover circuit:
 
 ```python
-from ampamp import FPAAAuditor, FixedPointEngine
+from ampamp import GroverEngine, TranspilationProfiler, TranspilationProfileConfig
 
-# Establish a degree-15 Yoder-Low-Chuang fixed-point schedule
-engine = FixedPointEngine(L=15, delta=1e-3)
+engine = GroverEngine(n_qubits=6, marked_indices=[10, 25])
+qc = engine.construct_circuit(iterations=engine.k_optimal)
 
-# Access the classical analytical hardware limits
-auditor = FPAAAuditor(engine)
-auditor.estimate_ftqc_cost(synthesis_epsilon=1e-4)
+config = TranspilationProfileConfig(
+    coupling_map_edges=[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]],
+)
+metrics = TranspilationProfiler(config).profile_circuit(qc)
 
-# Generate the synthesized circuit structure to inject directly into Qiskit primitives
-circuit = engine.build_fixed_point_circuit(num_qubits=6, marked_indices=[2, 7])
+print(engine.k_optimal)
+print(metrics["post_optimization_depth"])
+print(metrics["final_cnots"])
+```
+
+## Oracle Quick Start
+
+`ampamp` supports the two oracle-entry modes used by most amplitude-amplification workflows:
+
+1. The user supplies a Boolean function or expression string, and the library constructs the oracle circuit.
+2. The user supplies a unitary matrix directly, and the library validates and wraps it as an oracle circuit.
+
+```python
+import numpy as np
+
+from ampamp import OracleBuilder, build_phase_oracle, build_unitary_oracle
+
+formula_oracle = build_phase_oracle(
+    num_qubits=4,
+    formula_text="v0 & (v2 | v3)",
+)
+
+builder_oracle = OracleBuilder.from_formula(
+    num_qubits=4,
+    formula_text="v0 & (v2 | v3)",
+).phase_oracle()
+
+unitary_matrix = np.diag([1, 1, -1, 1])
+matrix_oracle = build_unitary_oracle(unitary_matrix)
+```
+
+## Current Repository Scope
+
+This repository now focuses on the installable `ampamp` package, tests, and documentation. The previous implementation-comparison folders were moved out because they are scenario workflows rather than core library code:
+
+```text
+https://github.com/QuantumAmplification/Implementation
+```
+
+A local archive may exist as `implementation_folders.zip` for convenience.
+
+## Testing
+
+```bash
+PYTHONPATH=src pytest
+```
+
+Focused checks:
+
+```bash
+PYTHONPATH=src pytest tests/test_oracles.py
+PYTHONPATH=src pytest tests/test_transpilation_module.py tests/test_transpilation_validation.py
+```
+
+## Documentation
+
+Serve this site locally:
+
+```bash
+mkdocs serve
+```
+
+Build it:
+
+```bash
+mkdocs build
 ```
