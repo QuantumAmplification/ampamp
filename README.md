@@ -9,9 +9,15 @@ inspecting their mathematical behavior, profiling compilation cost, and
 validating ideal/noisy backend behavior from one compact API.
 
 [![PyPI](https://img.shields.io/pypi/v/ampamp?color=1f6feb)](https://pypi.org/project/ampamp/)
-[![Python](https://img.shields.io/pypi/pyversions/ampamp)](https://pypi.org/project/ampamp/)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.9-3776AB)](https://pypi.org/project/ampamp/)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f)](https://quantumamplification.github.io/ampamp/)
+[![Survey](https://img.shields.io/badge/survey-Zenodo-1682d4)](https://doi.org/10.5281/zenodo.20054981)
 [![Repository](https://img.shields.io/badge/GitHub-QuantumAmplification%2Fampamp-24292f)](https://github.com/QuantumAmplification/ampamp)
+
+[Docs](https://quantumamplification.github.io/ampamp/) ·
+[PyPI](https://pypi.org/project/ampamp/) ·
+[Survey paper](https://doi.org/10.5281/zenodo.20054981) ·
+[Source](https://github.com/QuantumAmplification/ampamp)
 
 </div>
 
