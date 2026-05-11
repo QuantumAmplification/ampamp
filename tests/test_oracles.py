@@ -11,6 +11,7 @@ from ampamp import (  # noqa: E402
     OracleBuilder,
     build_bit_flip_oracle,
     build_phase_oracle,
+    build_unitary_oracle,
     marked_bitstrings_from_formula,
 )
 
@@ -57,6 +58,33 @@ def test_oracle_builder_exposes_common_marked_state_views():
 
     assert builder.marked_bitstrings() == ("100", "101")
     assert builder.marked_indices() == (4, 5)
+
+
+def test_unitary_oracle_accepts_user_supplied_matrix():
+    matrix = np.diag([1.0, -1.0])
+    oracle = build_unitary_oracle(matrix)
+
+    assert oracle.num_qubits == 1
+    assert np.allclose(Operator(oracle).data, matrix)
+
+
+def test_oracle_builder_constructs_unitary_matrix_oracle():
+    matrix = np.diag([1.0, 1.0, -1.0, 1.0])
+    oracle = OracleBuilder.from_unitary_matrix(matrix).unitary_oracle()
+
+    assert oracle.num_qubits == 2
+    assert np.allclose(Operator(oracle).data, matrix)
+
+
+def test_unitary_oracle_rejects_non_unitary_matrix():
+    matrix = np.array([[1.0, 0.0], [0.0, 2.0]])
+
+    try:
+        build_unitary_oracle(matrix)
+    except ValueError as exc:
+        assert "unitary_matrix must satisfy" in str(exc)
+    else:
+        raise AssertionError("Expected non-unitary matrix to be rejected")
 
 
 def test_grover_engine_uses_general_phase_oracle_behavior():
