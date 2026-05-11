@@ -4,7 +4,8 @@ from __future__ import annotations
 
 This module provides a small public framework for constructing Qiskit-native
 phase and bit-flip oracles from marked indices, marked bitstrings, or Boolean
-formulae over variables ``v0, v1, ...``.
+formulae over variables ``v0, v1, ...``.  It also accepts a user-supplied
+unitary matrix when the oracle operator is already known.
 """
 
 from dataclasses import dataclass
