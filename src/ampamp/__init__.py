@@ -13,6 +13,7 @@ from .oracles import (
     OracleSpec,
     build_bit_flip_oracle,
     build_phase_oracle,
+    build_unitary_oracle,
     marked_bitstrings_from_formula,
 )
 from .entanglement import EntanglementCountConfig, profile_entanglement_counts
@@ -47,6 +48,7 @@ __all__ = [
     "OracleSpec",
     "build_phase_oracle",
     "build_bit_flip_oracle",
+    "build_unitary_oracle",
     "marked_bitstrings_from_formula",
     "EntanglementCountConfig",
     "profile_entanglement_counts",
