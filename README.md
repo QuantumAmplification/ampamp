@@ -1,15 +1,24 @@
 # AmplitudeAmplification (`ampamp`)
 
-A quantum algorithm engineering repository focused on amplitude amplification and its modern polynomial form (QSVT), with both:
+`ampamp` is a Python library for quantum amplitude-amplification, QSVT/QSP, circuit diagnostics, transpilation profiling, and backend-validation workflows.
 
-- reusable **library APIs** (`ampamp` package), and
-- scenario-driven **non-library research/transpile workflows**.
+The current PyPI release is `0.1.4`:
 
-This README is intentionally detailed so you can get productive without opening docs first.
+```bash
+python3 -m pip install ampamp
+```
 
-## What This Repo Contains
+For local development from this repository:
 
-`ampamp` provides engines and utilities for:
+```bash
+python3 -m pip install -e .
+```
+
+Minimum Python: `>=3.9`
+
+## What The Library Provides
+
+`ampamp` exposes small engine classes and utilities for:
 
 - Grover-style amplitude amplification
 - Fixed-point amplitude amplification (FPAA)
@@ -17,57 +26,67 @@ This README is intentionally detailed so you can get productive without opening 
 - Fixed-point oblivious amplitude amplification (FOQA)
 - Distributed amplitude amplification (DQAA)
 - Variable-time amplitude amplification (VTAA)
-- Quantum singular value transformation (QSVT / QSP)
-- Transpilation profiling and backend validation workflows
+- Quantum singular value transformation and quantum signal processing (QSVT/QSP)
+- Oracle construction from marked states, Boolean formula strings, or user-supplied unitary matrices
+- Entanglement-count profiling
+- Transpilation profiling and hardware-cost scoring
+- Ideal/noisy backend validation
+
+Scenario scripts and implementation-comparison workflows are maintained separately at:
+
+```text
+https://github.com/QuantumAmplification/Implementation
+```
+
+This package repository now focuses on the installable library, docs, tests, and release artifacts.
 
 ## Repository Layout
 
-Top-level structure is now intentionally split:
-
-- `library_implementation/`
-  Contains workflows implemented with library abstractions.
-  - `library_transpile_showcase/`: per-algorithm library-only transpilation showcase
-
-- `non_library_implementation/`
-  Contains scenario-style and script-first workflows.
-  - `experiments/`
-  - `transpile/`
-  - `Transpile Algorithms GPU Parallelization/`
-
-Other important folders:
-
 - `src/ampamp/`: installable library source code
-- `docs/`: MkDocs site and API pages
-- `tests/`: tests
-- `dist/`: built distribution artifacts
+- `docs/`: MkDocs documentation and API pages
+- `tests/`: unit tests and regression checks
+- `dist/`: local build artifacts when releases are prepared
+- `implementation_folders.zip`: local archive of the moved implementation-comparison folders, if present
 
-## Library API Overview
+## Public API Overview
 
-Import surface from `ampamp`:
+Common imports:
 
 ```python
 from ampamp import (
     GroverEngine,
-    OracleBuilder,
-    OracleSpec,
-    build_phase_oracle,
-    build_bit_flip_oracle,
-    marked_bitstrings_from_formula,
-    EntanglementCountConfig,
-    profile_entanglement_counts,
     FixedPointEngine,
     ObliviousEngine,
     FOQAEngine,
     DQAAEngine,
+    OracleBuilder,
+    OracleSpec,
     OracleSynthesizer,
+    build_phase_oracle,
+    build_bit_flip_oracle,
+    build_unitary_oracle,
+    marked_bitstrings_from_formula,
+    EntanglementCountConfig,
+    profile_entanglement_counts,
     VTAAEngine,
     VariableTimeBranch,
     SU2QSPEngine,
     QSVTSynthesizer,
+    IQAEEngine,
+    IQAEConfig,
+    IQAEResult,
+    GroverAuditor,
+    FPAAAuditor,
+    ObliviousAuditor,
+    FOQAAuditor,
+    DistributedAuditor,
+    VTAAAuditor,
+    FundamentalLimitsAuditor,
+    QSVTAuditor,
+    HardwareCostWeights,
     TranspilationProfiler,
     TranspilationBatchProfiler,
     TranspilationProfileConfig,
-    HardwareCostWeights,
     BackendValidationRunner,
     BackendValidationConfig,
     ValidationNoiseConfig,
@@ -75,110 +94,96 @@ from ampamp import (
 )
 ```
 
-### Core Engines
+## Quick Start
 
-- `GroverEngine`: oracle/diffusion builders, Grover circuit synthesis, success-probability utilities.
-- `OracleBuilder` + helpers: general phase and bit-flip oracle construction from marked indices, bitstrings, or Boolean formulae.
-- `profile_entanglement_counts`: light/hard active-entanglement count profiling for Qiskit circuits.
-- `FixedPointEngine`: Chebyshev-derived phase schedule generation + fixed-point circuit synthesis.
-- `ObliviousEngine`: ancilla prep, block-encoding circuit construction, reflection construction.
-- `FOQAEngine`: Mizel/constant schedules, recurrence simulation, FOQA proxy circuit sequence builder.
-- `DQAAEngine` + `OracleSynthesizer`: distributed partitioning and local-oracle synthesis.
-- `VTAAEngine`: variable-time branch statistics and staged-state circuit synthesis.
-- `SU2QSPEngine` + `QSVTSynthesizer`: QSP evaluation, Jacobi-Anger synthesis, matrix-inverse polynomial synthesis.
-
-### Diagnostics
-
-Available auditors include:
-
-- `GroverAuditor`, `FPAAAuditor`, `ObliviousAuditor`, `FOQAAuditor`
-- `DistributedAuditor`, `VTAAAuditor`, `FundamentalLimitsAuditor`, `QSVTAuditor`
-
-Use these to inspect subspace behavior, recurrence behavior, and structural validity checks.
-
-### Transpilation Utilities (Library Native)
-
-- `TranspilationProfiler`: staged compile metrics (logical/routing/optimization/timing)
-- `TranspilationBatchProfiler`: profile multiple circuits together
-- `TranspilationProfileConfig`: basis gates, coupling map, duration model, optimization levels
-- `HardwareCostWeights`: weighted hardware penalty terms
-
-### Backend Validation Utilities
-
-- `BackendValidationRunner`: ideal-vs-noisy validation
-- `BackendValidationConfig`: shots, seed, thresholds, basis config
-- `ValidationNoiseConfig`: preset/custom noise settings
-- `ValidationLogConfig`: JSONL structured logging
-
-## Installation
-
-Recommended (editable install while developing):
-
-```bash
-pip install -e .
-```
-
-Minimum Python: `>=3.9`
-
-Key dependencies:
-
-- `qiskit>=1.0`
-- `qiskit-aer>=0.14`
-- `numpy`, `scipy`, `sympy`, `matplotlib`
-
-## Quick Start (Library)
-
-### 1) Build and profile a Grover circuit
+### Grover circuit and transpilation profile
 
 ```python
 from ampamp import GroverEngine, TranspilationProfiler, TranspilationProfileConfig
 
 engine = GroverEngine(n_qubits=6, marked_indices=[10, 25])
-qc = engine.construct_circuit(iterations=1)
+qc = engine.construct_circuit(iterations=engine.k_optimal)
 
-profiler = TranspilationProfiler(
-    TranspilationProfileConfig(
-        coupling_map_edges=[[i, j] for i in range(6) for j in range(6) if i != j],
-        optimize_optimization_level=3,
-    )
+config = TranspilationProfileConfig(
+    coupling_map_edges=[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]],
 )
+metrics = TranspilationProfiler(config).profile_circuit(qc)
 
-metrics = profiler.profile_circuit(qc)
-print(metrics["post_optimization_depth"], metrics["final_cnots"])
+print(engine.k_optimal)
+print(metrics["post_optimization_depth"])
+print(metrics["final_cnots"])
 ```
 
-### 2) Fixed-point schedule + circuit
+### Oracle construction
+
+`ampamp` supports two main oracle-entry modes:
+
+1. A user supplies a Boolean function or expression, often as a string, and the library constructs an oracle circuit.
+2. A user supplies a unitary matrix directly, and the library wraps it as an oracle circuit after validation.
+
+```python
+import numpy as np
+
+from ampamp import (
+    OracleBuilder,
+    build_bit_flip_oracle,
+    build_phase_oracle,
+    build_unitary_oracle,
+)
+
+phase_from_indices = build_phase_oracle(
+    num_qubits=4,
+    marked_indices=[3, 11],
+)
+
+phase_from_formula = build_phase_oracle(
+    num_qubits=4,
+    formula_text="v0 & (~v1 | v3)",
+)
+
+bit_flip_from_formula = build_bit_flip_oracle(
+    num_qubits=4,
+    formula_text="v0 & v2",
+)
+
+builder_oracle = OracleBuilder.from_formula(
+    num_qubits=4,
+    formula_text="v0 & (v2 | v3)",
+).phase_oracle()
+
+unitary_matrix = np.diag([1, 1, -1, 1])
+matrix_oracle = build_unitary_oracle(unitary_matrix)
+```
+
+For distributed symbolic oracle work, `OracleSynthesizer` can substitute fixed node prefixes into a global Boolean formula and synthesize node-local oracles.
+
+### Fixed-point amplitude amplification
 
 ```python
 from ampamp import FixedPointEngine
 
-fp = FixedPointEngine(L=3, delta=0.1)
-qc = fp.build_fixed_point_circuit(num_qubits=6, marked_indices=[0])
-print(len(fp.zetas), len(fp.alphas), len(fp.betas), qc.num_qubits)
+fp = FixedPointEngine(L=5, delta=0.1)
+qc = fp.build_fixed_point_circuit(num_qubits=4, marked_indices=[3, 11])
+
+print(fp.alphas)
+print(fp.betas)
+print(qc.depth())
 ```
 
-### 3) General oracle construction
-
-```python
-from ampamp import build_bit_flip_oracle, build_phase_oracle
-
-phase_oracle = build_phase_oracle(num_qubits=4, marked_indices=[3, 11])
-formula_oracle = build_phase_oracle(num_qubits=4, formula_text="v0 & (~v1 | v3)")
-bit_flip_oracle = build_bit_flip_oracle(num_qubits=4, marked_bitstrings=["0011", "1011"])
-```
-
-### 4) Light/hard entanglement count
+### Entanglement count profiling
 
 ```python
 from ampamp import EntanglementCountConfig, profile_entanglement_counts
 
-light = profile_entanglement_counts(qc, EntanglementCountConfig.light(max_qubits=12))
-hard = profile_entanglement_counts(qc, EntanglementCountConfig.hard(max_qubits=8))
+light = profile_entanglement_counts(
+    qc,
+    EntanglementCountConfig.light(max_qubits=12),
+)
 
 print(light["peak_active_entangled_qubits"])
 ```
 
-### 5) Backend validation with structured logs
+### Backend validation
 
 ```python
 from ampamp import (
@@ -197,84 +202,104 @@ runner = BackendValidationRunner(
     )
 )
 
-# result = runner.validate_circuit("my_circuit", qc)
+result = runner.validate_circuit("example", qc)
+print(result["status"], result["metrics"]["tvd"])
 ```
 
-## Library Transpilation Showcase
+## Engine Summary
 
-`library_implementation/library_transpile_showcase/` demonstrates per-algorithm transpilation using library APIs.
+- `GroverEngine`: standard oracle, diffusion, full Grover circuit, and success-probability utilities.
+- `FixedPointEngine`: Chebyshev-style phase schedules and fixed-point circuit synthesis.
+- `ObliviousEngine`: ancilla preparation, block-encoding scaffolds, and reflection construction.
+- `FOQAEngine`: fixed-point oblivious schedules, recurrence simulation, and split-operator helpers.
+- `DQAAEngine`: prefix/suffix partitioning for distributed search targets.
+- `OracleBuilder`: phase, bit-flip, and unitary oracle construction.
+- `OracleSynthesizer`: SymPy-backed local oracle synthesis from global formulas.
+- `VTAAEngine`: variable-time branch moments, success mass, asymptotic estimates, and staged-state examples.
+- `SU2QSPEngine`: QSP sequence evaluation.
+- `QSVTSynthesizer`: Chebyshev helpers for Jacobi-Anger and matrix-inverse approximations.
+- `IQAEEngine`, `IQAEConfig`, `IQAEResult`: QPE-free amplitude-estimation API scaffolding.
 
-It includes one file per algorithm track plus an orchestrator:
+## Diagnostics
 
-- `_01_grover.py`
-- `_01_1_qaoa_grover.py`
-- `_02_fixed_point.py`
-- `_03_oblivious.py`
-- `_03_25_controlled.py`
-- `_03_5_foqa.py`
-- `_04_distributed.py`
-- `_05_variable_time.py`
-- `_06_qsvt.py`
-- `_07_unified_comparative.py`
+Auditors inspect configured engines and derived objects:
 
-Run it:
+- `GroverAuditor`
+- `FPAAAuditor`
+- `ObliviousAuditor`
+- `FOQAAuditor`
+- `DistributedAuditor`
+- `VTAAAuditor`
+- `FundamentalLimitsAuditor`
+- `QSVTAuditor`
 
-```bash
-PYTHONPATH=src:. python3 library_implementation/library_transpile_showcase/run_all_with_library.py
-```
+These are intended as executable documentation and sanity checks before heavier simulation or transpilation runs.
 
-Outputs:
+## Transpilation And Backend Validation
 
-- `library_implementation/library_transpile_showcase/results/library_transpile_results.json`
-- `library_implementation/library_transpile_showcase/results/library_transpile_summary.csv`
+The transpilation module provides:
 
-## Non-Library Workflows
+- `TranspilationProfiler`: staged single-circuit profiling
+- `TranspilationBatchProfiler`: batch profiling under a shared configuration
+- `TranspilationProfileConfig`: basis, coupling map, timing, and optimization settings
+- `HardwareCostWeights`: weighted hardware-cost scoring
 
-`non_library_implementation/` preserves script-first experimental and transpilation workflows:
+The backend validation module provides:
 
-- `experiments/`: algorithm experiments and exploration scripts
-- `transpile/`: full transpilation scenario suites and result logs
-- `Transpile Algorithms GPU Parallelization/`: GPU-focused transpilation workflows
-
-These are valuable for reproducing scenario-heavy studies and script-level comparisons.
+- `BackendValidationRunner`: ideal/noisy simulator comparison
+- `BackendValidationConfig`: shots, seed, thresholds, optimization level, and qubit cap
+- `ValidationNoiseConfig`: ideal, preset, or custom noise models
+- `ValidationLogConfig`: optional JSONL validation records
 
 ## Documentation
 
-If you want API docs with generated signatures:
+Serve the docs locally:
 
 ```bash
 mkdocs serve
 ```
 
-Main docs entry: `docs/index.md`
+Main docs entry:
 
-API pages include:
+```text
+docs/index.md
+```
 
-- `grover`, `fixed_point`, `oblivious`, `foqa`, `distributed`, `variable_time`, `qsvt`, `diagnostics`
-- `transpilation`, `transpilation_validation`
+API pages include Grover, fixed-point, oblivious, FOQA, distributed, variable-time, QSVT, diagnostics, transpilation, transpilation validation, entanglement, and oracle construction.
 
 ## Testing
 
-Run tests:
+Run the full test suite:
 
 ```bash
-pytest -q
+PYTHONPATH=src pytest
 ```
 
-For focused transpilation tests:
+Focused checks:
 
 ```bash
-pytest -q tests/test_transpilation_module.py tests/test_transpilation_validation.py
+PYTHONPATH=src pytest tests/test_oracles.py
+PYTHONPATH=src pytest tests/test_transpilation_module.py tests/test_transpilation_validation.py
 ```
 
-## Current Status
+## Implementation Workflows
 
-- Library APIs are active and usable for all core algorithm families.
-- Library-side transpilation workflow is demonstrated in per-algorithm form.
-- Non-library scenario suites remain available for research-style execution and comparison.
+The previous `library_implementation/` and `non_library_implementation/` folders were moved out of this package repository because they are comparison and scenario workflows rather than core library code.
+
+They are available here:
+
+```text
+https://github.com/QuantumAmplification/Implementation
+```
+
+A local archive may also exist as:
+
+```text
+implementation_folders.zip
+```
 
 ## Notes
 
-- Some advanced scenario scripts may be significantly heavier than quick API examples.
-- Depending on environment, Aer/OpenMP runtime constraints can affect simulator-heavy flows.
+- Some simulator-heavy workflows can be slow or environment-sensitive.
 - If Matplotlib cache warnings appear, set a writable `MPLCONFIGDIR`.
+- For PyPI releases, bump `pyproject.toml`, run tests, build with `python3 -m build`, validate with `twine check`, then upload with `twine upload`.
