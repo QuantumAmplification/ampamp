@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 import sympy as sp
 from qiskit import QuantumCircuit
 
@@ -63,39 +64,87 @@ def _bitstrings_to_indices(marked_bitstrings: Sequence[str]) -> tuple[int, ...]:
     return tuple(int(bitstring, 2) for bitstring in marked_bitstrings)
 
 
+def _infer_num_qubits_from_dimension(dimension: int) -> int:
+    if dimension < 2 or dimension & (dimension - 1):
+        raise ValueError("unitary_matrix dimension must be a power of two")
+    return int(np.log2(dimension))
+
+
+def _validate_unitary_matrix(
+    unitary_matrix: ArrayLike,
+    *,
+    num_qubits: int | None = None,
+    atol: float = 1e-8,
+) -> tuple[int, np.ndarray]:
+    matrix = np.asarray(unitary_matrix, dtype=complex)
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError("unitary_matrix must be a square 2D array")
+
+    inferred_qubits = _infer_num_qubits_from_dimension(matrix.shape[0])
+    if num_qubits is not None and _validate_num_qubits(num_qubits) != inferred_qubits:
+        raise ValueError(
+            "num_qubits does not match unitary_matrix dimension: "
+            f"expected {2 ** int(num_qubits)}x{2 ** int(num_qubits)}, got {matrix.shape}"
+        )
+
+    identity = np.eye(matrix.shape[0], dtype=complex)
+    if not np.allclose(matrix.conj().T @ matrix, identity, atol=float(atol)):
+        raise ValueError("unitary_matrix must satisfy U.conj().T @ U = I")
+    return inferred_qubits, matrix
+
+
 @dataclass(frozen=True)
 class OracleSpec:
     """Validated oracle source specification.
 
     Exactly one source must be supplied: ``marked_indices``,
-    ``marked_bitstrings``, or ``formula_text``.  Bitstrings use the usual
-    most-significant-bit-left convention.  For formulae, ``v0`` denotes the
-    leftmost bit, ``v1`` the next bit, and so on.
+    ``marked_bitstrings``, ``formula_text``, or ``unitary_matrix``.  Bitstrings
+    use the usual most-significant-bit-left convention.  For formulae, ``v0``
+    denotes the leftmost bit, ``v1`` the next bit, and so on.  Matrix oracles
+    are checked as square power-of-two-dimensional unitary arrays.
     """
 
-    num_qubits: int
+    num_qubits: int | None = None
     marked_indices: Sequence[int] | None = None
     marked_bitstrings: Sequence[str] | None = None
     formula_text: str | None = None
+    unitary_matrix: ArrayLike | None = None
     phase: float = np.pi
     variable_prefix: str = "v"
     max_formula_qubits: int = 16
+    unitary_atol: float = 1e-8
 
     def __post_init__(self) -> None:
-        num_qubits = _validate_num_qubits(self.num_qubits)
-        object.__setattr__(self, "num_qubits", num_qubits)
-
         sources = (
             self.marked_indices is not None,
             self.marked_bitstrings is not None,
             self.formula_text is not None,
+            self.unitary_matrix is not None,
         )
         if sum(bool(value) for value in sources) != 1:
-            raise ValueError("Provide exactly one of marked_indices, marked_bitstrings, or formula_text")
+            raise ValueError(
+                "Provide exactly one of marked_indices, marked_bitstrings, "
+                "formula_text, or unitary_matrix"
+            )
+
+        if self.unitary_matrix is not None:
+            num_qubits, unitary_matrix = _validate_unitary_matrix(
+                self.unitary_matrix,
+                num_qubits=self.num_qubits,
+                atol=self.unitary_atol,
+            )
+            object.__setattr__(self, "num_qubits", num_qubits)
+            object.__setattr__(self, "unitary_matrix", unitary_matrix)
+        else:
+            if self.num_qubits is None:
+                raise ValueError("num_qubits is required for marked-state and formula oracle sources")
+            num_qubits = _validate_num_qubits(self.num_qubits)
+            object.__setattr__(self, "num_qubits", num_qubits)
 
         object.__setattr__(self, "phase", float(self.phase))
         object.__setattr__(self, "variable_prefix", str(self.variable_prefix))
         object.__setattr__(self, "max_formula_qubits", int(self.max_formula_qubits))
+        object.__setattr__(self, "unitary_atol", float(self.unitary_atol))
 
         if self.marked_indices is not None:
             object.__setattr__(
@@ -251,7 +300,25 @@ class OracleBuilder:
             )
         )
 
+    @classmethod
+    def from_unitary_matrix(
+        cls,
+        unitary_matrix: ArrayLike,
+        *,
+        num_qubits: int | None = None,
+        atol: float = 1e-8,
+    ) -> "OracleBuilder":
+        return cls(
+            OracleSpec(
+                num_qubits=num_qubits,
+                unitary_matrix=unitary_matrix,
+                unitary_atol=atol,
+            )
+        )
+
     def marked_bitstrings(self) -> tuple[str, ...]:
+        if self.spec.unitary_matrix is not None:
+            raise ValueError("marked_bitstrings are not defined for an arbitrary unitary oracle")
         if self.spec.marked_bitstrings is not None:
             return tuple(self.spec.marked_bitstrings)
         if self.spec.marked_indices is not None:
@@ -304,10 +371,28 @@ class OracleBuilder:
     def bit_flip_oracle(self, *, name: str | None = None) -> QuantumCircuit:
         """Return ``|x>|y> -> |x>|y xor f(x)>`` with the output qubit last."""
 
+        if self.spec.unitary_matrix is not None:
+            raise ValueError("bit_flip_oracle is not defined for an arbitrary unitary oracle")
         output_qubit = self.spec.num_qubits
         qc = QuantumCircuit(self.spec.num_qubits + 1, name=name or "bit_flip_oracle")
         for bitstring in self.marked_bitstrings():
             _append_bit_flip_for_bitstring(qc, bitstring, output_qubit)
+        return qc
+
+    def unitary_oracle(self, *, name: str | None = None) -> QuantumCircuit:
+        """Return a circuit that applies the supplied oracle unitary matrix."""
+
+        if self.spec.unitary_matrix is None:
+            return self.phase_oracle(name=name)
+
+        try:
+            from qiskit.circuit.library import UnitaryGate
+        except ImportError:  # pragma: no cover - compatibility with older Qiskit
+            from qiskit.extensions import UnitaryGate
+
+        gate = UnitaryGate(self.spec.unitary_matrix, label=name or "unitary_oracle")
+        qc = QuantumCircuit(self.spec.num_qubits, name=name or "unitary_oracle")
+        qc.append(gate, range(self.spec.num_qubits))
         return qc
 
 
@@ -380,3 +465,18 @@ def build_bit_flip_oracle(
     )
     return OracleBuilder(spec).bit_flip_oracle(name=name)
 
+
+def build_unitary_oracle(
+    unitary_matrix: ArrayLike,
+    *,
+    num_qubits: int | None = None,
+    atol: float = 1e-8,
+    name: str | None = None,
+) -> QuantumCircuit:
+    """Convenience wrapper for constructing an oracle from a unitary matrix."""
+
+    return OracleBuilder.from_unitary_matrix(
+        unitary_matrix,
+        num_qubits=num_qubits,
+        atol=atol,
+    ).unitary_oracle(name=name)
