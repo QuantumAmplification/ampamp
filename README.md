@@ -356,7 +356,7 @@ the companion survey:
 
 ```bibtex
 @software{Kumar2026QuantumAmplificationLibrary,
-  author = {Kumar, Mithilesh and Tahir, Yusuf and Daiya, Varun},
+  author = {Kumar, Mithilesh and Daiya, Varun and Tahir, Yusuf},
   title = {Quantum Amplification Library},
   year = {2026},
   month = apr,
