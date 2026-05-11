@@ -6,15 +6,15 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="A unified framework for Quantum Amplitude Amplification, QSVT, and VTAA.">
+        <meta name="description" content="A Python library for amplitude amplification, QSVT/QSP, diagnostics, transpilation profiling, and backend validation.">
       
       
       
       
-        <link rel="prev" href="../..">
+        <link rel="prev" href="../foqa/">
       
       
-        <link rel="next" href="../fixed_point/">
+        <link rel="next" href="../transpilation_validation/">
       
       
         
@@ -25,7 +25,7 @@
     
     
       
-        <title>Foundations - ampamp</title>
+        <title>Transpilation - ampamp</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#ampamp.foundations" class="md-skip">
+        <a href="#ampamp.transpilation" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Foundations
+              Transpilation
             
           </span>
         </div>
@@ -198,7 +198,7 @@
     
     
       <div class="md-header__source">
-        <a href="https://github.com/QuantumAmplitude/AmplitudeAmplification" title="Go to repository" class="md-source" data-md-component="source">
+        <a href="https://github.com/QuantumAmplification/ampamp" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
@@ -246,7 +246,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+        <a href="../grover/" class="md-tabs__link">
           
   
   
@@ -300,7 +300,7 @@
   </label>
   
     <div class="md-nav__source">
-      <a href="https://github.com/QuantumAmplitude/AmplitudeAmplification" title="Go to repository" class="md-source" data-md-component="source">
+      <a href="https://github.com/QuantumAmplification/ampamp" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
@@ -350,6 +350,14 @@
   
     
     
+      
+        
+      
+        
+      
+        
+      
+        
       
         
       
@@ -419,35 +427,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Foundations
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../grover/" class="md-nav__link">
         
   
   
@@ -463,113 +446,62 @@
   
 
       </a>
-      
-        
+    </li>
+  
 
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+              
+            
+              
+                
   
   
   
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#ampamp.foundations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        foundations
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="foundations">
-      <ul class="md-nav__list">
+    <li class="md-nav__item">
+      <a href="../oracles/" class="md-nav__link">
         
-          <li class="md-nav__item">
-  <a href="#ampamp.foundations.GroverEngine" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        GroverEngine
-      
-    </span>
-  </a>
   
-    <nav class="md-nav" aria-label="GroverEngine">
-      <ul class="md-nav__list">
+  
+  <span class="md-ellipsis">
+    
+  
+    Oracle Construction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../entanglement/" class="md-nav__link">
         
-          <li class="md-nav__item">
-  <a href="#ampamp.foundations.GroverEngine.__init__" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        __init__
-      
-    </span>
-  </a>
   
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#ampamp.foundations.GroverEngine.compute_success_prob" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        compute_success_prob
-      
-    </span>
-  </a>
   
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#ampamp.foundations.GroverEngine.construct_circuit" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        construct_circuit
-      
-    </span>
-  </a>
+  <span class="md-ellipsis">
+    
   
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#ampamp.foundations.GroverEngine.get_diffusion" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        get_diffusion
-      
-    </span>
-  </a>
+    Entanglement Count
   
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#ampamp.foundations.GroverEngine.get_oracle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        get_oracle
-      
-    </span>
-  </a>
+
+    
+  </span>
   
-</li>
-        
-      </ul>
-    </nav>
   
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
+
+      </a>
     </li>
   
 
@@ -722,7 +654,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../fpoa/" class="md-nav__link">
+      <a href="../foqa/" class="md-nav__link">
         
   
   
@@ -730,6 +662,211 @@
     
   
     FPOA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transpilation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transpilation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ampamp.transpilation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        transpilation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="transpilation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ampamp.transpilation.HardwareCostWeights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HardwareCostWeights
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ampamp.transpilation.TranspilationBatchProfiler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TranspilationBatchProfiler
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TranspilationBatchProfiler">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ampamp.transpilation.TranspilationBatchProfiler.profile_many" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        profile_many
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ampamp.transpilation.TranspilationProfileConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TranspilationProfileConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ampamp.transpilation.TranspilationProfiler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TranspilationProfiler
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TranspilationProfiler">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ampamp.transpilation.TranspilationProfiler.calculate_cost_function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        calculate_cost_function
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ampamp.transpilation.TranspilationProfiler.profile_circuit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        profile_circuit
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../transpilation_validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transpilation Validation
   
 
     
@@ -798,23 +935,23 @@
   
 
 
-  <h1>Foundations</h1>
+  <h1>Transpilation</h1>
 
 <div class="doc doc-object doc-module">
 
 
 
-<h2 id="ampamp.foundations" class="doc doc-heading">
-            <code>ampamp.foundations</code>
+<h2 id="ampamp.transpilation" class="doc doc-heading">
+            <code>ampamp.transpilation</code>
 
 
 </h2>
 
     <div class="doc doc-contents first">
 
-        <p>Foundations for Quantum Amplitude Amplification.</p>
-<p>This module provides basic classes and fundamental operations
-for standard Grover search and amplitude amplification algorithms.</p>
+        <p>Transpilation and hardware-profiling utilities for ampamp.</p>
+<p>This module provides reusable, library-grade classes for staged circuit
+transpilation analysis, routing diagnostics, and unified hardware scoring.</p>
 
 
 
@@ -839,8 +976,58 @@ for standard Grover search and amplitude amplification algorithms.</p>
 
 
 
-<h3 id="ampamp.foundations.GroverEngine" class="doc doc-heading">
-            <code>GroverEngine</code>
+<h3 id="ampamp.transpilation.HardwareCostWeights" class="doc doc-heading">
+            <code>HardwareCostWeights</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Weights used by the unified hardware cost function.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ampamp.transpilation.TranspilationBatchProfiler" class="doc doc-heading">
+            <code>TranspilationBatchProfiler</code>
 
 
 </h3>
@@ -850,9 +1037,7 @@ for standard Grover search and amplitude amplification algorithms.</p>
 
 
 
-        <p>The core algebraic and circuit engine for Grover's Search.</p>
-<p>Focuses on state synthesis and geometric calculations to amplify
-amplitudes of marked solution states optimally.</p>
+        <p>Profiles multiple circuits with one shared transpilation configuration.</p>
 
 
 
@@ -878,181 +1063,130 @@ amplitudes of marked solution states optimally.</p>
 <div class="doc doc-object doc-function">
 
 
-<h4 id="ampamp.foundations.GroverEngine.__init__" class="doc doc-heading">
-            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">,</span> <span class="n">marked_indices</span><span class="p">)</span></code>
+<h4 id="ampamp.transpilation.TranspilationBatchProfiler.profile_many" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">profile_many</span><span class="p">(</span><span class="n">circuits</span><span class="p">)</span></code>
 
 </h4>
 
 
     <div class="doc doc-contents ">
 
-        <p>Initializes the GroverEngine.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>n_qubits</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The number of qubits representing the problem space (<span class="arithmatex">\(N = 2^n\)</span>).</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>marked_indices</code>
-            </td>
-            <td>
-                  <code><span title="list">list</span>[<span title="int">int</span>]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>List indicating the integers representing 
-the marked states in the problem subspace.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
+        <p>Profile a dictionary of named circuits.</p>
 
 
     </div>
 
 </div>
 
-<div class="doc doc-object doc-function">
 
 
-<h4 id="ampamp.foundations.GroverEngine.compute_success_prob" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">compute_success_prob</span><span class="p">(</span><span class="n">lambda_val</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span></code>
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ampamp.transpilation.TranspilationProfileConfig" class="doc doc-heading">
+            <code>TranspilationProfileConfig</code>
+
 
   <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-staticmethod"><code>staticmethod</code></small>
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
   </span>
 
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Configuration for staged transpilation profiling.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ampamp.transpilation.TranspilationProfiler" class="doc doc-heading">
+            <code>TranspilationProfiler</code>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Profiles a circuit through layout, routing, optimization, and scheduling.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="ampamp.transpilation.TranspilationProfiler.calculate_cost_function" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">calculate_cost_function</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">time_ns</span><span class="p">,</span> <span class="n">cnots</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span></code>
+
 </h4>
 
 
     <div class="doc doc-contents ">
 
-        <p>Analytic success probability calculation.</p>
-<p>Computes the success probability <span class="arithmatex">\(P(k)\)</span> after <span class="arithmatex">\(k\)</span> Grover iterations
-given the solution density <span class="arithmatex">\(\lambda\)</span>. The probability formula is defined geometrically as 
-<span class="arithmatex">\(P(k) = \sin^2((2k + 1) \theta / 2)\)</span>, where <span class="arithmatex">\(\theta = 2 \arcsin(\sqrt{\lambda})\)</span>.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>lambda_val</code>
-            </td>
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The solution density fraction, <span class="arithmatex">\(M/N\)</span>.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>k</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The number of Grover iterations applied.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-<th>Name</th>          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-<td><code>float</code></td>            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The probability of measuring a marked state.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="ValueError">ValueError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If lambda_val is not within the inclusive bound [0, 1].</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
+        <p>Compute unified hardware penalty score.</p>
+<p>score = w_time<em>time + w_cnot</em>cnots + w_distance*distance</p>
 
 
     </div>
@@ -1062,166 +1196,15 @@ given the solution density <span class="arithmatex">\(\lambda\)</span>. The prob
 <div class="doc doc-object doc-function">
 
 
-<h4 id="ampamp.foundations.GroverEngine.construct_circuit" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">construct_circuit</span><span class="p">(</span><span class="n">iterations</span><span class="p">)</span></code>
+<h4 id="ampamp.transpilation.TranspilationProfiler.profile_circuit" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">profile_circuit</span><span class="p">(</span><span class="n">logical_circuit</span><span class="p">)</span></code>
 
 </h4>
 
 
     <div class="doc doc-contents ">
 
-        <p>Synthesizes the full Grover circuit.</p>
-<p>Links the oracle operator and diffusion operator for <span class="arithmatex">\(k\)</span> iterations 
-starting from the full uniformly mixed amplitude distribution <span class="arithmatex">\(|s\rangle\)</span>.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>iterations</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The amount of generalized Grover operator iterations 
-to sequentially run <span class="arithmatex">\(Q = -A S_0 A^{-1} S_f\)</span>.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-<th>Name</th>          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-<td><code>QuantumCircuit</code></td>            <td>
-                  <code><span title="qiskit.QuantumCircuit">QuantumCircuit</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The synthesized Grover standard algorithm sequence.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h4 id="ampamp.foundations.GroverEngine.get_diffusion" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">get_diffusion</span><span class="p">()</span></code>
-
-</h4>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Generates the Grover Diffusion operator (Inversion about mean).</p>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-<th>Name</th>          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-<td><code>QuantumCircuit</code></td>            <td>
-                  <code><span title="qiskit.QuantumCircuit">QuantumCircuit</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>An n-qubit circuit corresponding to <span class="arithmatex">\(2 |s\rangle\langle s| - I\)</span>, </p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-<td></td>            <td>
-                  <code><span title="qiskit.QuantumCircuit">QuantumCircuit</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>where <span class="arithmatex">\(|s\rangle\)</span> is the equal superposition state.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h4 id="ampamp.foundations.GroverEngine.get_oracle" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">get_oracle</span><span class="p">()</span></code>
-
-</h4>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Generates a Phase Oracle for the marked states.</p>
-<p>Constructs a standard quantum phase oracle gate circuit that flips the sign 
-of the marked states while leaving orthogonal unmarked states alone.</p>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-<th>Name</th>          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-<td><code>QuantumCircuit</code></td>            <td>
-                  <code><span title="qiskit.QuantumCircuit">QuantumCircuit</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>An n-qubit oracle circuit flipping the phase of marked states.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
+        <p>Run a multi-stage transpilation profile and return hardware metrics.</p>
 
 
     </div>
