@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ampamp"
-version = "0.1.3"
+version = "0.1.4"
 authors = [{name = "Varun Daiya"}, {name = "Yusuf Tahir"}]
 description = "A unified framework for Quantum Amplitude Amplification, QSVT, and VTAA."
 readme = "README.md"
