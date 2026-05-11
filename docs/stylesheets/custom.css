@@ -312,8 +312,8 @@ body {
   }
 
   .ampamp-hero h1 {
-    width: min(100%, 13.4ch);
-    font-size: clamp(2.4rem, 4.2vw, 3.7rem);
+    width: min(100%, 16ch);
+    font-size: clamp(2.35rem, 3.4vw, 3.05rem);
   }
 
   .ampamp-lede {
@@ -360,6 +360,7 @@ body {
 
   .ampamp-actions {
     flex-direction: column;
+    width: min(16rem, calc(100vw - 4rem));
   }
 
   .ampamp-button {
