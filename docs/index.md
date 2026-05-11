@@ -119,6 +119,70 @@ qc = engine.construct_circuit(
 
 </div>
 
+## Canonical Paper Trail {: .ampamp-section-title }
+
+`ampamp` is a practical library, but each module sits on a well-established algorithmic line. The documentation below names the main papers behind the current implementation surface, from Grover search and amplitude estimation through fixed-point schedules, block encodings, variable-time amplification, and QSVT.
+
+<div class="grid cards" markdown>
+
+-   **Survey and Taxonomy**
+
+    ---
+    Start with the companion survey [Kumar, Tahir, and Daiya (2026)](https://doi.org/10.5281/zenodo.20054981), which gives the broader amplitude-amplification landscape that this package turns into executable tools.
+
+    Used across the docs and SciPost manuscript.
+
+-   **Grover Search and Limits**
+
+    ---
+    The search core follows [Grover (1996)](https://doi.org/10.1145/237814.237866), with tight-search and optimality context from [Boyer, Brassard, Hoyer, and Tapp (1998)](https://doi.org/10.1002/(SICI)1521-3978(199806)46:4/5%3C493::AID-PROP493%3E3.0.CO;2-P), [Bennett, Bernstein, Brassard, and Vazirani (1997)](https://doi.org/10.1137/S0097539796300933), and [Zalka (1999)](https://doi.org/10.1103/PhysRevA.60.2746).
+
+    Maps to `GroverEngine`, phase oracles, diffusion, and success-probability utilities.
+
+-   **Amplitude Amplification and Estimation**
+
+    ---
+    The general amplification and estimation interface is grounded in [Brassard, Hoyer, Mosca, and Tapp (2002)](https://doi.org/10.1090/conm/305/05215), arbitrary-phase amplification in [Hoyer (2000)](https://doi.org/10.1103/PhysRevA.62.052304), and QPE-free estimation in [Grinko, Gacon, Zoufal, and Woerner (2021)](https://doi.org/10.1038/s41534-021-00379-1).
+
+    Maps to analytic probability helpers and the `IQAEConfig` / `IQAEResult` scaffolding.
+
+-   **Fixed-Point and Damped Search**
+
+    ---
+    Fixed-point behavior is connected to [Grover (2005)](https://doi.org/10.1103/PhysRevLett.95.150501), [Mizel (2009)](https://doi.org/10.1103/PhysRevLett.102.150501), [Yoder, Low, and Chuang (2014)](https://doi.org/10.1103/PhysRevLett.113.210501), and [Low, Yoder, and Chuang (2016)](https://doi.org/10.1103/PhysRevX.6.041067).
+
+    Maps to `FixedPointEngine`, `FOQAEngine`, phase schedules, and recurrence simulation.
+
+-   **Oracle, LCU, and Block-Encoding Methods**
+
+    ---
+    The oblivious-amplification and block-encoding parts reflect the LCU and qubitization paper trail, including [Berry, Childs, Cleve, Kothari, and Somma (2015)](https://doi.org/10.1103/PhysRevLett.114.090502), [Berry, Childs, and Kothari (2015)](https://doi.org/10.1109/FOCS.2015.54), [Low and Chuang (2019)](https://doi.org/10.22331/q-2019-07-12-163), and [Babbush et al. (2018)](https://doi.org/10.1103/PhysRevX.8.041015).
+
+    Maps to `ObliviousEngine`, direct unitary oracle wrapping, and block-encoding scaffolds.
+
+-   **Variable-Time and Linear Algebra Algorithms**
+
+    ---
+    Variable-time amplification follows [Ambainis (2012)](https://doi.org/10.4230/LIPIcs.STACS.2012.636), with the linear-system motivation from [Harrow, Hassidim, and Lloyd (2009)](https://doi.org/10.1103/PhysRevLett.103.150502) and improved precision dependence in [Childs, Kothari, and Somma (2017)](https://doi.org/10.1137/16M1087072).
+
+    Maps to `VTAAEngine`, branch records, stopping-time moments, and asymptotic estimates.
+
+-   **QSP and QSVT**
+
+    ---
+    The QSP/QSVT helpers sit on [Low and Chuang (2017)](https://doi.org/10.1103/PhysRevLett.118.010501), [Low and Chuang (2019)](https://doi.org/10.22331/q-2019-07-12-163), [Gilyen, Su, Low, and Wiebe (2019)](https://doi.org/10.1145/3313276.3316366), and [Martyn, Rossi, Tan, and Chuang (2021)](https://doi.org/10.1103/PRXQuantum.2.040203).
+
+    Maps to `SU2QSPEngine`, `QSVTSynthesizer`, Chebyshev helpers, and parity diagnostics.
+
+-   **Quantum Walks and Partitioned Search**
+
+    ---
+    The distributed and partitioned-search tools are software bookkeeping layers, but their motivation is close to quantum-walk search and walk/simulation relationships such as [Childs (2010)](https://doi.org/10.1007/s00220-009-0930-1).
+
+    Maps to `DQAAEngine`, prefix/suffix partitions, and symbolic local-oracle synthesis.
+
+</div>
+
 ## Quick Start
 
 Build and profile a Grover circuit:
