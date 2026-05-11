@@ -131,7 +131,12 @@ body {
   margin: 0 auto;
 }
 
+.ampamp-hero__inner > div:first-child {
+  width: min(100%, 21rem);
+}
+
 .ampamp-eyebrow {
+  width: min(100%, 34ch);
   margin: 0 0 0.75rem;
   color: var(--md-accent-fg-color);
   font-size: 0.72rem;
@@ -143,7 +148,7 @@ body {
 
 .ampamp-hero h1 {
   margin: 0;
-  max-width: 44rem;
+  width: min(100%, 10.8ch);
   font-size: clamp(1.85rem, 5vw, 4rem);
   line-height: 1.06;
   letter-spacing: 0;
@@ -151,7 +156,7 @@ body {
 }
 
 .ampamp-lede {
-  max-width: 42rem;
+  width: min(100%, 30ch);
   margin: 1rem 0 1.35rem;
   color: var(--ampamp-muted);
   font-size: clamp(0.95rem, 2vw, 1.12rem);
@@ -162,6 +167,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
+  width: min(100%, 21rem);
   margin: 1.2rem 0 0;
 }
 
