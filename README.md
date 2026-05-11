@@ -1,56 +1,194 @@
-# AmplitudeAmplification (`ampamp`)
+<div align="center">
 
-`ampamp` is a Python library for quantum amplitude-amplification, QSVT/QSP, circuit diagnostics, transpilation profiling, and backend-validation workflows.
+# ampamp
 
-The current PyPI release is `0.1.4`:
+### Amplitude amplification, QSVT, and circuit-analysis workflows for Python
+
+`ampamp` is a research library for building quantum amplification circuits,
+inspecting their mathematical behavior, profiling compilation cost, and
+validating ideal/noisy backend behavior from one compact API.
+
+[![PyPI](https://img.shields.io/pypi/v/ampamp?color=1f6feb)](https://pypi.org/project/ampamp/)
+[![Python](https://img.shields.io/pypi/pyversions/ampamp)](https://pypi.org/project/ampamp/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f)](https://quantumamplification.github.io/ampamp/)
+[![Repository](https://img.shields.io/badge/GitHub-QuantumAmplification%2Fampamp-24292f)](https://github.com/QuantumAmplification/ampamp)
+
+</div>
+
+---
+
+## Why ampamp?
+
+Amplitude amplification is the shared engine behind Grover search, amplitude
+estimation, fixed-point schedules, oblivious amplification, variable-time
+algorithms, and QSVT-style workflows. In papers these often appear as separate
+constructions. In experiments and software, the recurring need is simpler:
+
+1. describe the search, oracle, block encoding, branch model, or polynomial;
+2. build an inspectable circuit or classical schedule;
+3. profile the circuit under a hardware model;
+4. validate the behavior under ideal or noisy simulation;
+5. keep the whole workflow reproducible.
+
+`ampamp` is built for that practical loop.
+
+Requires Python `>=3.9`.
 
 ```bash
 python3 -m pip install ampamp
 ```
 
-For local development from this repository:
+```python
+from ampamp import GroverEngine, TranspilationProfiler, TranspilationProfileConfig
 
-```bash
-python3 -m pip install -e .
+engine = GroverEngine(n_qubits=6, marked_indices=[10, 25])
+qc = engine.construct_circuit(iterations=engine.k_optimal)
+
+metrics = TranspilationProfiler(
+    TranspilationProfileConfig(
+        coupling_map_edges=[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]],
+    )
+).profile_circuit(qc)
+
+print(engine.k_optimal)
+print(metrics["post_optimization_depth"])
+print(metrics["final_cnots"])
 ```
 
-Minimum Python: `>=3.9`
+## At A Glance
 
-## What The Library Provides
+| Area | What it gives you | Main entry points |
+| --- | --- | --- |
+| Grover search | Phase oracles, diffusion operators, optimal-iteration estimates, success probabilities, full circuits | `GroverEngine` |
+| Oracle construction | Marked-state, Boolean-formula, bit-flip, phase, and direct unitary oracle circuits | `OracleBuilder`, `build_phase_oracle`, `build_bit_flip_oracle`, `build_unitary_oracle` |
+| Fixed-point AA | Chebyshev-style phase schedules and monotone amplification circuits | `FixedPointEngine` |
+| Oblivious / FOQA | Ancilla preparation, block-encoding scaffolds, reflections, damping schedules, recurrence simulation | `ObliviousEngine`, `FOQAEngine` |
+| Distributed AA | Prefix/suffix target partitioning and local symbolic oracle synthesis | `DQAAEngine`, `OracleSynthesizer` |
+| Variable-time AA | Branch models, stopping-time moments, success mass, asymptotic estimates | `VTAAEngine`, `VariableTimeBranch` |
+| QSVT / QSP | SU(2) QSP sequence evaluation and Chebyshev polynomial helpers | `SU2QSPEngine`, `QSVTSynthesizer` |
+| Diagnostics | Executable checks for rotations, schedules, partitions, branches, and polynomial parity | `GroverAuditor`, `FPAAAuditor`, `QSVTAuditor`, ... |
+| Transpilation | Staged compile metrics, routing counts, timing models, batch profiling, hardware-cost scores | `TranspilationProfiler`, `TranspilationBatchProfiler` |
+| Backend validation | Ideal/noisy simulator comparisons, total-variation distance, noise presets, JSONL logs | `BackendValidationRunner` |
+| Entanglement count | Light and hard active-entangled-qubit profiling for Qiskit circuits | `profile_entanglement_counts` |
 
-`ampamp` exposes small engine classes and utilities for:
+## Workflow Examples
 
-- Grover-style amplitude amplification
-- Fixed-point amplitude amplification (FPAA)
-- Oblivious amplitude amplification (OAA)
-- Fixed-point oblivious amplitude amplification (FOQA)
-- Distributed amplitude amplification (DQAA)
-- Variable-time amplitude amplification (VTAA)
-- Quantum singular value transformation and quantum signal processing (QSVT/QSP)
-- Oracle construction from marked states, Boolean formula strings, or user-supplied unitary matrices
-- Entanglement-count profiling
-- Transpilation profiling and hardware-cost scoring
-- Ideal/noisy backend validation
+### Oracle construction
 
-Scenario scripts and implementation-comparison workflows are maintained separately at:
+Use marked indices, Boolean formulas, or direct unitary matrices.
 
-```text
-https://github.com/QuantumAmplification/Implementation
+```python
+import numpy as np
+
+from ampamp import (
+    OracleBuilder,
+    build_bit_flip_oracle,
+    build_phase_oracle,
+    build_unitary_oracle,
+)
+
+phase_from_indices = build_phase_oracle(
+    num_qubits=4,
+    marked_indices=[3, 11],
+)
+
+phase_from_formula = build_phase_oracle(
+    num_qubits=4,
+    formula_text="v0 & (~v1 | v3)",
+)
+
+bit_flip_from_formula = build_bit_flip_oracle(
+    num_qubits=4,
+    formula_text="v0 & v2",
+)
+
+builder_oracle = OracleBuilder.from_formula(
+    num_qubits=4,
+    formula_text="v0 & (v2 | v3)",
+).phase_oracle()
+
+unitary_matrix = np.diag([1, 1, -1, 1])
+matrix_oracle = build_unitary_oracle(unitary_matrix)
 ```
 
-This package repository now focuses on the installable library, docs, tests, and release artifacts.
+For distributed symbolic work, `OracleSynthesizer` substitutes fixed node
+prefixes into a global Boolean formula and emits node-local phase oracles.
 
-## Repository Layout
+### Fixed-point amplification
 
-- `src/ampamp/`: installable library source code
-- `docs/`: MkDocs documentation and API pages
-- `tests/`: unit tests and regression checks
-- `dist/`: local build artifacts when releases are prepared
-- `implementation_folders.zip`: local archive of the moved implementation-comparison folders, if present
+```python
+from ampamp import FixedPointEngine
 
-## Public API Overview
+fp = FixedPointEngine(L=5, delta=0.1)
+qc = fp.build_fixed_point_circuit(num_qubits=4, marked_indices=[3, 11])
 
-Common imports:
+print(fp.alphas)
+print(fp.betas)
+print(qc.depth())
+```
+
+### Variable-time branch analysis
+
+```python
+from ampamp import VTAAEngine, VariableTimeBranch
+
+branches = [
+    VariableTimeBranch(stop_time=1.0, weight=0.4, success_given_branch=0.8),
+    VariableTimeBranch(stop_time=3.0, weight=0.6, success_given_branch=0.5),
+]
+
+vtaa = VTAAEngine(branches)
+print(vtaa.p_success)
+print(vtaa.stopping_time_moments())
+print(vtaa.vtaa_asymptotic_bound())
+```
+
+### Backend validation
+
+```python
+from ampamp import GroverEngine
+from ampamp import (
+    BackendValidationRunner,
+    BackendValidationConfig,
+    ValidationNoiseConfig,
+    ValidationLogConfig,
+)
+
+qc = GroverEngine(n_qubits=4, marked_indices=[3, 11]).construct_circuit(
+    iterations=1,
+)
+
+runner = BackendValidationRunner(
+    BackendValidationConfig(
+        shots=1024,
+        seed=42,
+        noise=ValidationNoiseConfig(noise_level="light"),
+        logging=ValidationLogConfig(enabled=True, log_dir="./validation_logs"),
+    )
+)
+
+result = runner.validate_circuit("grover_demo", qc)
+print(result["status"], result["metrics"]["tvd"])
+```
+
+### Entanglement count profiling
+
+```python
+from ampamp import EntanglementCountConfig, GroverEngine, profile_entanglement_counts
+
+qc = GroverEngine(n_qubits=5, marked_indices=[0]).construct_circuit(
+    iterations=1,
+)
+
+light = profile_entanglement_counts(
+    qc,
+    EntanglementCountConfig.light(max_qubits=12),
+)
+
+print(light["peak_active_entangled_qubits"])
+```
+
+## Public Import Surface
 
 ```python
 from ampamp import (
@@ -94,164 +232,14 @@ from ampamp import (
 )
 ```
 
-## Quick Start
-
-### Grover circuit and transpilation profile
-
-```python
-from ampamp import GroverEngine, TranspilationProfiler, TranspilationProfileConfig
-
-engine = GroverEngine(n_qubits=6, marked_indices=[10, 25])
-qc = engine.construct_circuit(iterations=engine.k_optimal)
-
-config = TranspilationProfileConfig(
-    coupling_map_edges=[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]],
-)
-metrics = TranspilationProfiler(config).profile_circuit(qc)
-
-print(engine.k_optimal)
-print(metrics["post_optimization_depth"])
-print(metrics["final_cnots"])
-```
-
-### Oracle construction
-
-`ampamp` supports two main oracle-entry modes:
-
-1. A user supplies a Boolean function or expression, often as a string, and the library constructs an oracle circuit.
-2. A user supplies a unitary matrix directly, and the library wraps it as an oracle circuit after validation.
-
-```python
-import numpy as np
-
-from ampamp import (
-    OracleBuilder,
-    build_bit_flip_oracle,
-    build_phase_oracle,
-    build_unitary_oracle,
-)
-
-phase_from_indices = build_phase_oracle(
-    num_qubits=4,
-    marked_indices=[3, 11],
-)
-
-phase_from_formula = build_phase_oracle(
-    num_qubits=4,
-    formula_text="v0 & (~v1 | v3)",
-)
-
-bit_flip_from_formula = build_bit_flip_oracle(
-    num_qubits=4,
-    formula_text="v0 & v2",
-)
-
-builder_oracle = OracleBuilder.from_formula(
-    num_qubits=4,
-    formula_text="v0 & (v2 | v3)",
-).phase_oracle()
-
-unitary_matrix = np.diag([1, 1, -1, 1])
-matrix_oracle = build_unitary_oracle(unitary_matrix)
-```
-
-For distributed symbolic oracle work, `OracleSynthesizer` can substitute fixed node prefixes into a global Boolean formula and synthesize node-local oracles.
-
-### Fixed-point amplitude amplification
-
-```python
-from ampamp import FixedPointEngine
-
-fp = FixedPointEngine(L=5, delta=0.1)
-qc = fp.build_fixed_point_circuit(num_qubits=4, marked_indices=[3, 11])
-
-print(fp.alphas)
-print(fp.betas)
-print(qc.depth())
-```
-
-### Entanglement count profiling
-
-```python
-from ampamp import EntanglementCountConfig, profile_entanglement_counts
-
-light = profile_entanglement_counts(
-    qc,
-    EntanglementCountConfig.light(max_qubits=12),
-)
-
-print(light["peak_active_entangled_qubits"])
-```
-
-### Backend validation
-
-```python
-from ampamp import (
-    BackendValidationRunner,
-    BackendValidationConfig,
-    ValidationNoiseConfig,
-    ValidationLogConfig,
-)
-
-runner = BackendValidationRunner(
-    BackendValidationConfig(
-        shots=1024,
-        seed=42,
-        noise=ValidationNoiseConfig(noise_level="light"),
-        logging=ValidationLogConfig(enabled=True, log_dir="./validation_logs"),
-    )
-)
-
-result = runner.validate_circuit("example", qc)
-print(result["status"], result["metrics"]["tvd"])
-```
-
-## Engine Summary
-
-- `GroverEngine`: standard oracle, diffusion, full Grover circuit, and success-probability utilities.
-- `FixedPointEngine`: Chebyshev-style phase schedules and fixed-point circuit synthesis.
-- `ObliviousEngine`: ancilla preparation, block-encoding scaffolds, and reflection construction.
-- `FOQAEngine`: fixed-point oblivious schedules, recurrence simulation, and split-operator helpers.
-- `DQAAEngine`: prefix/suffix partitioning for distributed search targets.
-- `OracleBuilder`: phase, bit-flip, and unitary oracle construction.
-- `OracleSynthesizer`: SymPy-backed local oracle synthesis from global formulas.
-- `VTAAEngine`: variable-time branch moments, success mass, asymptotic estimates, and staged-state examples.
-- `SU2QSPEngine`: QSP sequence evaluation.
-- `QSVTSynthesizer`: Chebyshev helpers for Jacobi-Anger and matrix-inverse approximations.
-- `IQAEEngine`, `IQAEConfig`, `IQAEResult`: QPE-free amplitude-estimation API scaffolding.
-
-## Diagnostics
-
-Auditors inspect configured engines and derived objects:
-
-- `GroverAuditor`
-- `FPAAAuditor`
-- `ObliviousAuditor`
-- `FOQAAuditor`
-- `DistributedAuditor`
-- `VTAAAuditor`
-- `FundamentalLimitsAuditor`
-- `QSVTAuditor`
-
-These are intended as executable documentation and sanity checks before heavier simulation or transpilation runs.
-
-## Transpilation And Backend Validation
-
-The transpilation module provides:
-
-- `TranspilationProfiler`: staged single-circuit profiling
-- `TranspilationBatchProfiler`: batch profiling under a shared configuration
-- `TranspilationProfileConfig`: basis, coupling map, timing, and optimization settings
-- `HardwareCostWeights`: weighted hardware-cost scoring
-
-The backend validation module provides:
-
-- `BackendValidationRunner`: ideal/noisy simulator comparison
-- `BackendValidationConfig`: shots, seed, thresholds, optimization level, and qubit cap
-- `ValidationNoiseConfig`: ideal, preset, or custom noise models
-- `ValidationLogConfig`: optional JSONL validation records
-
 ## Documentation
+
+| Resource | Link |
+| --- | --- |
+| Documentation site | https://quantumamplification.github.io/ampamp/ |
+| PyPI package | https://pypi.org/project/ampamp/ |
+| Source repository | https://github.com/QuantumAmplification/ampamp |
+| Implementation comparison workflows | https://github.com/QuantumAmplification/Implementation |
 
 Serve the docs locally:
 
@@ -259,17 +247,63 @@ Serve the docs locally:
 mkdocs serve
 ```
 
-Main docs entry:
+Build the docs:
 
-```text
-docs/index.md
+```bash
+mkdocs build --strict
 ```
 
-API pages include Grover, fixed-point, oblivious, FOQA, distributed, variable-time, QSVT, diagnostics, transpilation, transpilation validation, entanglement, and oracle construction.
+## Research Lineage
 
-## Testing
+`ampamp` is a software layer over a long amplitude-amplification paper trail:
+Grover search, polynomial lower bounds, amplitude estimation, arbitrary-phase
+amplification, fixed-point search, controlled amplification, oblivious
+amplification, LCU/block encodings, variable-time algorithms, Hamiltonian
+simulation, QSP, and QSVT.
 
-Run the full test suite:
+The companion survey for the project is:
+
+```text
+M. Kumar, Y. Tahir, and V. Daiya,
+"Amplitude Amplification Algorithms",
+Zenodo, 2026.
+https://doi.org/10.5281/zenodo.20054981
+```
+
+The SciPost manuscript in this repository contains the fuller bibliography,
+including Grover, Bennett-Bernstein-Brassard-Vazirani, Beals-Buhrman-Cleve-
+Mosca-de Wolf, Brassard-Hoyer-Mosca-Tapp, Yoder-Low-Chuang, Low-Chuang,
+Ambainis, Harrow-Hassidim-Lloyd, Gilyen-Su-Low-Wiebe, Martyn-Rossi-Tan-Chuang,
+and the distributed/FOQA papers used by the package.
+
+## Repository Layout
+
+```text
+src/ampamp/       installable library source
+docs/             MkDocs documentation and API pages
+tests/            unit tests and regression checks
+dist/             local release artifacts, when built
+fd.tex            SciPost manuscript draft
+main.tex          alternate SciPost manuscript draft
+CITATION.cff      citation metadata
+```
+
+Scenario scripts and implementation-comparison workflows live outside the
+package repository:
+
+```text
+https://github.com/QuantumAmplification/Implementation
+```
+
+## Development
+
+Install locally:
+
+```bash
+python3 -m pip install -e .
+```
+
+Run the test suite:
 
 ```bash
 PYTHONPATH=src pytest
@@ -282,24 +316,48 @@ PYTHONPATH=src pytest tests/test_oracles.py
 PYTHONPATH=src pytest tests/test_transpilation_module.py tests/test_transpilation_validation.py
 ```
 
-## Implementation Workflows
+Build a release artifact locally:
 
-The previous `library_implementation/` and `non_library_implementation/` folders were moved out of this package repository because they are comparison and scenario workflows rather than core library code.
-
-They are available here:
-
-```text
-https://github.com/QuantumAmplification/Implementation
+```bash
+python3 -m build
+python3 -m twine check dist/*
 ```
 
-A local archive may also exist as:
+## Reproducibility Notes
 
-```text
-implementation_folders.zip
+For papers, notebooks, and benchmark runs, record:
+
+- `ampamp` version;
+- Python version;
+- Qiskit and Qiskit Aer versions;
+- backend or simulator settings;
+- transpilation basis gates, coupling map, and optimization levels;
+- random seeds and shot counts;
+- validation noise preset or custom noise parameters.
+
+Some simulator-heavy workflows can be environment-sensitive. If Matplotlib cache
+warnings appear, set a writable `MPLCONFIGDIR`.
+
+## Citation
+
+Until an archival software DOI is attached to a release, cite the repository and
+the companion survey:
+
+```bibtex
+@software{Kumar2026QuantumAmplificationLibrary,
+  author = {Kumar, Mithilesh and Tahir, Yusuf and Daiya, Varun},
+  title = {Quantum Amplification Library},
+  year = {2026},
+  month = apr,
+  url = {https://github.com/QuantumAmplification/ampamp}
+}
+
+@misc{Kumar2026AmplitudeAmplification,
+  author = {Kumar, Mithilesh and Tahir, Yusuf and Daiya, Varun},
+  title = {Amplitude Amplification Algorithms},
+  year = {2026},
+  publisher = {Zenodo},
+  doi = {10.5281/zenodo.20054981},
+  url = {https://doi.org/10.5281/zenodo.20054981}
+}
 ```
-
-## Notes
-
-- Some simulator-heavy workflows can be slow or environment-sensitive.
-- If Matplotlib cache warnings appear, set a writable `MPLCONFIGDIR`.
-- For PyPI releases, bump `pyproject.toml`, run tests, build with `python3 -m build`, validate with `twine check`, then upload with `twine upload`.
