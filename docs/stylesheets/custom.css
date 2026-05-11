@@ -35,6 +35,12 @@ body {
   overflow-x: hidden;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 .md-header {
   background: var(--md-primary-fg-color);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 28px rgba(0, 0, 0, 0.12);
@@ -299,6 +305,7 @@ body {
 
   .ampamp-hero__inner {
     grid-template-columns: 1fr;
+    max-width: calc(100vw - 2rem);
   }
 
   .ampamp-terminal {
@@ -312,6 +319,14 @@ body {
 
   .ampamp-hero h1 {
     font-size: clamp(1.65rem, 8vw, 2.45rem);
+    max-width: calc(100vw - 4rem);
+  }
+
+  .ampamp-lede,
+  .ampamp-eyebrow,
+  .ampamp-actions,
+  .ampamp-version {
+    max-width: calc(100vw - 4rem);
   }
 
   .ampamp-actions {
