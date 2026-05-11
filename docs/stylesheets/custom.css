@@ -167,7 +167,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
-  width: min(100%, 21rem);
+  width: min(100%, 18rem);
   margin: 1.2rem 0 0;
 }
 
@@ -299,6 +299,29 @@ body {
 @media screen and (max-width: 76.1875em) {
   .md-nav--primary .md-nav__title[for="__drawer"] {
     background: var(--md-primary-fg-color);
+  }
+}
+
+@media screen and (min-width: 900px) {
+  .ampamp-hero {
+    padding-block: 3.2rem;
+  }
+
+  .ampamp-hero__inner > div:first-child {
+    width: min(100%, 36rem);
+  }
+
+  .ampamp-hero h1 {
+    width: min(100%, 13.4ch);
+    font-size: clamp(2.4rem, 4.2vw, 3.7rem);
+  }
+
+  .ampamp-lede {
+    width: min(100%, 46ch);
+  }
+
+  .ampamp-actions {
+    width: min(100%, 24rem);
   }
 }
 
