@@ -107,10 +107,13 @@ body {
 
 .ampamp-hero {
   position: relative;
-  margin: -1.5rem -1.2rem 2rem;
+  margin: 0 0 2rem;
   padding: clamp(2rem, 6vw, 4.7rem) 1.2rem;
   background: var(--ampamp-hero-bg);
+  border: 1px solid var(--ampamp-panel-border);
+  border-radius: 12px;
   border-bottom: 1px solid var(--ampamp-panel-border);
+  overflow: hidden;
 }
 
 .ampamp-hero__inner {
@@ -129,13 +132,16 @@ body {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .ampamp-hero h1 {
   margin: 0;
-  font-size: clamp(2rem, 5vw, 4.2rem);
-  line-height: 1.02;
+  max-width: 44rem;
+  font-size: clamp(1.85rem, 5vw, 4rem);
+  line-height: 1.06;
   letter-spacing: 0;
+  overflow-wrap: break-word;
 }
 
 .ampamp-lede {
@@ -143,6 +149,7 @@ body {
   margin: 1rem 0 1.35rem;
   color: var(--ampamp-muted);
   font-size: clamp(0.95rem, 2vw, 1.12rem);
+  overflow-wrap: break-word;
 }
 
 .ampamp-actions {
@@ -285,8 +292,9 @@ body {
 
 @media screen and (max-width: 700px) {
   .ampamp-hero {
-    margin-inline: -0.8rem;
-    padding-block: 2rem;
+    margin-inline: 0;
+    padding: 1.7rem 1rem;
+    border-radius: 10px;
   }
 
   .ampamp-hero__inner {
@@ -295,6 +303,15 @@ body {
 
   .ampamp-terminal {
     display: none;
+  }
+
+  .ampamp-eyebrow {
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+  }
+
+  .ampamp-hero h1 {
+    font-size: clamp(1.65rem, 8vw, 2.45rem);
   }
 
   .ampamp-actions {
