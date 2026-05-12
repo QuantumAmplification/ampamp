@@ -12,6 +12,7 @@ validating ideal/noisy backend behavior from one compact API.
 [![Python](https://img.shields.io/badge/python-%3E%3D3.9-3776AB)](https://pypi.org/project/ampamp/)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f)](https://quantumamplification.github.io/ampamp/)
 [![Survey](https://img.shields.io/badge/survey-Zenodo-1682d4)](https://doi.org/10.5281/zenodo.20054981)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Repository](https://img.shields.io/badge/GitHub-QuantumAmplification%2Fampamp-24292f)](https://github.com/QuantumAmplification/ampamp)
 
 [Docs](https://quantumamplification.github.io/ampamp/) ·
@@ -251,6 +252,7 @@ from ampamp import (
 | PyPI package | https://pypi.org/project/ampamp/ |
 | Source repository | https://github.com/QuantumAmplification/ampamp |
 | Implementation comparison workflows | https://github.com/QuantumAmplification/Implementation |
+| License | MIT License |
 
 Serve the docs locally:
 
@@ -297,6 +299,7 @@ dist/             local release artifacts, when built
 fd.tex            SciPost manuscript draft
 main.tex          alternate SciPost manuscript draft
 CITATION.cff      citation metadata
+LICENSE           MIT license text
 ```
 
 Scenario scripts and implementation-comparison workflows live outside the
@@ -348,6 +351,11 @@ For papers, notebooks, and benchmark runs, record:
 
 Some simulator-heavy workflows can be environment-sensitive. If Matplotlib cache
 warnings appear, set a writable `MPLCONFIGDIR`.
+
+## License
+
+`ampamp` is distributed under the MIT License. See [`LICENSE`](LICENSE) for the
+full license text.
 
 ## Citation
 

@@ -8,7 +8,11 @@ version = "0.1.4"
 authors = [{name = "Varun Daiya"}, {name = "Yusuf Tahir"}]
 description = "A unified framework for Quantum Amplitude Amplification, QSVT, and VTAA."
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.9"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+]
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
